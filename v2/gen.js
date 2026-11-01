@@ -77,8 +77,12 @@ const GEN={
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
     for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(type[i]===M.FLUID && type[i-1]===M.WALL&&type[i+1]===M.WALL&&type[i-W]===M.WALL&&type[i+W]===M.WALL) type[i]=M.WALL; }
+    // bake source influence: which source blocks lie within ~3 cells of each fluid cell
+    const src=new Uint8Array(W*H*4);
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const t=type[y*W+x]; if(t<5||t>8) continue; const ch=t-5;
+      for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){ if(dx*dx+dy*dy>10) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; src[(ny*W+nx)*4+ch]=255; } }
     for(let i=0;i<W*H;i++){ mask[i*4]=type[i]; mask[i*4+1]=Math.round((dirs[i*2]*0.5+0.5)*255); mask[i*4+2]=Math.round((dirs[i*2+1]*0.5+0.5)*255); mask[i*4+3]=255; }
-    return {W,H,mask,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
+    return {W,H,mask,src,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
   },
   // machine quads for this frame: returns Float32Array of [x,y,vx,vy,type] per vertex (6 per quad)
   machineQuads(machines,t,out,H){ H=H||1024;

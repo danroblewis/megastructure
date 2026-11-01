@@ -5,12 +5,12 @@
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
-  const W=+HASH.w||(small?1280:2048), H=+HASH.h||(small?640:1024);
+  const W=+HASH.w||(small?1024:2048), H=+HASH.h||(small?512:1024);
   const world=GEN.build(W,H,+HASH.seed||7);
-  try{ SIM.init(canvas,W,H,world.mask); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
+  try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
   let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1;
-  function resize(){ dpr=Math.min(2,window.devicePixelRatio||1); sw=Math.floor(window.innerWidth*dpr); sh=Math.floor(window.innerHeight*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; zoom=(small?2.0:2.5)*dpr; }
+  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); sw=Math.floor(window.innerWidth*dpr); sh=Math.floor(window.innerHeight*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; zoom=(small?2.0:2.5)*dpr; }
   window.addEventListener('resize',resize); resize();
 
   // ---------- audio ----------
@@ -80,7 +80,7 @@
     for(const c of cores){ if(!c.alive||n>=64) continue; if(Math.abs(c.x-player.x)>sw/zoom||Math.abs(c.y-player.y)>sh/zoom) continue; probePts[n*2]=c.x; probePts[n*2+1]=c.y; list.push(c); n++; }
     let nd=0;
     for(const d of drones){ if(!d.alive||n>=64) continue; if(Math.abs(d.x-player.x)>sw/zoom*1.2||Math.abs(d.y-player.y)>sh/zoom*1.2) continue; probePts[n*2]=d.x; probePts[n*2+1]=d.y; list.push(d); n++; if(nd<16){ droneArr[nd*2]=d.x; droneArr[nd*2+1]=d.y; nd++; } }
-    const [pb,pb2]=SIM.probe(probePts,n);
+    const [pb,pb2,red]=SIM.collect();
     const ux=pb[0]*PARAMS.adv*3, uy=pb[1]*PARAMS.adv*3, heat=pb[2];
     // --- intent -> body parameters ---
     const alive=!player.dead;
@@ -117,7 +117,7 @@
     // --- simulate ---
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
-    const red=SIM.reduce();
+    SIM.probe(probePts,n);
     player.mass=red.mass; player.burning=red.burning;
     if(red.mass>0.5){ player.vx=red.cx-player.px; player.vy=red.cy-player.py; player.px=red.cx; player.py=red.cy; player.x=red.cx; player.y=red.cy; }
     player.hp=Math.min(1,player.mass/BODY.massMax);
@@ -198,7 +198,7 @@
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
-    const [pb]=SIM.probe(probePts,1);
+    SIM.probe(probePts,1); const [pb]=SIM.collect();
     document.title=`test ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();

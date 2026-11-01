@@ -79,7 +79,7 @@ void main(){
 
 // ---------------- species: advect, diffuse, react ----------------
 SH.species = SH.head + `
-uniform sampler2D uS, uFC, uDye, uB;
+uniform sampler2D uS, uFC, uDye, uB, uSrc;   // uSrc: baked source influence (burner, cooler, fuel, spore)
 uniform float uAdv, uIgn, uBurnRate, uCool, uLifeF, uLifeK, uDiff;
 uniform vec4 uInject; uniform vec4 uInjectAmt; // player injection: xy pos, z radius ; amounts fuel heat smoke life
 layout(location=0) out vec4 oS; layout(location=1) out vec4 oDye;
@@ -112,12 +112,12 @@ void main(){
   vec4 nb=vec4(0.0); float n=0.0;
   for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0, k==2?1:k==3?-1:0); if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidT(mtype(maskAt(q)))) continue; nb+=texelFetch(uS,q,0); n+=1.0; }
   if(n>0.0) s+=uDiff*(nb/n-s);
-  // sources: any burner / cooler / fuel / spore block within 3 cells drives this cell hard
-  for(int dy=-3;dy<=3;dy++) for(int dx=-3;dx<=3;dx++){ if(dx*dx+dy*dy>10) continue; int tq=mtype(maskAt(p+ivec2(dx,dy)));
-    if(tq==M_BURNER){ s.y=max(s.y,1.0); }
-    else if(tq==M_COOLER){ s.y=min(s.y,-0.6); }
-    else if(tq==M_FUEL){ s.x=min(1.0,s.x+0.12); }
-    else if(tq==M_SPORE){ s.w=max(s.w,0.5); s.x=min(1.0,s.x+0.05); } }
+  // sources (baked once from the static mask): burner, cooler, fuel, spore influence
+  vec4 src=texelFetch(uSrc,p,0);
+  if(src.r>0.0){ s.y=max(s.y,1.0); }
+  if(src.g>0.0){ s.y=min(s.y,-0.6); }
+  if(src.b>0.0){ s.x=min(1.0,s.x+0.12); }
+  if(src.a>0.0){ s.w=max(s.w,0.5); s.x=min(1.0,s.x+0.05); }
   // combustion
   float burn=s.x*smoothstep(uIgn,uIgn+0.25,s.y)*uBurnRate;
   s.x-=burn; s.y+=burn*2.2; s.z+=burn*1.5;
