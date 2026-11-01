@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head><body>
+<canvas id="c" width="900" height="560"></canvas>
+<script src="types.js"></script><script src="gpu.js"></script><script src="shaders.js"></script><script src="sim.js"></script><script src="world.js"></script>
+<script>
+const H=Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(kv=>kv.split('=')));
+const log=[]; function L(s){ log.push(s); document.title=log.join(' | '); }
+try{
+  const canvas=document.getElementById('c'); const cp=+H.px||2;
+  WORLD.W=2560; WORLD.H=640;
+  const t0=performance.now(); generateWorld(+H.seed||7); L('gen '+Math.round(performance.now()-t0)+'ms');
+  const E=()=>SIM.gl.getError();
+  if(H.trace){ for(const fn of ['tex','fbo','program','draw','bind']){ const orig=GPU[fn]; GPU[fn]=function(...a){ const r=orig.apply(GPU,a); const e=GPU.gl.getError(); if(e) L('ERR in '+fn+' '+e+' args '+JSON.stringify(a.slice(0,3).map(v=>typeof v==='object'?'obj':v))); return r; }; } }
+  SIM.gpuInit(canvas, 1024, 640); L('gpu ok e'+E());
+  SIM.upload(WORLD.surface); L('upload e'+E());
+  { SIM.requestRead(200,100,300,200); SIM.collectRead(); const v=SIM.view; let mism=0, first=null; const cols=new Array(10).fill(0);
+    for(let yy=0;yy<v.h;yy++) for(let xx=0;xx<v.w;xx++){ const g=v.cells[(yy*v.w+xx)*4]; const c=SIM.cells[(v.y0+yy)*SIM.W+v.x0+xx]; if(g!==c){ mism++; cols[Math.floor(xx/30)]++; if(!first) first=[xx,yy,c,g]; } }
+    L('after-upload mismatch '+mism+' first '+JSON.stringify(first)+' cols '+cols.join(','));
+    // row check: does gpu row yy equal cpu row (y0+yy) shifted?
+    let best=null; for(let sh=-3;sh<=3;sh++){ let mm=0; for(let xx=0;xx<v.w;xx++){ const g=v.cells[(50*v.w+xx)*4]; const c=SIM.cells[(v.y0+50+sh)*SIM.W+v.x0+xx]; if(g!==c) mm++; } if(!best||mm<best[1]) best=[sh,mm]; } L('rowshift '+JSON.stringify(best));
+    let bestx=null; for(let sh=-3;sh<=3;sh++){ let mm=0; for(let xx=5;xx<v.w-5;xx++){ const g=v.cells[(50*v.w+xx)*4]; const c=SIM.cells[(v.y0+50)*SIM.W+v.x0+xx+sh]; if(g!==c) mm++; } if(!bestx||mm<bestx[1]) bestx=[sh,mm]; } L('colshift '+JSON.stringify(bestx));
+  }
+  const x=+H.x||400, y=+H.y||WORLD.surface[x]-60; let cam=[x-canvas.width/cp/2, y-canvas.height/cp/2];
+  SIM.setWindow(cam[0]-100,cam[1]-100); L('win e'+E());
+  const N=+H.n||120, dbg=+H.dbg||0; const params={tau:0.56,buoy:0.9,gliq:0.0008,substeps:2};
+  // optional ignition / explosions for testing
+  const t1=performance.now();
+  for(let f=0;f<N;f++){
+    if(H.fire && f===5){ for(let k=0;k<6;k++) SIM.set(x+k,WORLD.surface[x+k]-1,T.FIRE,30); }
+    if(H.boom && f===5){ SIM.set(x,WORLD.surface[x]-3,T.BLAST,+H.boom); }
+    if(H.lava && f===5){ for(let k=0;k<12;k++) for(let j=0;j<6;j++) SIM.set(x+k,WORLD.surface[x]-30-j,T.LAVA,0); }
+    SIM.step(params); if(f===0) L('step e'+E());
+    if(f===N-1){ SIM.requestRead(x-50,y-50,100,100); L('req e'+E()); SIM.collectRead(); L('col e'+E()); }
+  }
+  SIM.gl.finish();
+  L('steps '+N+' in '+Math.round(performance.now()-t1)+'ms');
+  SIM.render(cam[0],cam[1],cp,canvas.width,canvas.height,N/60,dbg,0);
+  // stats from readback
+  { SIM.requestRead(200,100,300,200); SIM.collectRead(); const v=SIM.view; let mism=0; for(let yy=0;yy<v.h;yy++) for(let xx=0;xx<v.w;xx++){ const g=v.cells[(yy*v.w+xx)*4]; const c=SIM.cells[(v.y0+yy)*SIM.W+v.x0+xx]; if(g!==c) mism++; } L('mismatch '+mism+'/'+(v.w*v.h)); }
+  const v=SIM.view; const cnt={}; for(let i=0;i<v.cells.length;i+=4){ const t=v.cells[i]; cnt[NAMES[t]]=(cnt[NAMES[t]]||0)+1; }
+  L(JSON.stringify(cnt));
+  const err=SIM.gl.getError(); L('glerr '+err);
+}catch(e){ L('ERR '+e.message+' '+(e.stack||'').split('\n')[1]); }
+</script></body></html>

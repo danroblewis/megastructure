@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Sandfall</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  canvas{display:block;position:fixed;inset:0;width:100vw;height:100vh;}
+  #hud{pointer-events:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="hud"></canvas>
+<script src="types.js"></script>
+<script src="gpu.js"></script>
+<script src="shaders.js"></script>
+<script src="sim.js"></script>
+<script src="world.js"></script>
+<script src="entities.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
