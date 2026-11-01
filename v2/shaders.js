@@ -286,6 +286,5 @@ void main(){
   float self=texelFetch(uB,wrapP(p),0).x;
   self=(self*4.0+texelFetch(uB,wrapP(p+ivec2(1,0)),0).x+texelFetch(uB,wrapP(p-ivec2(1,0)),0).x+texelFetch(uB,wrapP(p+ivec2(0,1)),0).x+texelFetch(uB,wrapP(p-ivec2(0,1)),0).x)/8.0;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k); bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
-  float pd=length(wc-uPlayer.xy); if(pd<uPlayer.z && pd>uPlayer.z-1.0) col+=vec3(0.3,0.5,0.8)*0.5;
   o=vec4(col,1.0);
 }`;
