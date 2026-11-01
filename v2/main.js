@@ -26,15 +26,19 @@
   window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%4; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
-  canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume(); const role=e.clientX<window.innerWidth*0.5?'move':'act'; touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,role,t:performance.now()}); if(role==='act') sparkQ=true; if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
-  canvas.addEventListener('pointermove',e=>{ const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; } e.preventDefault(); });
-  const up=e=>{ touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
+  // touch: drag anywhere = direction, quick tap = spark, hold still = contract
+  const DEAD=10;
+  canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume(); touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false}); if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
+  canvas.addEventListener('pointermove',e=>{ const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; } e.preventDefault(); });
+  const up=e=>{ const t=touches.get(e.pointerId); if(t&&!t.moved&&performance.now()-t.t<250) sparkQ=true; touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
   canvas.addEventListener('contextmenu',e=>e.preventDefault()); document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   function readInput(){
     let tx=0,ty=0,puff=false;
     if(keys.ArrowLeft||keys.KeyA) tx-=1; if(keys.ArrowRight||keys.KeyD) tx+=1; if(keys.ArrowUp||keys.KeyW) ty-=1; if(keys.ArrowDown||keys.KeyS) ty+=1;
     if(keys.KeyC||keys.ShiftLeft) puff=true;
-    for(const t of touches.values()){ if(t.role==='move'){ const dx=t.x-t.x0, dy=t.y-t.y0; const d=Math.hypot(dx,dy); if(d>6){ const k=Math.min(1,d/60); tx=dx/d*k; ty=dy/d*k; } } else { if(performance.now()-t.t>250) puff=true; } }
+    for(const t of touches.values()){ const dx=t.x-t.x0, dy=t.y-t.y0; const d=Math.hypot(dx,dy);
+      if(t.moved){ const k=Math.min(1,d/70); tx+=dx/d*k; ty+=dy/d*k; }
+      else if(performance.now()-t.t>250) puff=true; }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
     return {tx,ty,spark:sparkQ,puff}; }
 
@@ -155,7 +159,7 @@
     // hp bar
     c.fillStyle='rgba(0,0,0,0.4)'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s,8*s); c.fillStyle=player.hp>0.3?'#6cf':'#f55'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s*Math.max(0,player.hp),8*s);
     // legend upper right
-    const legend=isTouch?['LEFT THUMB','drag  thrust','RIGHT THUMB','tap  spark (ignite fuel)','hold  contract','ride hot plumes & currents']:['CONTROLS','WASD / arrows  thrust','space / X  spark (ignite fuel)','C / shift  contract','V  debug views','M  mute · R  restart','ride hot plumes & currents'];
+    const legend=isTouch?['TOUCH','drag anywhere  steer','tap  spark (ignite fuel)','hold still  contract','ride hot plumes & currents']:['CONTROLS','WASD / arrows  thrust','space / X  spark (ignite fuel)','C / shift  contract','V  debug views','M  mute · R  restart','ride hot plumes & currents'];
     const fl=Math.round(11*s); c.font=`${fl}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='right'; let lw=0; for(const l of legend) lw=Math.max(lw,c.measureText(l).width); const lh=fl*1.35;
     c.fillStyle='rgba(0,0,0,0.35)'; c.fillRect(sw-pad-lw-pad*2,pad,lw+pad*2,lh*legend.length+pad);
     legend.forEach((l,i)=>{ const hd=l===l.toUpperCase()&&l.length<14; c.fillStyle=hd?'rgba(255,220,120,0.95)':'rgba(255,255,255,0.85)'; c.fillText(l,sw-pad*2,pad+pad*0.5+i*lh); });
