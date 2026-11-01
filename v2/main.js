@@ -164,6 +164,20 @@
     c.fillStyle='rgba(0,0,0,0.35)'; c.fillRect(sw-pad-lw-pad*2,pad,lw+pad*2,lh*legend.length+pad);
     legend.forEach((l,i)=>{ const hd=l===l.toUpperCase()&&l.length<14; c.fillStyle=hd?'rgba(255,220,120,0.95)':'rgba(255,255,255,0.85)'; c.fillText(l,sw-pad*2,pad+pad*0.5+i*lh); });
     c.textAlign='left';
+    // touch joystick: anchor ring where the finger landed, knob where it is now, full strength at the ring edge
+    for(const t of touches.values()){
+      const ax=t.x0*s, ay=t.y0*s, kx=t.x*s, ky=t.y*s, R=70*s;
+      c.lineWidth=2*s; c.strokeStyle='rgba(255,255,255,0.35)'; c.beginPath(); c.arc(ax,ay,R,0,6.283); c.stroke();
+      c.fillStyle='rgba(255,255,255,0.15)'; c.beginPath(); c.arc(ax,ay,R,0,6.283); c.fill();
+      if(t.moved){ const dx=kx-ax, dy=ky-ay, d=Math.hypot(dx,dy)||1, k=Math.min(1,d/R); const ex=ax+dx/d*Math.min(d,R), ey=ay+dy/d*Math.min(d,R);
+        c.strokeStyle='rgba(120,220,255,0.9)'; c.lineWidth=4*s; c.beginPath(); c.moveTo(ax,ay); c.lineTo(ex,ey); c.stroke();
+        c.fillStyle='rgba(120,220,255,0.9)'; c.beginPath(); c.arc(ex,ey,10*s,0,6.283); c.fill();
+        c.font=`${Math.round(11*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.8)'; c.fillText(`${Math.round(k*100)}%`,ax+R+6*s,ay-6*s); }
+      else { c.fillStyle= performance.now()-t.t>250 ? 'rgba(255,200,80,0.9)' : 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(ax,ay,8*s,0,6.283); c.fill(); }
+    }
+    // thrust indicator on the body: direction and strength of the push you are applying
+    if(!player.dead){ const mag=Math.hypot(bd.dir[0],bd.dir[1]); if(mag>0.03){ const px=(player.x-camX)*zoom, py=(player.y-camY)*zoom; const L=(14+40*Math.min(1,mag))*s; const ex=px+bd.dir[0]/mag*L, ey=py+bd.dir[1]/mag*L;
+      c.strokeStyle='rgba(120,220,255,0.7)'; c.lineWidth=3*s; c.beginPath(); c.moveTo(px,py); c.lineTo(ex,ey); c.stroke(); c.fillStyle='rgba(120,220,255,0.8)'; c.beginPath(); c.arc(ex,ey,4*s,0,6.283); c.fill(); } }
     // guide arrow to the next checkpoint or the exit
     if(!player.dead&&!player.won){
       const tgt=player.cpIndex<world.checkpoints.length?world.checkpoints[player.cpIndex]:world.exit;
