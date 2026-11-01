@@ -23,22 +23,27 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%4; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%4; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
-  // touch: drag anywhere = direction, quick tap = spark, hold still = contract
+  // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
+  // second finger tap = spark; holding one finger still = contract
+  const target={x:null,y:null,set:0};
   const DEAD=10;
-  canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume(); touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false}); if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
-  canvas.addEventListener('pointermove',e=>{ const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; } e.preventDefault(); });
-  const up=e=>{ const t=touches.get(e.pointerId); if(t&&!t.moved&&performance.now()-t.t<250) sparkQ=true; touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
+  const setTarget=(cx,cy)=>{ target.x=camX+cx*dpr/zoom; target.y=camY+cy*dpr/zoom; target.set=performance.now(); };
+  canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
+    if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
+    touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
+    if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
+  canvas.addEventListener('pointermove',e=>{ const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; if(t.primary) setTarget(e.clientX,e.clientY); } e.preventDefault(); });
+  const up=e=>{ touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
   canvas.addEventListener('contextmenu',e=>e.preventDefault()); document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   function readInput(){
     let tx=0,ty=0,puff=false;
     if(keys.ArrowLeft||keys.KeyA) tx-=1; if(keys.ArrowRight||keys.KeyD) tx+=1; if(keys.ArrowUp||keys.KeyW) ty-=1; if(keys.ArrowDown||keys.KeyS) ty+=1;
     if(keys.KeyC||keys.ShiftLeft) puff=true;
-    for(const t of touches.values()){ const dx=t.x-t.x0, dy=t.y-t.y0; const d=Math.hypot(dx,dy);
-      if(t.moved){ const k=Math.min(1,d/70); tx+=dx/d*k; ty+=dy/d*k; }
-      else if(performance.now()-t.t>250) puff=true; }
+    for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; }
+    if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>6){ const k=Math.min(1,(d-6)/40); tx=dx/d*k; ty=dy/d*k; } }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
     return {tx,ty,spark:sparkQ,puff}; }
 
@@ -159,25 +164,15 @@
     // hp bar
     c.fillStyle='rgba(0,0,0,0.4)'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s,8*s); c.fillStyle=player.hp>0.3?'#6cf':'#f55'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s*Math.max(0,player.hp),8*s);
     // legend upper right
-    const legend=isTouch?['TOUCH','drag anywhere  steer','tap  spark (ignite fuel)','hold still  contract','ride hot plumes & currents']:['CONTROLS','WASD / arrows  thrust','space / X  spark (ignite fuel)','C / shift  contract','V  debug views','M  mute · R  restart','ride hot plumes & currents'];
+    const legend=isTouch?['TOUCH','touch or drag  set the target point','second finger tap  spark','hold still  contract','the body heads for the target','the wind has its say']:['CONTROLS','WASD / arrows  thrust','space / X  spark (ignite fuel)','C / shift  contract','V  debug views','M  mute · R  restart','ride hot plumes & currents'];
     const fl=Math.round(11*s); c.font=`${fl}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='right'; let lw=0; for(const l of legend) lw=Math.max(lw,c.measureText(l).width); const lh=fl*1.35;
     c.fillStyle='rgba(0,0,0,0.35)'; c.fillRect(sw-pad-lw-pad*2,pad,lw+pad*2,lh*legend.length+pad);
     legend.forEach((l,i)=>{ const hd=l===l.toUpperCase()&&l.length<14; c.fillStyle=hd?'rgba(255,220,120,0.95)':'rgba(255,255,255,0.85)'; c.fillText(l,sw-pad*2,pad+pad*0.5+i*lh); });
     c.textAlign='left';
-    // touch joystick: anchor ring where the finger landed, knob where it is now, full strength at the ring edge
-    for(const t of touches.values()){
-      const ax=t.x0*s, ay=t.y0*s, kx=t.x*s, ky=t.y*s, R=70*s;
-      c.lineWidth=2*s; c.strokeStyle='rgba(255,255,255,0.35)'; c.beginPath(); c.arc(ax,ay,R,0,6.283); c.stroke();
-      c.fillStyle='rgba(255,255,255,0.15)'; c.beginPath(); c.arc(ax,ay,R,0,6.283); c.fill();
-      if(t.moved){ const dx=kx-ax, dy=ky-ay, d=Math.hypot(dx,dy)||1, k=Math.min(1,d/R); const ex=ax+dx/d*Math.min(d,R), ey=ay+dy/d*Math.min(d,R);
-        c.strokeStyle='rgba(120,220,255,0.9)'; c.lineWidth=4*s; c.beginPath(); c.moveTo(ax,ay); c.lineTo(ex,ey); c.stroke();
-        c.fillStyle='rgba(120,220,255,0.9)'; c.beginPath(); c.arc(ex,ey,10*s,0,6.283); c.fill();
-        c.font=`${Math.round(11*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.8)'; c.fillText(`${Math.round(k*100)}%`,ax+R+6*s,ay-6*s); }
-      else { c.fillStyle= performance.now()-t.t>250 ? 'rgba(255,200,80,0.9)' : 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(ax,ay,8*s,0,6.283); c.fill(); }
-    }
-    // thrust indicator on the body: direction and strength of the push you are applying
-    if(!player.dead){ const mag=Math.hypot(bd.dir[0],bd.dir[1]); if(mag>0.03){ const px=(player.x-camX)*zoom, py=(player.y-camY)*zoom; const L=(14+40*Math.min(1,mag))*s; const ex=px+bd.dir[0]/mag*L, ey=py+bd.dir[1]/mag*L;
-      c.strokeStyle='rgba(120,220,255,0.7)'; c.lineWidth=3*s; c.beginPath(); c.moveTo(px,py); c.lineTo(ex,ey); c.stroke(); c.fillStyle='rgba(120,220,255,0.8)'; c.beginPath(); c.arc(ex,ey,4*s,0,6.283); c.fill(); } }
+    // target point: a soft animated marker where you asked the body to go
+    if(target.x!==null&&!player.dead){ const px=(target.x-camX)*zoom, py=(target.y-camY)*zoom; const ph=(performance.now()/700)%1;
+      c.strokeStyle=`rgba(140,220,255,${0.55*(1-ph)})`; c.lineWidth=2*s; c.beginPath(); c.arc(px,py,(6+16*ph)*s,0,6.283); c.stroke();
+      c.fillStyle='rgba(140,220,255,0.5)'; c.beginPath(); c.arc(px,py,3.5*s,0,6.283); c.fill(); }
     // guide arrow to the next checkpoint or the exit
     if(!player.dead&&!player.won){
       const tgt=player.cpIndex<world.checkpoints.length?world.checkpoints[player.cpIndex]:world.exit;
@@ -189,7 +184,7 @@
     let msg=null;
     if(player.won) msg= player.winT<240?'YOU REACHED THE CORE EXIT':`exit reached · ${player.cores} cores · ${player.deaths} deaths · tap or R to restart`;
     else if(player.dead) msg='dispersed...';
-    else if(SIM.frame<900) msg='you are a wisp of living gas escaping a derelict atmosphere plant · the currents are your roads: ride them · steer with the keys, you push the gas and it pushes you · spark fuel to make updrafts · hold C to pull yourself together';
+    else if(SIM.frame<900) msg='you are a wisp of living gas escaping a derelict atmosphere plant · touch the map to set where you want to go · the currents are your roads and your obstacles · spark fuel to make updrafts · hold still to pull yourself together';
     if(msg){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
