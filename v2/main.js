@@ -39,7 +39,7 @@
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:16, rfar:42, swim:0.34, push:0.006, coh:1.6, spawnR:9};
+  const BODY={massMax:170, rnear:12, rfar:30, swim:0.11, push:0.022, coh:2.4, spawnR:8};
   const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
   let pendingInjectB=null;
@@ -61,6 +61,7 @@
     return dmg; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   let inject=null, shake=0, steps=small?2:3;
+  const dirS=[0,0];
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   function tick(){
     const inp=readInput(); sparkQ=false;
@@ -75,10 +76,11 @@
     // --- intent -> body parameters ---
     const alive=!player.dead;
     const contract=alive&&inp.puff;
-    bd.dir[0]=alive?inp.tx:0; bd.dir[1]=alive?inp.ty:0;
+    dirS[0]+=((alive?inp.tx:0)-dirS[0])*0.12; dirS[1]+=((alive?inp.ty:0)-dirS[1])*0.12;
+    bd.dir[0]=dirS[0]; bd.dir[1]=dirS[1];
     bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh;
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
-    bd.grow=alive?0.05*Math.max(0,1-player.mass/BODY.massMax):0;
+    bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
@@ -169,7 +171,7 @@
     let msg=null;
     if(player.won) msg= player.winT<240?'YOU REACHED THE CORE EXIT':`exit reached · ${player.cores} cores · ${player.deaths} deaths · tap or R to restart`;
     else if(player.dead) msg='dispersed...';
-    else if(SIM.frame<900) msg='you are the glowing cloud · follow the arrow to the gold exit · hold C to pull yourself together · cores grow you · heat, drains and drones scatter you';
+    else if(SIM.frame<900) msg='you are a wisp of living gas escaping a derelict atmosphere plant · the currents are your roads: ride them · steer with the keys, you push the gas and it pushes you · spark fuel to make updrafts · hold C to pull yourself together';
     if(msg){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }

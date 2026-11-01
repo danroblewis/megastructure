@@ -142,6 +142,7 @@ void main(){
   if(seed<0.00012){ vec2 cc=vec2(bp*8+4); float fall=1.0-min(1.0,length(vec2(p)+0.5-cc)/6.0); d.rgb+=vec3(rnd(bp,4u),rnd(bp,5u),rnd(bp,6u))*fall; }
   // vents breathe dye so every current is visible
   if(t==M_VENT) d.rgb=max(d.rgb,vec3(0.2,0.55,0.8));
+  d.rgb=max(d.rgb,vec3(0.5,0.7,1.0)*min(1.0,selfHere*0.8));   // the body writes its path into the flow
   oDye=clamp(d,0.0,1.0);
 }`;
 
@@ -160,7 +161,7 @@ void main(){
   float gy=(selfAt(p+ivec2(0,1))-selfAt(p-ivec2(0,1)))*0.5+(selfAt(p+ivec2(0,3))-selfAt(p-ivec2(0,3)))/6.0;
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
-  vec2 g=vec2(gx,gy)*uCoh*(0.7-here)/0.7; float gl=length(g); if(gl>0.3) g*=0.3/gl;
+  vec2 g=vec2(gx,gy)*uCoh*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
   vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   vec2 v=u*uAdv+uDir*uSwim+g+home;
@@ -191,7 +192,7 @@ void main(){
   vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC);
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   if(dc>uRfar) self*=0.95;                                       // stragglers wither
-  else if(dc<uRnear) self+=uGrow*avg*max(0.0,0.9-self);         // close cells reinforce each other
+  else if(dc<uRnear) self+=uGrow*avg*max(0.0,1.0-self);         // close cells reinforce each other
   self*=0.9995;
   vec4 sp=texelFetch(uS,p,0);
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
@@ -284,7 +285,7 @@ void main(){
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }
   float self=texelFetch(uB,wrapP(p),0).x;
   self=(self*4.0+texelFetch(uB,wrapP(p+ivec2(1,0)),0).x+texelFetch(uB,wrapP(p-ivec2(1,0)),0).x+texelFetch(uB,wrapP(p+ivec2(0,1)),0).x+texelFetch(uB,wrapP(p-ivec2(0,1)),0).x)/8.0;
-  if(self>0.0){ float k=min(1.0,pow(self/0.7,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k); bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
+  if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k); bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
   float pd=length(wc-uPlayer.xy); if(pd<uPlayer.z && pd>uPlayer.z-1.0) col+=vec3(0.3,0.5,0.8)*0.5;
   o=vec4(col,1.0);
 }`;
