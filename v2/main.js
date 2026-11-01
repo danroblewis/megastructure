@@ -156,19 +156,8 @@
     requestAnimationFrame(frame);
   }
   function drawHud(ms){
-    const c=hctx, s=dpr; c.clearRect(0,0,sw,sh);
-    const fs=Math.round(13*s), pad=6*s; c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.textAlign='left';
-    const nCh=world.checkpoints.length+1;
-    const txt=`chamber ${Math.min(nCh,player.cpIndex+1)}/${nCh}   mass ${player.mass|0}   cores ${player.cores}   kills ${player.kills||0}   ${dtAvg.toFixed(0)}ms ×${steps}`;
-    c.fillStyle='rgba(0,0,0,0.4)'; const tw=c.measureText(txt).width; c.fillRect(pad,pad,tw+pad*2,fs+pad*1.2); c.fillStyle='#fff'; c.fillText(txt,pad*2,pad+pad*0.6);
-    // hp bar
-    c.fillStyle='rgba(0,0,0,0.4)'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s,8*s); c.fillStyle=player.hp>0.3?'#6cf':'#f55'; c.fillRect(pad,pad*2+fs+pad*1.2,120*s*Math.max(0,player.hp),8*s);
-    // legend upper right
-    const legend=isTouch?['TOUCH','touch or drag  set the target point','second finger tap  spark','hold still  contract','the body heads for the target','the wind has its say']:['CONTROLS','WASD / arrows  thrust','space / X  spark (ignite fuel)','C / shift  contract','V  debug views','M  mute · R  restart','ride hot plumes & currents'];
-    const fl=Math.round(11*s); c.font=`${fl}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='right'; let lw=0; for(const l of legend) lw=Math.max(lw,c.measureText(l).width); const lh=fl*1.35;
-    c.fillStyle='rgba(0,0,0,0.35)'; c.fillRect(sw-pad-lw-pad*2,pad,lw+pad*2,lh*legend.length+pad);
-    legend.forEach((l,i)=>{ const hd=l===l.toUpperCase()&&l.length<14; c.fillStyle=hd?'rgba(255,220,120,0.95)':'rgba(255,255,255,0.85)'; c.fillText(l,sw-pad*2,pad+pad*0.5+i*lh); });
-    c.textAlign='left';
+    const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
+    if(HASH.hud){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`,pad,pad); }
     // target point: a soft animated marker where you asked the body to go
     if(target.x!==null&&!player.dead){ const px=(target.x-camX)*zoom, py=(target.y-camY)*zoom; const ph=(performance.now()/700)%1;
       c.strokeStyle=`rgba(140,220,255,${0.55*(1-ph)})`; c.lineWidth=2*s; c.beginPath(); c.arc(px,py,(6+16*ph)*s,0,6.283); c.stroke();
@@ -184,7 +173,7 @@
     let msg=null;
     if(player.won) msg= player.winT<240?'YOU REACHED THE CORE EXIT':`exit reached · ${player.cores} cores · ${player.deaths} deaths · tap or R to restart`;
     else if(player.dead) msg='dispersed...';
-    else if(SIM.frame<900) msg='you are a wisp of living gas escaping a derelict atmosphere plant · touch the map to set where you want to go · the currents are your roads and your obstacles · spark fuel to make updrafts · hold still to pull yourself together';
+    else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
     if(msg){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
