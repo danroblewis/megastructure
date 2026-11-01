@@ -139,7 +139,7 @@
     if(SIM.frame%120===0){ if(dtAvg>24&&steps>1) steps--; else if(dtAvg<17.5&&steps<(small?2:3)) steps++; }
     tick();
     const vw=sw/zoom, vh=sh/zoom;
-    const tx=player.x+player.facing*vw*0.08-vw/2, ty=player.y-vh/2;
+    const tx=player.x-vw/2, ty=player.y-vh/2;
     camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;
     camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
