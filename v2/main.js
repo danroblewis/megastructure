@@ -43,7 +43,7 @@
     if(keys.ArrowLeft||keys.KeyA) tx-=1; if(keys.ArrowRight||keys.KeyD) tx+=1; if(keys.ArrowUp||keys.KeyW) ty-=1; if(keys.ArrowDown||keys.KeyS) ty+=1;
     if(keys.KeyC||keys.ShiftLeft) puff=true;
     for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; }
-    if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>6){ const k=Math.min(1,(d-6)/40); tx=dx/d*k; ty=dy/d*k; } }
+    if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>2.5){ const k=Math.min(1,0.35+d/30); tx=dx/d*k; ty=dy/d*k; } }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
     return {tx,ty,spark:sparkQ,puff}; }
 
@@ -87,7 +87,8 @@
     const contract=alive&&inp.puff;
     dirS[0]+=((alive?inp.tx:0)-dirS[0])*0.12; dirS[1]+=((alive?inp.ty:0)-dirS[1])*0.12;
     bd.dir[0]=dirS[0]; bd.dir[1]=dirS[1];
-    bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh;
+    const effort=Math.min(1,Math.hypot(dirS[0],dirS[1]));
+    bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh*(1.0+1.2*(1-effort));
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
     bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
@@ -125,8 +126,7 @@
     if(alive){
       if(player.respawnT>0) player.respawnT--;
       else if(player.mass<22){ player.dead=true; player.deadT=90; player.deaths++; shake=4; AUDIO.tone(300,40,0.7,'sawtooth',0.15); AUDIO.noise(0.6,0.25,600); }
-      const tt=world.type[(player.y|0)*W+(player.x|0)];
-      if(tt===10){ const ci=world.checkpoints.findIndex(c=>Math.abs(c.x-player.x)<10&&Math.abs(c.y-player.y)<10); if(ci>=0&&ci>=player.cpIndex){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=ci+1; pendingInjectB=[player.x,player.y,10,1.0]; AUDIO.tone(600,900,0.2,'sine',0.08); } }
+      { const ci=world.checkpoints.findIndex(c=>Math.hypot(c.x-player.x,c.y-player.y)<12); if(ci>=0&&ci>=player.cpIndex){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=ci+1; pendingInjectB=[player.x,player.y,10,1.0]; AUDIO.tone(600,900,0.2,'sine',0.08); } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
       AUDIO.ambience(Math.hypot(ux,uy)/3,heat,Math.hypot(inp.tx,inp.ty));
