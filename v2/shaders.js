@@ -238,6 +238,24 @@ void main(){
   soot*=0.99995;
   o=vec4(clamp(phi,0.0,1.0),min(soot,1.0),min(res,1.0),clamp(kind,0.0,1.0));
 }`;
+// ---------------- light: emitted by the body and by heat, diffused through open cells ----------------
+// texture is world/4: r light, g solid fraction of the block, b emission
+SH.light = SH.head + `
+uniform sampler2D uL, uB, uS; uniform ivec2 uLRes; uniform int uInit; out vec4 o;
+void main(){
+  ivec2 lp=ivec2(gl_FragCoord.xy); ivec2 b=lp*4;
+  float em=0.0, sol=0.0;
+  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y){ sol+=1.0; continue; } if(solidAt(q)) sol+=1.0; else { vec4 sp=texelFetch(uS,q,0); em+=texelFetch(uB,q,0).x*1.6+max(sp.y,0.0)*0.35; } }
+  sol/=16.0; em/=16.0;
+  if(uInit==1){ o=vec4(0.0,sol,em,0.0); return; }
+  float best=0.0;
+  for(int k=0;k<8;k++){ ivec2 d=ivec2(k==0?1:k==1?-1:k==4?1:k==5?-1:k==6?1:k==7?-1:0, k==2?1:k==3?-1:k==4?1:k==5?1:k==6?-1:k==7?-1:0); ivec2 q=lp+d; if(q.x<0||q.y<0||q.x>=uLRes.x||q.y>=uLRes.y) continue; vec4 n=texelFetch(uL,q,0); float att=(k<4)?0.945:0.92; best=max(best,n.r*att*(1.0-n.g*0.9)); }
+  float prev=texelFetch(uL,lp,0).r;
+  float L=max(min(em*4.0,2.5), best);
+  L*=1.0-sol*0.7;
+  L=mix(prev,L,0.6);
+  o=vec4(L,sol,em,0.0);
+}`;
 // first reduction: 4x4 blocks of the body texture -> (mass, mass*x, mass*y, burning)
 SH.reduce0 = SH.head + `
 uniform sampler2D uB, uS; out vec4 o;
@@ -271,7 +289,7 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(flo
 
 // ---------------- render ----------------
 SH.render = SH.head + `
-uniform sampler2D uS, uFC, uDye, uB;
+uniform sampler2D uS, uFC, uDye, uB, uLight;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
@@ -287,6 +305,8 @@ void main(){
   vec4 s=texelFetch(uS,wrapP(p),0); vec4 c=texelFetch(uFC,wrapP(p),0); vec4 d=texelFetch(uDye,wrapP(p),0);
   vec3 col;
   vec4 wf=texelFetch(uWf,wrapP(p),0); bool solid=solidAt(p);
+  float light=texture(uLight,(wc)/vec2(uRes)).r; float lit=0.045+min(1.6,light*1.6);
+  if(uDebug==4){ o=vec4(vec3(min(1.0,light)),1.0); return; }
   if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
   if(uDebug==2){ col=vec3(s.x,max(s.y,0.0),s.w); if(s.y<0.0) col.b+= -s.y; if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
   if(uDebug==3){ col=vec3(wf.x,wf.y,wf.z); o=vec4(col,1.0); return; }
@@ -305,7 +325,9 @@ void main(){
     else if(t==M_FUEL) col=mix(col,vec3(0.3,0.9,0.5),0.7);
     else if(t==M_SPORE) col=mix(col,vec3(0.8,0.3,0.9),0.7);
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
-    if(s.y>0.0 && t!=M_BURNER) col=mix(col,vec3(1.0,0.4,0.1),clamp(s.y*0.3,0.0,0.5)); // hot walls glow
+    bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE);
+    col*=src? max(lit,0.55) : lit;
+    if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5); // hot walls glow
     o=vec4(col,1.0); return;
   }
   // gas volume
@@ -317,6 +339,7 @@ void main(){
   col+=d.rgb*vec3(0.35,0.45,0.6)*(0.5+sp*4.0);            // tracer dye tinted by speed
   col+=vec3(0.15,0.55,0.35)*s.x*0.45;                     // fuel haze
   col=mix(col,vec3(0.02),clamp(s.z*0.5,0.0,0.7));          // smoke
+  col*=lit;                                               // lit by the self and by fire
   float h=max(s.y,0.0);
   col+=vec3(1.0,0.5,0.15)*h*0.8+vec3(1.0,0.9,0.7)*h*h*0.5; // heat glow
   if(s.y<0.0) col+=vec3(0.1,0.25,0.5)*(-s.y)*0.6;          // cold

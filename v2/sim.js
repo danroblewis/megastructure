@@ -14,6 +14,8 @@ const SIM={
     this.F=[{a:hf(W,H),b:hf(W,H),c:hf(W,H)},{a:hf(W,H),b:hf(W,H),c:hf(W,H)}]; this.Ffbo=this.F.map(f=>fbo([f.a,f.b,f.c]));
     this.S=[hf(W,H),hf(W,H)]; this.D=[tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE),tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE)];
     this.SDfbo=[fbo([this.S[0],this.D[0]]),fbo([this.S[1],this.D[1]])];
+    this.LW=Math.ceil(W/4); this.LH=Math.ceil(H/4);
+    this.L=[tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true),tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true)]; this.Lfbo=this.L.map(t=>fbo([t])); this.lcur=0;
     this.Wf=[hf(W,H),hf(W,H)]; this.Wfbo=this.Wf.map(t=>fbo([t])); this.wcur=0;
     this.B=[hf(W,H),hf(W,H)]; this.Bfbo=this.B.map(t=>fbo([t])); this.bcur=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
     // reduction chain for mass / centroid
@@ -28,7 +30,7 @@ const SIM={
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -39,6 +41,7 @@ const SIM={
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
     this.probeBuf=new Float32Array(64*4); this.probeBuf2=new Float32Array(64*4); this.pts=new Float32Array(128);
     this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[1]}); this.draw(this.Wfbo[0],W,H); this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[0]}); this.draw(this.Wfbo[1],W,H);
+    for(let i=0;i<2;i++){ const pr=this.P.light; this.use(pr,{uMask:this.Mstatic,uL:this.L[1-i],uB:this.B[0],uS:this.S[0]}); gl.uniform2i(pr.u.uLRes,this.LW,this.LH); gl.uniform1i(pr.u.uInit,1); this.draw(this.Lfbo[i],this.LW,this.LH); }
     this.pbos=[gl.createBuffer(),gl.createBuffer(),gl.createBuffer()]; this.fence=null; this.pending=false;
     const L=this.levels[this.levels.length-1];
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER,this.pbos[0]); gl.bufferData(gl.PIXEL_PACK_BUFFER,64*16,gl.STREAM_READ);
@@ -83,6 +86,10 @@ const SIM={
     this.use(pr,{uMask:this.Mdyn,uWf:this.Wf[this.wcur],uS:this.S[this.scur],uFC:this.F[this.cur].c,uB:this.B[this.bcur]});
     this.draw(this.Wfbo[wo],this.W,this.H); this.wcur=wo;
   },
+  lightStep(iters){
+    const gl=this.gl, pr=this.P.light;
+    for(let i=0;i<iters;i++){ const lo=1-this.lcur; this.use(pr,{uMask:this.Mdyn,uL:this.L[this.lcur],uB:this.B[this.bcur],uS:this.S[this.scur]}); gl.uniform2i(pr.u.uLRes,this.LW,this.LH); gl.uniform1i(pr.u.uInit,0); this.draw(this.Lfbo[lo],this.LW,this.LH); this.lcur=lo; }
+  },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
     const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uS:this.S[this.scur]}); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
@@ -114,7 +121,7 @@ const SIM={
   },
   render(cam,zoom,sw,sh,debug,player,ents,nEnt,hurt,hp){
     const gl=this.gl, pr=this.P.render;
-    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur]});
+    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uLight:this.L[this.lcur]});
     gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); gl.uniform1i(pr.u.uDebug,debug);
     gl.uniform4f(pr.u.uPlayer,player[0],player[1],player[2],player[3]); gl.uniform4fv(pr.u.uEnt,ents); gl.uniform1i(pr.u.uNEnt,nEnt); gl.uniform1f(pr.u.uPHurt,hurt); gl.uniform1f(pr.u.uPHp,hp);
     this.draw(null,sw,sh);

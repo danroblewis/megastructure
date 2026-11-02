@@ -23,7 +23,7 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%4; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -117,6 +117,7 @@
     // --- simulate ---
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
+    SIM.lightStep(3);
     SIM.probe(probePts,n);
     player.mass=red.mass; player.burning=red.burning;
     if(red.mass>0.5){ player.vx=red.cx-player.px; player.vy=red.cy-player.py; player.px=red.cx; player.py=red.cy; player.x=red.cx; player.y=red.cy; }
