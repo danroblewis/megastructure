@@ -54,13 +54,13 @@ const GEN={
     const connectH=(a,b)=>{ // a left of b
       const ch=ri(24,44); const ya=ri(a.y0+16,a.y1-16), yb=ri(b.y0+16,b.y1-16); const mid=Math.round((a.x1+b.x0)/2);
       rect(a.x1,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0,yb+ch/2,M.FLUID);
-      if(R()<0.65) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
+      if(R()<0.65 && a.i>0 && b.i>0) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
       if(R()<0.4) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
       rect(xa-ch/2,a.y1,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0,M.FLUID);
-      machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
+      if(a.i>0 && b.i>0) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
     for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1,x+dh/2,b.y0,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }

@@ -228,6 +228,7 @@ out vec4 o;
 bool fluidAt(ivec2 q){ return !solidAt(q); }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
+  if(t==M_MOVING){ vec4 bb=texelFetch(uB,p,0); o=vec4(bb.x*0.9,bb.x*0.1,bb.z,0.0); return; }   // a blade wears at what it sweeps through; it does not erase it
   if(solidAt(p)||t==M_DRAIN){ o=vec4(0.0); return; }
   float self=texelFetch(uB,p,0).x; float s0=self;
   vec2 v0=texelFetch(uBV,p,0).xy;
