@@ -5,8 +5,8 @@
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
-  const W=+HASH.w||(small?1024:2048), H=+HASH.h||(small?512:1024);
-  const world=GEN.build(W,H,+HASH.seed||7);
+  const W=HASH.lab?512:(+HASH.w||(small?1024:2048)), H=HASH.lab?256:(+HASH.h||(small?512:1024));
+  const world= HASH.lab? LAB.build(512,256) : GEN.build(W,H,+HASH.seed||7);
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
   let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1;
@@ -230,6 +230,19 @@
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
+  // lab mode: fixed scenarios with measurements
+  if(HASH.lab){
+    const labIntent=[0,0];
+    SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; };
+    SCHEME.useTarget=false;
+    const ctx={N:+HASH.n||600,player,selves,spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
+      setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
+      measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
+        const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<64;x+=8){ probePts[n*2]=x; probePts[n*2+1]=j.y; n++; }
+        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; for(let k=0;k<n;k++) s+=pb2[k*4+3]; return {inJet:s*8*(j.half*2)/1.0}; } };
+    const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
+    document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
+  } else
   // headless test mode: run N ticks synchronously, render once, report
   if(HASH.test){
     if(HASH.zoom) zoom=+HASH.zoom*dpr;
