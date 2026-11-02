@@ -30,7 +30,7 @@ const SIM={
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -119,9 +119,21 @@ const SIM={
     this.red={mass:m,cx:m>0?mx/m:0,cy:m>0?my/m:0,burning:b}; this.pending=false;
     return [this.probeBuf,this.probeBuf2,this.red];
   },
+  ensureBloom(sw,sh){ const gl=this.gl, w=Math.max(1,sw>>1), h=Math.max(1,sh>>1); if(this.bloomW===w&&this.bloomH===h) return;
+    const tex=(w,h)=>{ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null); return t; };
+    const fbo=(t)=>{ const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f); gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0); gl.bindFramebuffer(gl.FRAMEBUFFER,null); return f; };
+    this.bloomW=w; this.bloomH=h; this.bloomT=[tex(w,h),tex(w,h)]; this.bloomF=this.bloomT.map(fbo); },
   render(cam,zoom,sw,sh,debug,player,ents,nEnt,hurt,hp){
-    const gl=this.gl, pr=this.P.render;
+    const gl=this.gl; let pr;
+    // bloom: extract emissive at half resolution, blur horizontally then vertically
+    this.ensureBloom(sw,sh); const bw=this.bloomW, bh=this.bloomH;
+    pr=this.P.bloomExtract; this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uB:this.B[this.bcur]}); gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); this.draw(this.bloomF[0],bw,bh);
+    pr=this.P.blur; gl.useProgram(pr.p); gl.uniform2f(pr.u.uTexel,1/bw,1/bh);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uT,0); gl.uniform2f(pr.u.uDir,1,0); this.draw(this.bloomF[1],bw,bh);
+    gl.bindTexture(gl.TEXTURE_2D,this.bloomT[1]); gl.uniform2f(pr.u.uDir,0,1); this.draw(this.bloomF[0],bw,bh);
+    pr=this.P.render;
     this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uLight:this.L[this.lcur]});
+    gl.activeTexture(gl.TEXTURE0+9); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uBloom,9);
     gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); gl.uniform1i(pr.u.uDebug,debug);
     gl.uniform4f(pr.u.uPlayer,player[0],player[1],player[2],player[3]); gl.uniform4fv(pr.u.uEnt,ents); gl.uniform1i(pr.u.uNEnt,nEnt); gl.uniform1f(pr.u.uPHurt,hurt); gl.uniform1f(pr.u.uPHp,hp);
     this.draw(null,sw,sh);

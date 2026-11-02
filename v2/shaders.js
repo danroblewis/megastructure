@@ -141,10 +141,9 @@ void main(){
   vec2 dv=vec2(p)+0.5-uInject.xy; float dd=dot(dv,dv); if(dd<uInject.z*uInject.z){ float k=1.0-dd/(uInject.z*uInject.z); s+=uInjectAmt*k; }
   s=clamp(s,vec4(0.0,-1.0,0.0,0.0),vec4(1.0,3.0,2.0,1.0));
   oS=s;
-  // dye: slow decay, re-seeded from drifting noise so the flow stays visible
-  d*=0.9985;
-  ivec2 bp=p/8; float seed=rnd(bp,3u);
-  if(seed<0.00012){ vec2 cc=vec2(bp*8+4); float fall=1.0-min(1.0,length(vec2(p)+0.5-cc)/6.0); d.rgb+=vec3(rnd(bp,4u),rnd(bp,5u),rnd(bp,6u))*fall; }
+  // dye: an advected noise pattern, relaxed slowly toward a fixed field so the flow draws streaklines through it
+  vec3 pat=vec3(float(hashu(uvec3(uint(p.x),uint(p.y),101u))&255u),float(hashu(uvec3(uint(p.x/2),uint(p.y/2),77u))&255u),float(hashu(uvec3(uint(p.x/3),uint(p.y/3),55u))&255u))/255.0;
+  d.rgb=mix(d.rgb,pat,0.012);
   // vents breathe dye so every current is visible
   if(t==M_VENT) d.rgb=max(d.rgb,vec3(0.2,0.55,0.8));
   d.rgb=max(d.rgb,vec3(0.5,0.7,1.0)*min(1.0,selfHere*0.8));   // the body writes its path into the flow
@@ -256,6 +255,18 @@ void main(){
   L=mix(prev,L,0.6);
   o=vec4(L,sol,em,0.0);
 }`;
+// ---------------- bloom: emissive extract (half res) and separable blur ----------------
+SH.bloomExtract = SH.head + `
+uniform sampler2D uS, uB; uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; out vec4 o;
+void main(){ vec2 wc=uCam+vec2(gl_FragCoord.x,uScreen.y*0.5-gl_FragCoord.y)*2.0/uZoom; ivec2 p=wrapP(ivec2(floor(wc)));
+  float self=texelFetch(uB,p,0).x; float h=max(texelFetch(uS,p,0).y,0.0);
+  vec3 e=vec3(0.55,0.78,1.0)*min(1.0,self*1.2)+vec3(1.0,0.5,0.15)*h*0.9+vec3(1.0,0.9,0.7)*h*h*0.5;
+  o=vec4(e,1.0); }`;
+SH.blur = `#version 300 es
+precision highp float; uniform sampler2D uT; uniform vec2 uDir; uniform vec2 uTexel; out vec4 o;
+void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=float[5](0.227,0.195,0.122,0.054,0.016);
+  acc+=texture(uT,uv).rgb*ws[0]; for(int i=1;i<5;i++){ vec2 off=uDir*uTexel*float(i)*2.0; acc+=texture(uT,uv+off).rgb*ws[i]; acc+=texture(uT,uv-off).rgb*ws[i]; }
+  o=vec4(acc,1.0); }`;
 // first reduction: 4x4 blocks of the body texture -> (mass, mass*x, mass*y, burning)
 SH.reduce0 = SH.head + `
 uniform sampler2D uB, uS; out vec4 o;
@@ -289,7 +300,7 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(flo
 
 // ---------------- render ----------------
 SH.render = SH.head + `
-uniform sampler2D uS, uFC, uDye, uB, uLight;
+uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
@@ -336,7 +347,8 @@ void main(){
   col=bg;
   if(wf.x>0.0){ col=mix(col,vec3(0.3,0.3,0.33)*(0.5+0.5*(1.0-wf.y)),wf.x*0.8); }
   float sp=length(c.zw);
-  col+=d.rgb*vec3(0.35,0.45,0.6)*(0.5+sp*4.0);            // tracer dye tinted by speed
+  float streak=(d.r+d.g+d.b)/3.0-0.5;                       // signed noise, stretched along the flow
+  col+=vec3(0.30,0.40,0.55)*(0.10+min(1.0,sp*6.0)*0.55)*(0.5+streak);  // streaklines, brighter where the gas moves
   col+=vec3(0.15,0.55,0.35)*s.x*0.45;                     // fuel haze
   col=mix(col,vec3(0.02),clamp(s.z*0.5,0.0,0.7));          // smoke
   col*=lit;                                               // lit by the self and by fire
@@ -346,6 +358,7 @@ void main(){
   float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0)),clamp(L*1.6,0.0,0.85)); // organism
   float pr=c.y; col+=vec3(0.3,0.25,0.2)*clamp((pr-1.15)*1.5,0.0,1.0);  // pressure fronts
   col+=vec3(0.35,0.5,0.85)*wf.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
+  col+=texture(uBloom,gl_FragCoord.xy/uScreen).rgb*0.55;
   col=1.0-exp(-col*1.4);
   // entities
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }
