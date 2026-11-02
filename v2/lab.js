@@ -25,6 +25,8 @@ const LAB={
     hold:    {spawn:[160,128], script:[{t0:0,t1:900,dir:[-1,0],stayIn:true}]},   // inside the jet, push upstream (correcting to stay in it) until tired
     calm:    {spawn:[80,60],   script:[{t0:0,t1:300,dir:[1,0]}]},            // still gas: move freely
     calm2:   {spawn:[300,60],  script:[{t0:0,t1:300,dir:[1,0]}]},            // the same, away from the cold corner
+    taste:   {spawn:[80,118],  script:[{t0:0,t1:450,dir:[0,-0.6]}]},         // straddling the jet while pulling away from it: is a part taken while the rest stays?
+    tasteR:  {spawn:[80,118],  script:[{t0:0,t1:120,dir:[0,-0.6]},{t0:120,t1:450,dir:[1,0.5]}]},   // the same, then go after what was taken
   },
   run(name,ctx,tick){
     const sc=this.scenarios[name]; const rows=[]; const N=ctx.N; ctx.jet=ctx.world.jet;
