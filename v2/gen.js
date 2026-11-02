@@ -109,6 +109,18 @@ const GEN={
     for(let i=0;i<W*H;i++){ mask[i*4]=type[i]; mask[i*4+1]=Math.round((dirs[i*2]*0.5+0.5)*255); mask[i*4+2]=Math.round((dirs[i*2+1]*0.5+0.5)*255); mask[i*4+3]=255; }
     return {W,H,mask,src,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
   },
+  // the same world at 1/f resolution: structure, machines and markers all scaled; sources and vents survive the coarsening
+  downsample(w,f){
+    const W=Math.floor(w.W/f), H=Math.floor(w.H/f); const type=new Uint8Array(W*H), mask=new Uint8Array(W*H*4), src=new Uint8Array(W*H*4);
+    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)?5 : t===4?4 : t===1?3 : t===9||t===10?2 : 0;   // what wins when cells merge
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      let best=0,bp=-1,g=128,b=128,solid=0,n=0; const s4=[0,0,0,0];
+      for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
+      if(best===1 && solid<n/2) best=0;   // thin walls stay walls only if they fill half the block
+      const j=y*W+x; type[j]=best; mask[j*4]=best; mask[j*4+1]=g; mask[j*4+2]=b; mask[j*4+3]=255; for(let c=0;c<4;c++) src[j*4+c]=s4[c]; }
+    const sc=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==='number'&&['x','y','r','w','h','len','x0','x1','y0','y1','cx','cy'].includes(k)?v/f:v]));
+    return {W,H,mask,src,type,machines:w.machines.map(sc),cores:[],drones:[],checkpoints:w.checkpoints.map(sc),rooms:w.rooms.map(sc),spawn:sc(w.spawn),exit:sc(w.exit),jet:w.jet&&sc(w.jet)};
+  },
   // machine quads for this frame: returns Float32Array of [x,y,vx,vy,type] per vertex (6 per quad)
   machineQuads(machines,t,out,H){ H=H||1024;
     let n=0; const push=(x,y,vx,vy,tp)=>{ out[n++]=x; out[n++]=y; out[n++]=vx; out[n++]=vy; out[n++]=tp; };

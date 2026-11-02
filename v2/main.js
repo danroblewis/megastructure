@@ -5,8 +5,9 @@
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
-  const W=HASH.lab?512:(+HASH.w||2048), H=HASH.lab?256:(+HASH.h||1024);
-  const world= HASH.lab? LAB.build(512,256) : GEN.build(W,H,+HASH.seed||7);
+  const FULLW=+HASH.w||2048, FULLH=+HASH.h||1024; const COARSE=(small&&!HASH.w&&!HASH.lab)?2:1;
+  const world= HASH.lab? LAB.build(512,256) : (COARSE>1? GEN.downsample(GEN.build(FULLW,FULLH,+HASH.seed||7),COARSE) : GEN.build(FULLW,FULLH,+HASH.seed||7));
+  const W=world.W, H=world.H;
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
   let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1;
@@ -229,10 +230,10 @@
       c.strokeStyle= player.dissoc>0? 'rgba(160,160,170,0.7)' : st<0.3? 'rgba(255,150,120,0.8)' : 'rgba(220,235,255,0.6)'; c.beginPath(); c.arc(px,py,30*s,-Math.PI/2,-Math.PI/2+6.283*st); c.stroke(); }
     // scheme menu (bottom-right pill; Tab or ` on a keyboard)
     { const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='middle'; c.textAlign='left';
-      const label='scheme: '+SCHEME.name+'  ▴'; const tw=c.measureText(label).width; const ph=fs*2, pw=tw+fs*1.6; const px=sw-pw-10*s, py=sh-ph-10*s-(window.safeBottom||0);
+      const label='scheme: '+SCHEME.name+'  ▾'; const tw=c.measureText(label).width; const ph=fs*2, pw=tw+fs*1.6; const px=sw-pw-10*s, py=10*s+(window.safeTop||0)*s;
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.45)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
-      if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py-8*s-rh*MENU.names.length; const rx=sw-rw-10*s;
+      if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
         c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*MENU.names.length+12*s,10*s); c.fill();
         for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
