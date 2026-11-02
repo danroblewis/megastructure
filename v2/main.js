@@ -15,26 +15,27 @@
 
   // ---------- audio ----------
   const AUDIO={ctx:null,muted:false,init(){ if(this.ctx) return; try{ const C=window.AudioContext||window.webkitAudioContext; this.ctx=new C(); const sr=this.ctx.sampleRate; const buf=this.ctx.createBuffer(1,sr*2,sr); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; this.nb=buf;
-      const mk=(f,q)=>{ const s=this.ctx.createBufferSource(); s.buffer=buf; s.loop=true; const fl=this.ctx.createBiquadFilter(); fl.type='bandpass'; fl.frequency.value=f; fl.Q.value=q; const g=this.ctx.createGain(); g.gain.value=0; s.connect(fl); fl.connect(g); g.connect(this.ctx.destination); s.start(); return {g,fl}; };
+      this.master=this.ctx.createGain(); this.master.gain.value=0.35; this.master.connect(this.ctx.destination); this.out=this.master;
+      const mk=(f,q)=>{ const s=this.ctx.createBufferSource(); s.buffer=buf; s.loop=true; const fl=this.ctx.createBiquadFilter(); fl.type='bandpass'; fl.frequency.value=f; fl.Q.value=q; const g=this.ctx.createGain(); g.gain.value=0; s.connect(fl); fl.connect(g); g.connect(this.out); s.start(); return {g,fl}; };
       this.wind=mk(400,0.5); this.roar=mk(120,0.8); this.hiss=mk(3000,0.6);
       // two voices of the self: together they hum in the middle; as you spread they drift apart and detune
-      const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.ctx.destination); o.start(); return {o,g,p}; };
+      const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.out); o.start(); return {o,g,p}; };
       this.vA=voice(); this.vB=voice(); }catch(e){} },
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
       const stretch=Math.max(0,Math.min(1,(spread/r0-1.0)/1.4));       // 0 round .. 1 torn apart
-      const vol=dead?0:Math.min(0.06,0.012+mass/170*0.045);
+      const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022);
       const w=stretch*0.9; const pa=Math.max(-1,Math.min(1,pan-w)), pb=Math.max(-1,Math.min(1,pan+w));
       const base=96+Math.min(1,mass/170)*28; const det=stretch*stretch*18+Math.max(0,elong-1.3)*3;
       this.vA.o.frequency.setTargetAtTime(base,t,0.3); this.vB.o.frequency.setTargetAtTime(base+det,t,0.3);
       this.vA.g.gain.setTargetAtTime(vol*(1-stretch*0.3),t,0.3); this.vB.g.gain.setTargetAtTime(vol*(0.6+stretch*0.4),t,0.3);
       this.vA.p.pan.setTargetAtTime(pa,t,0.3); this.vB.p.pan.setTargetAtTime(pb,t,0.3); },
-    tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
-    noise(dur,vol,freq){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
+    tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.out||this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
+    noise(dur,vol,freq){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.out||this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
     ambience(rel,heat){ if(!this.ctx||this.muted||!this.wind) return; const t=this.ctx.currentTime;
       // wind only when the gas moves relative to you; quiet by default, smoothed over ~0.4 s
-      const w=Math.max(0,rel-0.015)*0.5; this.wind.g.gain.setTargetAtTime(Math.min(0.09,w),t,0.4); this.wind.fl.frequency.setTargetAtTime(250+Math.min(1,rel*4)*1500,t,0.4);
-      this.roar.g.gain.setTargetAtTime(Math.min(0.12,Math.max(0,heat-0.1)*0.25),t,0.3); this.hiss.g.gain.setTargetAtTime(Math.min(0.05,Math.max(0,heat-0.4)*0.2),t,0.3); } };
+      const w=Math.max(0,rel-0.14)*0.25; this.wind.g.gain.setTargetAtTime(Math.min(0.035,w),t,0.6); this.wind.fl.frequency.setTargetAtTime(180+Math.min(1,rel*3)*700,t,0.6);
+      this.roar.g.gain.setTargetAtTime(Math.min(0.05,Math.max(0,heat-0.2)*0.15),t,0.4); this.hiss.g.gain.setTargetAtTime(Math.min(0.02,Math.max(0,heat-0.5)*0.1),t,0.4); } };
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
@@ -161,7 +162,7 @@
       { const ci=world.checkpoints.findIndex(c=>Math.hypot(c.x-player.x,c.y-player.y)<12); if(ci>=0&&ci>=player.cpIndex){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=ci+1; pendingInjectB=[player.x,player.y,10,1.0]; AUDIO.tone(600,900,0.2,'sine',0.08); } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
-      AUDIO.ambience(Math.hypot(ux/3-player.vx*0.3,uy/3-player.vy*0.3),heat);
+      AUDIO.ambience(Math.hypot(ux/3-player.vx,uy/3-player.vy)/Math.max(1,steps),heat);
     } else if(--player.deadT<=0){ player.dead=false; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
     { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass,red.spread||0,red.elong||1,pan,player.dead); }
     shake*=0.85;
