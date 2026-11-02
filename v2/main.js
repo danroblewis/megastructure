@@ -42,7 +42,7 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -56,7 +56,8 @@
     if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
     touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
     if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
-  canvas.addEventListener('pointermove',e=>{ const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; if(t.primary&&SCHEME.useTarget!==false) setTarget(e.clientX,e.clientY); if(SCHEME.onMove) SCHEME.onMove(ctxNow(),{id:e.pointerId,sx:e.clientX,sy:e.clientY,x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom}); } e.preventDefault(); });
+  const hover={x:0,y:0,set:false};
+  canvas.addEventListener('pointermove',e=>{ hover.x=camX+e.clientX*dpr/zoom; hover.y=camY+e.clientY*dpr/zoom; hover.set=true; const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; if(t.primary&&SCHEME.useTarget!==false) setTarget(e.clientX,e.clientY); if(SCHEME.onMove) SCHEME.onMove(ctxNow(),{id:e.pointerId,sx:e.clientX,sy:e.clientY,x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom}); } e.preventDefault(); });
   const up=e=>{ const ev=touchLog.find(v=>v.id===e.pointerId&&!v.up); if(ev){ ev.up=performance.now(); ev.dur=ev.up-ev.t; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); } touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
   canvas.addEventListener('contextmenu',e=>e.preventDefault()); document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   function readInput(){
@@ -109,7 +110,7 @@
       else if(m.kind==='door'){ const open=(Math.sin(m.phase+t*2*Math.PI/m.period)>0.2); if(!open && Math.abs(e.x-m.x)<m.h/2+r && Math.abs(e.y-m.y)<m.w/2+r){ e.x+=(e.x<m.x?-1:1)*1.2; e.vx*=-0.3; } }
       else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5)*m.len; const dirY=m.y<=H/2?1:-1; const y0=Math.min(m.y,m.y+dirY*ph), y1=Math.max(m.y,m.y+dirY*ph); if(e.x>m.x-m.w/2-r&&e.x<m.x+m.w/2+r&&e.y>y0-r&&e.y<y1+r){ dmg+=0.012; e.vy+=dirY*0.5; e.x+= (e.x<m.x?-1:1)*0.8; } } }
     return dmg; }
-  function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
+  function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   let inject=null, shake=0, steps=small?2:3;
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};

@@ -26,7 +26,7 @@ SCHEMES.consistency={name:'consistency',blurb:'touch where you want to go · the
   hud(ctx,c){ if(!ctx.SIM.frame||!location.hash.includes('hud')) return; const s=ctx.dpr; c.font=`${Math.round(11*s)}px sans-serif`; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`${this.st.status} ${this.st.c.toFixed(2)}`,6*s,30*s); }};
 
 // 2. APPETITES — emotions processed linearly on three chemical axes. No targets: the self chases one chemical at a time; a tap moves on to the next.
-SCHEMES.appetites={name:'appetites',blurb:'no steering · the self chases one chemical at a time · tap to move on to the next appetite',useTarget:false,
+SCHEMES.appetites={name:'appetites',blurb:'no steering · the self chases one chemical at a time · tap the screen or press space to move on to the next appetite',useTarget:false,
   cycle:[{n:'seeks heat',a:[1,0,0]},{n:'seeks fuel',a:[0,1,0]},{n:'seeks cold',a:[0,0,1]},{n:'flees heat',a:[-1,0,0]},{n:'flees fuel',a:[0,-1,0]},{n:'flees cold',a:[0,0,-1]}],
   st:{i:0,flash:0},
   onDown(ctx){ this.st.i=(this.st.i+1)%this.cycle.length; this.st.flash=90; ctx.AUDIO.tone(300+this.st.i*60,300+this.st.i*60,0.12,'sine',0.05); },
@@ -34,13 +34,13 @@ SCHEMES.appetites={name:'appetites',blurb:'no steering · the self chases one ch
   hud(ctx,c){ if(this.st.flash<=0) return; const s=ctx.dpr; c.font=`${Math.round(14*s)}px sans-serif`; c.fillStyle=`rgba(255,255,255,${Math.min(1,this.st.flash/30)})`; const w=c.measureText(this.cycle[this.st.i].n).width; c.fillText(this.cycle[this.st.i].n,(ctx.sw-w)/2,ctx.sh*0.62); }};
 
 // 3. BREATH — rhythm and entrainment. Hold to inhale (gather), release to exhale a puff from the side you touched. A steady rhythm consolidates the self.
-SCHEMES.breath={name:'breath',blurb:'hold to breathe in and gather · let go to breathe out from where you touched · a steady rhythm holds you together',useTarget:false,
+SCHEMES.breath={name:'breath',blurb:'hold the screen or the space bar to breathe in · let go to breathe out away from your finger or mouse · a steady rhythm holds you together',useTarget:false,
   st:{exh:0,ex:[0,0],coh:0.5,ups:[]},
   onUp(ctx,ev){ const s=this.st; s.ups.push(ev.up); if(s.ups.length>12) s.ups.shift(); const d=_unit(ctx.player.x-ev.x,ctx.player.y-ev.y); s.ex=d; s.exh=28+Math.min(40,ev.dur/60); ctx.AUDIO.noise(0.35,0.12,900);
     if(s.ups.length>=4){ const gaps=[]; for(let i=1;i<s.ups.length;i++) gaps.push(s.ups[i]-s.ups[i-1]); const reg=1/(1+_cv(gaps)*2); s.coh+=(reg-s.coh)*0.3; } },
   tick(ctx){ const s=this.st, bd=ctx.bd; const holding=ctx.touches.size>0||ctx.keys.Space;
     bd.swim=0; bd.push=0; bd.dir[0]=0; bd.dir[1]=0; ctx.dirS[0]=0; ctx.dirS[1]=0;
-    if(ctx.keys.Space&&!this.sp){ this.t0=ctx.now; } if(!ctx.keys.Space&&this.sp){ this.onUp(ctx,{x:ctx.player.x+(ctx.player.vx||0.01)*-10,y:ctx.player.y,up:ctx.now,dur:ctx.now-(this.t0||ctx.now)}); } this.sp=!!ctx.keys.Space;
+    if(ctx.keys.Space&&!this.sp){ this.t0=ctx.now; } if(!ctx.keys.Space&&this.sp){ const h=ctx.hover; const ex= h&&h.set? {x:h.x,y:h.y} : {x:ctx.player.x-10,y:ctx.player.y}; this.onUp(ctx,{x:ex.x,y:ex.y,up:ctx.now,dur:ctx.now-(this.t0||ctx.now)}); } this.sp=!!ctx.keys.Space;
     if(holding){ bd.dense=1.4; bd.coh*=2.2; bd.grow*=1.6; bd.grip=0.5; }
     else if(s.exh>0){ s.exh--; bd.dir[0]=s.ex[0]; bd.dir[1]=s.ex[1]; bd.push=0.05*(0.5+s.coh); bd.radial=0.004; bd.dense=0.7; }
     bd.coh*=0.6+0.9*s.coh; bd.grow*=0.5+s.coh; }};
@@ -82,7 +82,7 @@ SCHEMES.memory={name:'memory',blurb:'each touch is remembered in three layers ·
     const ident=Math.hypot(s.l[0],s.l[1]); bd.coh*=0.6+1.4*ident; bd.grow*=0.5+1.0*ident; bd.dense=0.6+0.7*ident; }};
 
 // 7. PRESENCE — IFS. Self is always here. The one input is Self-energy: while held, parts unburden and come home; released, parts act on their burdens.
-SCHEMES.presence={name:'presence',blurb:'hold anywhere to be present · parts calm and come home while you are · let go and they act on what burdens them',useTarget:false,
+SCHEMES.presence={name:'presence',blurb:'hold the screen or the space bar to be present · parts calm and come home while you are · let go and they act on what burdens them',useTarget:false,
   burdens:[[1,0,0],[0,1,0],[0,0,1],[-1,0,0]],
   st:{b:{}},
   tick(ctx){ const bd=ctx.bd, sv=ctx.selves; const held=ctx.touches.size>0||ctx.keys.Space;
