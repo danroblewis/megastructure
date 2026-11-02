@@ -48,12 +48,12 @@ const GEN={
     const ductLoop=(a,b)=>{ // thin duct with a vent at one end and a drain at the other: permanent current
       const dh=ri(10,16); const ya=ri(a.y0+8,a.y1-8), yb=ri(b.y0+8,b.y1-8); const left=a.x1<b.x0?a:b, right=left===a?b:a;
       const yl=left===a?ya:yb, yr=left===a?yb:ya; const mid=Math.round((left.x1+right.x0)/2)+ri(-20,20);
-      rect(left.x1,yl-dh/2,mid+dh/2,yl+dh/2,M.FLUID); rect(mid-dh/2,Math.min(yl,yr)-dh/2,mid+dh/2,Math.max(yl,yr)+dh/2,M.FLUID); rect(mid-dh/2,yr-dh/2,right.x0,yr+dh/2,M.FLUID);
+      rect(left.x1-AMP-4,yl-dh/2,mid+dh/2,yl+dh/2,M.FLUID); rect(mid-dh/2,Math.min(yl,yr)-dh/2,mid+dh/2,Math.max(yl,yr)+dh/2,M.FLUID); rect(mid-dh/2,yr-dh/2,right.x0+AMP+4,yr+dh/2,M.FLUID);
       const dir=(a.i===0||b.i===0)? (left===a?1:-1) : (R()<0.5?1:-1); const vx=dir>0?left.x1+3:right.x0-3, vy=dir>0?yl:yr, dxx=dir>0?right.x0-3:left.x1+3, dyy=dir>0?yr:yl;
       for(let k=-dh/2+1;k<dh/2;k++){ set(vx,Math.round(vy+k),M.VENT); setDir(vx,Math.round(vy+k),dir,0); set(dxx,Math.round(dyy+k),M.DRAIN); } };
     const connectH=(a,b)=>{ // a left of b
       const ch=ri(24,44); const ya=ri(a.y0+16,a.y1-16), yb=ri(b.y0+16,b.y1-16); const mid=Math.round((a.x1+b.x0)/2);
-      rect(a.x1,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0,yb+ch/2,M.FLUID);
+      rect(a.x1-AMP-4,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0+AMP+4,yb+ch/2,M.FLUID);
       { // the way forward is a current: vent at the earlier chamber's mouth, drain on the far wall of the later one
         const fwd=a.i<b.i; const e=fwd?a:b, l=fwd?b:a; const my=fwd?ya:yb; const vx=fwd?a.x1+2:b.x0-2; const dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(vx,Math.round(my+k),M.VENT); setDir(vx,Math.round(my+k),dir,0); }
@@ -63,14 +63,14 @@ const GEN={
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
-      rect(xa-ch/2,a.y1,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0,M.FLUID);
+      rect(xa-ch/2,a.y1-AMP-4,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0+AMP+4,M.FLUID);
       { const fwd=a.i<b.i; const l=fwd?b:a; const vy=fwd?a.y1+2:b.y0-2, mx=fwd?xa:xb, dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(Math.round(mx+k),vy,M.VENT); setDir(Math.round(mx+k),vy,0,dir); }
         const dy=fwd?l.y1:l.y0; for(let k=-6;k<=6;k++) set(Math.round(l.cx+k*2),dy,M.DRAIN); }
       if(a.i>=6 && b.i>=6) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
-    for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1,x+dh/2,b.y0,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
+    for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1-AMP-4,x+dh/2,b.y0+AMP+4,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
     // ---- room furniture ----
     for(const r of rooms){
       const w=r.x1-r.x0, h=r.y1-r.y0;
@@ -96,7 +96,7 @@ const GEN={
       else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=6) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
-      { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); rect(cx0-3,y0,cx0,y1,M.COOLER); rect(cx0+cw,y0,cx0+cw+3,y1,M.COOLER); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh}); } }   // the cold room: where you condense, and where you are remembered
+      { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-5,top?y1:r.y1-AMP-4,dx+5,top?r.y0+AMP+4:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); rect(cx0-3,y0,cx0,y1,M.COOLER); rect(cx0+cw,y0,cx0+cw+3,y1,M.COOLER); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh}); } }   // the cold room: where you condense, and where you are remembered
     }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
@@ -124,7 +124,7 @@ const GEN={
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){
       let best=0,bp=-1,g=128,b=128,solid=0,n=0; const s4=[0,0,0,0];
       for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
-      if(best===1 && solid<n/2) best=0;   // thin walls stay walls only if they fill half the block
+      if(best===1 && solid<n) best=0;   // a passage survives coarsening; only fully solid blocks stay wall
       const j=y*W+x; type[j]=best; mask[j*4]=best; mask[j*4+1]=g; mask[j*4+2]=b; mask[j*4+3]=255; for(let c=0;c<4;c++) src[j*4+c]=s4[c]; }
     const sc=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==='number'&&['x','y','r','w','h','len','x0','x1','y0','y1','cx','cy'].includes(k)?v/f:v]));
     return {W,H,mask,src,type,machines:w.machines.map(sc),cores:[],drones:[],checkpoints:w.checkpoints.map(sc),rooms:w.rooms.map(sc),spawn:sc(w.spawn),exit:sc(w.exit),jet:w.jet&&sc(w.jet)};
