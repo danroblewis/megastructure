@@ -27,6 +27,7 @@ const LAB={
   },
   run(name,ctx,tick){
     const sc=this.scenarios[name]; const rows=[]; const N=ctx.N; ctx.jet=ctx.world.jet;
+    for(let i=0;i<(ctx.warm||900);i++) ctx.warmStep();          // let the jet develop before anyone is in it
     ctx.player.x=sc.spawn[0]; ctx.player.y=sc.spawn[1]; ctx.spawnAt(sc.spawn[0],sc.spawn[1]);
     let fades=0, prevGhosts=0;
     for(let i=0;i<N;i++){
@@ -35,7 +36,7 @@ const LAB={
       tick();
       const ghosts=ctx.selves.filter((s,k)=>k>0&&s.live&&s.mass>6);
       if(ghosts.length<prevGhosts) fades+=prevGhosts-ghosts.length; prevGhosts=ghosts.length;
-      if(i%30===29){ const m=ctx.measure(); rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades}); }
+      if(i%30===29){ const m=ctx.measure(); rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
     }
     return rows;
   },

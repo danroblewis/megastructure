@@ -146,7 +146,7 @@
     { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
       const fx=pb[0], fy=pb[1], fl=Math.hypot(fx,fy); const dl=Math.hypot(bd.dir[0],bd.dir[1]);
       let effort=0; if(fl>0.07&&dl>0.05){ const against=-(bd.dir[0]*fx+bd.dir[1]*fy)/(fl*dl); effort=Math.max(0,against)*Math.min(1,(fl-0.07)/0.12)*Math.min(1,dl); }
-      player.effort=effort;
+      player.effort=effort; player.dbg=[fx,fy,fl,dl,bd.dir[0],bd.dir[1]].map(v=>+v.toFixed(3)); player.dbg2=[pb===SIM.probeBuf, +SIM.probeBuf[0].toFixed(3), SIM.pending, n, probePts[0]|0, probePts[1]|0];
       if(player.dissoc>0){ player.dissoc--; bd.dir[0]=0; bd.dir[1]=0; bd.coh*=0.5; bd.dense=0.6; if(player.dissoc===0) player.stamina=0.35; }
       else { player.stamina=Math.max(0,player.stamina-effort*0.0045); if(effort<0.1) player.stamina=Math.min(1,player.stamina+0.003*(heat<0?2:1)); if(player.stamina<=0.02){ player.dissoc=150; AUDIO.tone(180,60,1.2,'sine',0.05); } }
       const st=player.stamina; bd.swim*=0.2+0.8*st; bd.push*=0.2+0.8*st; bd.coh*=0.6+0.4*st;
@@ -264,11 +264,11 @@
     const labIntent=[0,0];
     SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; };
     SCHEME.useTarget=false;
-    const ctx={N:+HASH.n||600,player,selves,world,spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
+    const ctx={N:+HASH.n||600,warm:+HASH.warm||900,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-8,0,8]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
-        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; for(let k=0;k<n;k++) s+=pb2[k*4+3]; return {inJet:s*24*(j.half*2)/3}; } };
+        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
     const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
     document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
   } else
