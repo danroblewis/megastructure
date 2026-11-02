@@ -279,15 +279,15 @@ void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=flo
   o=vec4(acc,1.0); }`;
 // first reduction: 4x4 blocks of the body texture -> (mass, mass*x, mass*y, burning)
 SH.reduce0 = SH.head + `
-uniform sampler2D uB, uS; out vec4 o;
-void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0);
-  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue; float h=max(texelFetch(uS,q,0).y,0.0); acc+=vec4(s,s*(float(q.x)+0.5),s*(float(q.y)+0.5),s*h); }
-  o=acc; }`;
+uniform sampler2D uB, uS; layout(location=0) out vec4 o; layout(location=1) out vec4 o2;
+void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0), acc2=vec4(0.0);
+  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue; float h=max(texelFetch(uS,q,0).y,0.0); float px=float(q.x)+0.5, py=float(q.y)+0.5; acc+=vec4(s,s*px,s*py,s*h); acc2+=vec4(s*px*px,s*py*py,s*px*py,0.0); }
+  o=acc; o2=acc2; }`;
 SH.reduceN = SH.head + `
-uniform sampler2D uL; uniform ivec2 uLRes; out vec4 o;
-void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0);
-  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uLRes.x||q.y>=uLRes.y) continue; acc+=texelFetch(uL,q,0); }
-  o=acc; }`;
+uniform sampler2D uL, uL2; uniform ivec2 uLRes; layout(location=0) out vec4 o; layout(location=1) out vec4 o2;
+void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0), acc2=vec4(0.0);
+  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uLRes.x||q.y>=uLRes.y) continue; acc+=texelFetch(uL,q,0); acc2+=texelFetch(uL2,q,0); }
+  o=acc; o2=acc2; }`;
 
 // ---------------- dynamic mask: copy static then machines are drawn as quads ----------------
 SH.maskCopy = SH.head + `
