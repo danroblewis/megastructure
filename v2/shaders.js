@@ -210,7 +210,17 @@ void main(){
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
 SH.wallsInit = SH.head + `
-out vec4 o; void main(){ ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p)); o=vec4(solidT(t)?1.0:0.0,0.0,0.0,0.0); }`;
+out vec4 o;
+float vn(vec2 x){ vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f); float a=float(hashu(uvec3(uint(i.x+500.0),uint(i.y+500.0),9u))&255u)/255.0, b=float(hashu(uvec3(uint(i.x+501.0),uint(i.y+500.0),9u))&255u)/255.0, c=float(hashu(uvec3(uint(i.x+500.0),uint(i.y+501.0),9u))&255u)/255.0, d=float(hashu(uvec3(uint(i.x+501.0),uint(i.y+501.0),9u))&255u)/255.0; return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+void main(){ ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p)); bool s=solidT(t);
+  if(!s){ o=vec4(0.0); return; }
+  bool face=false; for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); if(q.x>=0&&q.y>=0&&q.x<uRes.x&&q.y<uRes.y && !solidT(mtype(maskAt(q)))) face=true; }
+  float grime=vn(vec2(p)/37.0)*0.7+vn(vec2(p)/9.0)*0.3;          // patchy soot
+  float wear=vn(vec2(p)/23.0+7.0);                                 // eroded faces
+  float phi=1.0; if(face){ phi=mix(1.0,0.55,smoothstep(0.55,0.9,wear)); }
+  float soot=face? smoothstep(0.5,0.95,grime)*0.6 : 0.0;
+  float kind=face&&vn(vec2(p)/31.0+3.0)>0.8 ? 0.5 : 0.0;           // old frost crusts here and there
+  o=vec4(phi,soot,0.0,kind); }`;
 SH.walls = SH.head + `
 uniform sampler2D uS, uFC, uB; out vec4 o;
 void main(){
