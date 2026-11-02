@@ -66,13 +66,13 @@
     let tx=0,ty=0,puff=false;
     if(keys.ArrowLeft||keys.KeyA) tx-=1; if(keys.ArrowRight||keys.KeyD) tx+=1; if(keys.ArrowUp||keys.KeyW) ty-=1; if(keys.ArrowDown||keys.KeyS) ty+=1;
     if(keys.KeyC||keys.ShiftLeft) puff=true;
-    for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; }
+    if(SCHEME.useTarget!==false){ for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; } }   // hold still to tighten: only where a touch is not itself the input
     if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>2.5){ const k=Math.min(1,0.35+d/30); tx=dx/d*k; ty=dy/d*k; } }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:12, rfar:30, swim:0.1, push:0.0, coh:2.4, spawnR:8};
+  const BODY={massMax:170, rnear:12, rfar:30, swim:0.15, push:0.0, coh:2.4, spawnR:8};
   const DEFAULT_SCHEME='target';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
