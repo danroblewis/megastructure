@@ -193,13 +193,14 @@ void main(){
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
   float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
   vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
-  vec2 v=carry+drive*uSwim+g+home;
+  vec2 coh=g+home; float dl=length(drive); if(dl>0.05){ vec2 dd=drive/dl; float along=dot(coh,dd); if(along<0.0) coh-=along*dd*0.85; }   // cohesion does not fight locomotion
+  vec2 v=carry+drive*uSwim+coh;
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
     float side=1.0; if(uSplitApp>0.0){ side= dot(vec2(p)+0.5-uC[0],uSplitAxis)>=0.0?1.0:-1.0; }
     vec3 app=uApp*mix(1.0,side,uSplitApp);
-    vec2 ga=gh*app.x+gf*app.y+gc*app.z; float gl2=length(ga); if(gl2>0.0003) v+=ga/gl2*min(0.45,0.12+gl2*8.0); else { float a=float(hashu(uvec3(uFrame/40u,7u,3u))&1023u)/1024.0*6.2832; v+=vec2(cos(a),sin(a))*0.06; }
+    vec2 ga=gh*app.x+gf*app.y+gc*app.z; float gl2=length(ga); if(gl2>0.0003) v+=ga/gl2*min(0.45,0.12+gl2*8.0); else { float a=float(hashu(uvec3(uFrame/40u,7u,3u))&1023u)/1024.0*6.2832; v+=vec2(cos(a),sin(a))*0.1; }
   }
   if(ki==0 && uSplitStr>0.0){ // differentiate: matter sorts itself by what it has lived through — warm-remembering cells toward heat, the rest toward cold
     float ex=texelFetch(uB,p,0).z; float side= ex>0.5?1.0:-1.0;
