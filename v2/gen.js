@@ -28,6 +28,22 @@ const GEN={
       }
     }
     for(const r of rooms) rect(r.x0,r.y0,r.x1,r.y1,M.FLUID);
+    // organic reshaping: the walls of each chamber bulge outward and pinch inward with low-frequency noise
+    const noiseTbl=new Float32Array(4096); for(let i=0;i<4096;i++) noiseTbl[i]=R();
+    const vnoise=(x,y)=>{ const xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi; const h=(i,j)=>noiseTbl[((i*73+j*151)&4095+4096)&4095]; const sx=fx*fx*(3-2*fx), sy=fy*fy*(3-2*fy);
+      return (h(xi,yi)*(1-sx)+h(xi+1,yi)*sx)*(1-sy)+(h(xi,yi+1)*(1-sx)+h(xi+1,yi+1)*sx)*sy; };
+    const AMP=14;
+    for(const r of rooms){
+      for(let y=r.y0-AMP-1;y<=r.y1+AMP+1;y++) for(let x=r.x0-AMP-1;x<=r.x1+AMP+1;x++){
+        if(x<4||y<4||x>=W-4||y>=H-4) continue;
+        const dx=Math.max(r.x0-x,0,x-r.x1), dy=Math.max(r.y0-y,0,y-r.y1);
+        const inside=(x>=r.x0&&x<=r.x1&&y>=r.y0&&y<=r.y1);
+        const d= inside? -Math.min(x-r.x0,r.x1-x,y-r.y0,r.y1-y) : Math.hypot(dx,dy);   // signed distance to the rectangle
+        const n=(vnoise(x/46+r.i*7.3,y/46+r.i*3.1)-0.5)*2*AMP + (vnoise(x/16+r.i,y/16)-0.5)*5 + (vnoise(x/5,y/5)-0.5)*1.5;
+        if(d<n){ if(type[y*W+x]===M.WALL) type[y*W+x]=M.FLUID; }
+        else if(inside && d>n+1){ type[y*W+x]=M.WALL; }
+      }
+    }
     // ---- connections ----
     const ductLoop=(a,b)=>{ // thin duct with a vent at one end and a drain at the other: permanent current
       const dh=ri(10,16); const ya=ri(a.y0+8,a.y1-8), yb=ri(b.y0+8,b.y1-8); const left=a.x1<b.x0?a:b, right=left===a?b:a;
