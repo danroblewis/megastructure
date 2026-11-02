@@ -1,7 +1,7 @@
 // v2/main.js — game loop, player, entities, input, camera, HUD, audio
 'use strict';
 (function(){
-  const HASH=Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(kv=>kv.split('=')));
+  const HASH=Object.fromEntries([...location.search.slice(1).split('&'),...location.hash.slice(1).split('&')].filter(Boolean).map(kv=>kv.split('=')));
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
@@ -136,6 +136,15 @@
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
+    // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
+    { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
+      const fx=pb[0], fy=pb[1], fl=Math.hypot(fx,fy); const dl=Math.hypot(bd.dir[0],bd.dir[1]);
+      let effort=0; if(fl>0.02&&dl>0.05){ const against=-(bd.dir[0]*fx+bd.dir[1]*fy)/(fl*dl); effort=Math.max(0,against)*Math.min(1,fl/0.12)*Math.min(1,dl); }
+      player.effort=effort;
+      if(player.dissoc>0){ player.dissoc--; bd.dir[0]=0; bd.dir[1]=0; bd.coh*=0.5; bd.dense=0.6; }
+      else { player.stamina=Math.max(0,player.stamina-effort*0.0045); if(effort<0.1) player.stamina=Math.min(1,player.stamina+0.0015*(heat<0?2:1)); if(player.stamina<=0.02){ player.dissoc=240; AUDIO.tone(180,60,1.2,'sine',0.05); } }
+      const st=player.stamina; bd.swim*=0.2+0.8*st; bd.push*=0.2+0.8*st; bd.coh*=0.6+0.4*st;
+      if(st<0.6){ const g=1-st/0.6; bd.tint=[0.55,0.55,0.6,Math.max(bd.tint?bd.tint[3]:0,0.5*g)]; } }
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
     if(alive){

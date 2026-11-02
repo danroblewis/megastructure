@@ -165,6 +165,7 @@ uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform float uDense;                                 // preferred density of the self
 uniform vec3 uApp;                                    // appetites: drift up (+) or down (-) the gradients of heat, fuel, cold
+uniform float uJet;                                   // how much harder fast gas grips matter
 uniform vec2 uSplitAxis; uniform float uSplitStr, uSplitApp;   // differentiate: push halves apart along an axis; flip appetites across it
 int nearestI(vec2 pp){ int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } return k; }
 vec2 nearestC(vec2 pp){ return uC[nearestI(pp)]; }
@@ -188,7 +189,8 @@ void main(){
   if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
-  vec2 carry=u*uAdv; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
+  float jet=1.0+uJet*min(1.0,length(u)/0.2);
+  vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
   vec2 v=carry+drive*uSwim+g+home;
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
