@@ -37,7 +37,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush;
+uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -73,7 +73,8 @@ void main(){
   float burn=s.x*smoothstep(uIgn,uIgn+0.25,s.y);
   rho+=burn*uBurnP;
   float self=texelFetch(uB,p,0).x;
-  vec2 F=vec2(0.0,-uBuoy*s.y+0.00015*s.z)+uDir*uPush*self;
+  vec2 pushDir=uDir; if(self>0.0 && uCN>1){ vec2 pp=vec2(p)+0.5; int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } pushDir=uDirs[k]; }
+  vec2 F=vec2(0.0,-uBuoy*s.y+0.00015*s.z)+pushDir*uPush*self;
   vec2 ueq=u+uTau*F/rho;
   ueq*=max(0.0,1.0-solidity(p)*1.8);   // porous cells drag the gas
   float sp=length(ueq); if(sp>0.3) ueq*=0.3/sp;
@@ -112,6 +113,9 @@ void main(){
   vec2 u=texelFetch(uFC,p,0).zw;
   vec2 back=vec2(p)+0.5-u*uAdv;
   vec4 s=sampleS(back);
+  { // the organism creeps up the gradient of self, hunting you through the gas
+    float sl=texelFetch(uB,wrapP(p-ivec2(2,0)),0).x, sr=texelFetch(uB,wrapP(p+ivec2(2,0)),0).x, su=texelFetch(uB,wrapP(p-ivec2(0,2)),0).x, sd=texelFetch(uB,wrapP(p+ivec2(0,2)),0).x;
+    vec2 gs=vec2(sr-sl,sd-su); float gl=length(gs); if(gl>0.002){ vec2 drift=gs/gl*min(0.25,gl*6.0); float Lw=sampleS(back-drift).w; s.w=max(s.w,Lw); } }
   vec4 d=sampleD(back);
   // diffusion
   vec4 nb=vec4(0.0); float n=0.0;
@@ -156,8 +160,9 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
-uniform vec2 uC[3]; uniform int uCN;
-vec2 nearestC(vec2 pp){ vec2 c=uC[0]; float bd=distance(pp,c); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; c=uC[j]; } } } return c; }
+uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+int nearestI(vec2 pp){ int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } return k; }
+vec2 nearestC(vec2 pp){ return uC[nearestI(pp)]; }
 float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
@@ -173,7 +178,12 @@ void main(){
   vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
   vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
-  vec2 v=u*uAdv+uDir*uSwim+g+home;
+  int ki=nearestI(vec2(p)+0.5);
+  vec2 drive=uDirs[ki];
+  if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
+    float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
+    vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
+  vec2 v=u*uAdv+drive*uSwim+g+home;
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;

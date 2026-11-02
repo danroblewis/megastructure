@@ -90,7 +90,7 @@ const GEN={
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
       if(r.i>0){ const cx3=(r.tier%2===0)?r.x0+8:r.x1-8; const cy3=Math.round(r.cy); checkpoints.push({x:cx3,y:cy3}); disc(cx3,cy3,4,M.CHECK);
         const wx=(r.tier%2===0)?r.x0:r.x1; rect(wx-(r.tier%2===0?3:0),cy3-7,wx+(r.tier%2===0?0:3),cy3+7,M.COOLER); }   // a cold mirror behind every checkpoint
-      if(R()<0.35){ const top=R()<0.5; const cw=ri(16,28), chh=ri(12,20); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-8-chh:r.y1+8, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-3,top?y1:r.y1,dx+3,top?r.y0:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); } }   // an unmarked cold alcove
+      if(R()<0.7){ const top=R()<0.5; const cw=ri(16,30), chh=ri(12,22); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-8-chh:r.y1+8, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-3,top?y1:r.y1,dx+3,top?r.y0:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); } }   // an unmarked cold alcove
     }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
