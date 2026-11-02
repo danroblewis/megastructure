@@ -9,6 +9,7 @@ const LAB={
     for(let y=20;y<H-20;y++) for(let x=20;x<W-20;x++) type[y*W+x]=0;
     const jy=Math.round(H/2);
     for(let k=-14;k<=14;k++){ type[(jy+k)*W+20]=2; dirs[((jy+k)*W+20)*2]=1; type[(jy+k)*W+(W-21)]=3; }
+    for(let x=60;x<=120;x++){ type[(jy-27)*W+x]=1; type[(jy-28)*W+x]=1; }   // a ledge above the jet: a body against it has only its lowest rows in the stream
     // a cold pocket in the top-left corner, a burner bottom-right: calm and heat for the stamina tests
     for(let x=24;x<60;x++){ type[20*W+x]=6; }
     for(let x=W-80;x<W-40;x++){ type[(H-21)*W+x]=5; }
@@ -26,8 +27,8 @@ const LAB={
     calm:    {spawn:[80,60],   script:[{t0:0,t1:300,dir:[1,0]}]},            // still gas: move freely
     calm2:   {spawn:[300,60],  script:[{t0:0,t1:300,dir:[1,0]}]},            // the same, away from the cold corner
     taste:   {spawn:[80,118],  script:[{t0:0,t1:450,dir:[0,-0.6]}]},         // straddling the jet while pulling away from it: is a part taken while the rest stays?
-    ledge:   {spawn:[83,118],  script:[{t0:0,t1:450,dir:[0,-1]}]},           // pressed up against the ledge, lower edge in the jet: is a part taken while the rest holds?
-    ledgeR:  {spawn:[83,118],  script:[{t0:0,t1:150,dir:[0,-1]},{t0:150,t1:450,dir:[1,0.6]}]},   // then let go and go after it
+    ledge:   {spawn:[88,108],  script:[{t0:0,t1:450,dir:[0,-1]}]},           // pressed up against the ledge, lower edge in the jet: is a part taken while the rest holds?
+    ledgeR:  {spawn:[88,108],  script:[{t0:0,t1:150,dir:[0,-1]},{t0:150,t1:450,dir:[1,0.6]}]},   // then let go and go after it
     tasteR:  {spawn:[80,118],  script:[{t0:0,t1:120,dir:[0,-0.6]},{t0:120,t1:450,dir:[1,0.5]}]},   // the same, then go after what was taken
   },
   run(name,ctx,tick){
