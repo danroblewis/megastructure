@@ -4,7 +4,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 0. Strip the harness
+## 0. Strip the harness — done 2026-11-02
 
 **Why.** Health bar, counters and legends assert a conventional "you". The visible size of the self is the health bar. The game should look like the simulation and nothing else.
 
@@ -12,7 +12,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 1. Phase-field walls with residue
+## 1. Phase-field walls with residue — done 2026-11-02
 
 **Why.** A fixed stage makes the self the only thing that changes. If the structure softens, melts, frosts, grows and remembers, then dissolution is the world's condition too, and the places where you lost pieces of yourself stay marked.
 
@@ -31,7 +31,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 2. Self as light
+## 2. Self as light — done 2026-11-02 (diffused light grid at quarter resolution rather than ray marching)
 
 **Why.** If the self is the only light, then a flattened self lights a wall as a smear, a lost fragment is a light going out in the distance, and the dark between fragments is literal.
 
@@ -43,7 +43,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 3. Streaklines and glow
+## 3. Streaklines and glow — done 2026-11-02
 
 **Why.** The wind is the other character. It should read as continuous ink, not scattered dots.
 
@@ -53,7 +53,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 4. Organic geometry and ageing
+## 4. Organic geometry and ageing — done 2026-11-02 (noise-displaced chamber walls, pre-aged soot and wear; ducts still straight)
 
 **Why.** Boxes assert a designed, permanent place. Swollen, pinched, eroded forms assert a place that has been lived in.
 
@@ -61,7 +61,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 5. Sound as a sense of self
+## 5. Sound as a sense of self — done 2026-11-02
 
 **Why.** You should hear yourself come apart before you see it.
 
@@ -79,7 +79,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 7. Reformation as a place
+## 7. Reformation as a place — in progress 2026-11-02
 
 **Why.** Reforming should be found, not awarded. A checkpoint is a reward; a cold still pocket where you condense is a mirror.
 
