@@ -34,3 +34,13 @@ Keep these true when changing the game:
 - Should fragments that drift beyond the far radius wither, or could a large fragment become a second self you can switch to?
 - Could the camera hesitate, or widen, when the self is split, to make the choice of where to look part of play?
 - Does damage need a health bar at all, or is the visible size of the self enough?
+
+## Living matter (added 2026-11-02)
+
+There are three kinds of living matter in the structure, and all three are fields under the same rules:
+
+- **You**: the self cloud, driven by your intention wherever your cells are.
+- **Past lives**: fragments that were you and are no longer. They keep a fading habit of the last intention you gave them and drift toward cold. They fade unless they rest in a cold, still pocket, where they persist and can be rejoined or re-entered with a tap. If you disperse completely, the largest resting past life becomes you.
+- **The organism**: the only other appetite. It creeps up the gradient of self through fuel-rich gas, feeds on you and grows from what it takes, and gives you back when it burns near you.
+
+Every relation between them is an exchange of mass. There are no enemies, no pickups. The resource is the cold, still pockets where matter condenses, and whoever occupies a pocket is condensed there: a past life settled in a good pocket is a chamber you negotiate by waiting, by heating it out with a spark, or by joining it. Dispersal is an ending, slow and quiet, not a reload.

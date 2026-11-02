@@ -98,3 +98,9 @@ Every item below is judged by one question: does it make the self's dissolution,
 ## 9. Theme
 
 Decide after items 1 and 2 are in. The two fits are a corroding machine or a breathing body. The phase field makes either possible; which one wins should be decided by looking at the aged, lit structure, not in the abstract.
+
+---
+
+## 10. Past lives and the single appetite — done 2026-11-02
+
+Cores and drones retired. The organism hunts by climbing the self gradient. Past lives keep a habit and seek cold, fade outside pockets, persist inside them. Pockets are the resource. Dispersal is slow.
