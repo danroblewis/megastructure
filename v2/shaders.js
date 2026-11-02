@@ -208,6 +208,11 @@ void main(){
     vec2 dirv= gl3>0.0005? gh/gl3*side : (al>0.5? away/al*side : vec2(0.0));
     v+=dirv*uSplitStr; }
   if(ki==0 && uSplitStr<0.0){ vec2 toC=uC[0]-(vec2(p)+0.5); float tl=length(toC); if(tl>1.0) v+=toC/tl*(-uSplitStr); }   // integrate: all of it is one
+  if(ki==0){ // stick: press into a wall and the cells touching it hold on
+    float press=0.0;
+    if(solidAt(p+ivec2(1,0))) press=max(press,drive.x); if(solidAt(p-ivec2(1,0))) press=max(press,-drive.x);
+    if(solidAt(p+ivec2(0,1))) press=max(press,drive.y); if(solidAt(p-ivec2(0,1))) press=max(press,-drive.y);
+    if(press>0.2) v*=mix(1.0,0.05,min(1.0,(press-0.2)/0.4)); }
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;
