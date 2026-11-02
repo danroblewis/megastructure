@@ -4,7 +4,7 @@
   const HASH=Object.fromEntries([...location.search.slice(1).split('&'),...location.hash.slice(1).split('&')].filter(Boolean).map(kv=>kv.split('=')));
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
-  const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
+  const small= HASH.small? true : (HASH.test||HASH.lab)? false : (Math.min(window.innerWidth,window.innerHeight)<700||isTouch);
   const FULLW=+HASH.w||2048, FULLH=+HASH.h||1024; const COARSE=(small&&!HASH.w&&!HASH.lab)?2:1;
   const world= HASH.lab? LAB.build(512,256) : (COARSE>1? GEN.downsample(GEN.build(FULLW,FULLH,+HASH.seed||7),COARSE) : GEN.build(FULLW,FULLH,+HASH.seed||7));
   const W=world.W, H=world.H;
@@ -119,7 +119,7 @@
     return dmg; }
   function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
-  let inject=null, shake=0, steps=small?1:3;
+  let inject=null, shake=0, steps=small?2:3;
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   function tick(){
     const inp=readInput(); sparkQ=false;
@@ -206,7 +206,7 @@
     const t0=performance.now();
     if(lastNow){ const dt=Math.min(100,now-lastNow); dtAvg+=(dt-dtAvg)*0.05; }
     lastNow=now;
-    if(SIM.frame%120===0){ if(dtAvg>24&&steps>1) steps--; else if(dtAvg<17.5&&steps<(small?2:3)) steps++; }
+    if(SIM.frame%120===0){ if(dtAvg>26&&steps>1) steps--; else if(dtAvg<17.5&&steps<3) steps++; }
     tick();
     const vw=sw/zoom, vh=sh/zoom;
     const tx=player.x-vw/2, ty=player.y-vh/2;
