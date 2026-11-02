@@ -134,6 +134,7 @@ void main(){
   if(s.y>0.35) s.w-=(s.y-0.35)*0.6;
   // the body burns into smoke, and feeds the organism a little
   float selfHere=texelFetch(uB,p,0).x; s.z+=selfHere*max(s.y-0.35,0.0)*0.6;
+  s.w+=selfHere*max(s.w-0.08,0.0)*0.5;                      // the organism grows from the self it feeds on
   // cooling, smoke settling
   s.y-=uCool*(s.y>0.0?s.y:s.y*0.5);
   s.z*=0.996;
@@ -207,7 +208,8 @@ void main(){
   else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw))); self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // close cells reinforce; cold still pockets condense you
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
-  self-=max(sp.w-0.08,0.0)*0.04;
+  self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
+  if(sp.y>0.35 && sp.w>0.05 && dc<uRfar) self+=sp.w*(sp.y-0.35)*0.35;   // organism burning near you becomes you
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
   float lost=max(0.0,before-self);
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); }

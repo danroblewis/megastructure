@@ -69,7 +69,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 6. Multiple selves
+## 6. Multiple selves — done 2026-11-02
 
 **Why.** The centroid can sit in empty space between two halves. That is honest but it hides the choice. Pinball makes you choose a ball; this should make you choose a fragment.
 
@@ -79,7 +79,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 7. Reformation as a place — in progress 2026-11-02
+## 7. Reformation as a place — done 2026-11-02
 
 **Why.** Reforming should be found, not awarded. A checkpoint is a reward; a cold still pocket where you condense is a mirror.
 
@@ -87,7 +87,7 @@ Every item below is judged by one question: does it make the self's dissolution,
 
 ---
 
-## 8. The organism as the other self
+## 8. The organism as the other self — done 2026-11-02
 
 **Why.** A second kind of self that lives differently makes the first one's nature visible.
 
