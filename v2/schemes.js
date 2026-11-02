@@ -64,9 +64,9 @@ SCHEMES.attention={name:'attention',blurb:'hold a spot to attend to it · the se
   onDown(ctx,ev){ this.st.spots.push({t:ev.t,x:ev.x,y:ev.y}); if(this.st.spots.length>40) this.st.spots.shift(); },
   onMove(ctx,ev){ const sp=this.st.spots[this.st.spots.length-1]; if(sp){ sp.x=ev.x; sp.y=ev.y; } },
   tick(ctx){ const s=this.st, bd=ctx.bd; const held=ctx.touches.size>0; const sp=s.spots[s.spots.length-1];
-    if(held&&sp){ s.fat=Math.min(1,s.fat+1/600); const str=1-s.fat; const d=_unit(sp.x-ctx.player.x,sp.y-ctx.player.y); ctx.dirS[0]+=(d[0]*str-ctx.dirS[0])*0.1; ctx.dirS[1]+=(d[1]*str-ctx.dirS[1])*0.1; }
-    else { s.fat=Math.max(0,s.fat-1/240); ctx.dirS[0]*=0.95; ctx.dirS[1]*=0.95; }
-    bd.dir[0]=ctx.dirS[0]; bd.dir[1]=ctx.dirS[1];
+    if(held&&sp){ s.fat=Math.min(1,s.fat+1/600); const str=1-0.5*s.fat; const d=_unit(sp.x-ctx.player.x,sp.y-ctx.player.y); ctx.dirS[0]+=(d[0]*str-ctx.dirS[0])*0.15; ctx.dirS[1]+=(d[1]*str-ctx.dirS[1])*0.15; }
+    else { s.fat=Math.max(0,s.fat-1/150); ctx.dirS[0]*=0.992; ctx.dirS[1]*=0.992; }   // the heading you gave persists for a few seconds after you let go
+    bd.dir[0]=ctx.dirS[0]; bd.dir[1]=ctx.dirS[1]; bd.swim*=1.4;
     const distinct=_recent(s.spots,ctx.now,60000).length; const focus=1/(1+distinct*0.25); s.focus+=(focus-s.focus)*0.02;
     bd.coh*=0.6+1.4*s.focus; bd.grow*=0.4+1.2*s.focus; bd.dense=0.6+0.7*s.focus; bd.tint=[0.3,0.35,0.5,0.6*s.fat]; },
   hud(ctx,c){ const s=this.st, d=ctx.dpr; const sp=s.spots[s.spots.length-1]; const held=ctx.touches.size>0&&sp;
