@@ -49,17 +49,24 @@ const GEN={
       const dh=ri(10,16); const ya=ri(a.y0+8,a.y1-8), yb=ri(b.y0+8,b.y1-8); const left=a.x1<b.x0?a:b, right=left===a?b:a;
       const yl=left===a?ya:yb, yr=left===a?yb:ya; const mid=Math.round((left.x1+right.x0)/2)+ri(-20,20);
       rect(left.x1,yl-dh/2,mid+dh/2,yl+dh/2,M.FLUID); rect(mid-dh/2,Math.min(yl,yr)-dh/2,mid+dh/2,Math.max(yl,yr)+dh/2,M.FLUID); rect(mid-dh/2,yr-dh/2,right.x0,yr+dh/2,M.FLUID);
-      const dir=R()<0.5?1:-1; const vx=dir>0?left.x1+3:right.x0-3, vy=dir>0?yl:yr, dxx=dir>0?right.x0-3:left.x1+3, dyy=dir>0?yr:yl;
+      const dir=(a.i===0||b.i===0)? (left===a?1:-1) : (R()<0.5?1:-1); const vx=dir>0?left.x1+3:right.x0-3, vy=dir>0?yl:yr, dxx=dir>0?right.x0-3:left.x1+3, dyy=dir>0?yr:yl;
       for(let k=-dh/2+1;k<dh/2;k++){ set(vx,Math.round(vy+k),M.VENT); setDir(vx,Math.round(vy+k),dir,0); set(dxx,Math.round(dyy+k),M.DRAIN); } };
     const connectH=(a,b)=>{ // a left of b
       const ch=ri(24,44); const ya=ri(a.y0+16,a.y1-16), yb=ri(b.y0+16,b.y1-16); const mid=Math.round((a.x1+b.x0)/2);
       rect(a.x1,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0,yb+ch/2,M.FLUID);
+      { // the way forward is a current: vent at the earlier chamber's mouth, drain on the far wall of the later one
+        const fwd=a.i<b.i; const e=fwd?a:b, l=fwd?b:a; const my=fwd?ya:yb; const vx=fwd?a.x1+2:b.x0-2; const dir=fwd?1:-1;
+        for(let k=-ch/2+3;k<=ch/2-3;k++){ set(vx,Math.round(my+k),M.VENT); setDir(vx,Math.round(my+k),dir,0); }
+        const dx=fwd?l.x1:l.x0; for(let k=-6;k<=6;k++) set(dx,Math.round(l.cy+k*2),M.DRAIN); }
       if(R()<0.65 && a.i>=6 && b.i>=6) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
       if(R()<0.4 && a.i>=3 && b.i>=3) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
       rect(xa-ch/2,a.y1,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0,M.FLUID);
+      { const fwd=a.i<b.i; const l=fwd?b:a; const vy=fwd?a.y1+2:b.y0-2, mx=fwd?xa:xb, dir=fwd?1:-1;
+        for(let k=-ch/2+3;k<=ch/2-3;k++){ set(Math.round(mx+k),vy,M.VENT); setDir(Math.round(mx+k),vy,0,dir); }
+        const dy=fwd?l.y1:l.y0; for(let k=-6;k<=6;k++) set(Math.round(l.cx+k*2),dy,M.DRAIN); }
       if(a.i>=6 && b.i>=6) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
