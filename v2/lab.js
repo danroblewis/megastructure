@@ -19,8 +19,8 @@ const LAB={
   },
   // scenarios: where the blob starts, and a scripted intent (direction over tick ranges)
   scenarios:{
-    edge:    {spawn:[80,110],  script:[]},                                   // resting against the top of the jet: does a part get torn off and fade?
-    commit:  {spawn:[80,106],  script:[{t0:60,t1:200,dir:[0,1]}]},           // after a second, move into the jet, then let it carry you
+    edge:    {spawn:[80,120],  script:[]},                                   // resting against the top of the jet: does a part get torn off and fade?
+    commit:  {spawn:[80,106],  script:[{t0:60,t1:130,dir:[0,1]}]},           // after a second, move into the jet, then let it carry you
     rescue:  {spawn:[80,106],  script:[{t0:150,t1:400,dir:[1,0.6]}]},        // when a part has gone, go after it
     hold:    {spawn:[160,128], script:[{t0:0,t1:900,dir:[-1,0],stayIn:true}]},   // inside the jet, push upstream (correcting to stay in it) until tired
     calm:    {spawn:[80,60],   script:[{t0:0,t1:300,dir:[1,0]}]},            // still gas: move freely

@@ -71,7 +71,7 @@
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:12, rfar:30, swim:0.1, push:0.004, coh:2.4, spawnR:8};
+  const BODY={massMax:170, rnear:12, rfar:30, swim:0.1, push:0.0, coh:2.4, spawnR:8};
   const DEFAULT_SCHEME='target';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
