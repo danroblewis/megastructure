@@ -261,11 +261,11 @@
     const labIntent=[0,0];
     SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; };
     SCHEME.useTarget=false;
-    const ctx={N:+HASH.n||600,player,selves,spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
+    const ctx={N:+HASH.n||600,player,selves,world,spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
-        const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<64;x+=8){ probePts[n*2]=x; probePts[n*2+1]=j.y; n++; }
-        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; for(let k=0;k<n;k++) s+=pb2[k*4+3]; return {inJet:s*8*(j.half*2)/1.0}; } };
+        const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-8,0,8]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
+        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; for(let k=0;k<n;k++) s+=pb2[k*4+3]; return {inJet:s*24*(j.half*2)/3}; } };
     const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
     document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
   } else

@@ -189,7 +189,7 @@ void main(){
   if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
-  float jet=1.0+uJet*min(1.0,length(u)/0.2);
+  float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
   vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
   vec2 v=carry+drive*uSwim+g+home;
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
