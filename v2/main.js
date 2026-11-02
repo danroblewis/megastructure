@@ -45,7 +45,7 @@
   // second finger tap = spark; holding one finger still = contract
   const target={x:null,y:null,set:0};
   const DEAD=10;
-  const setTarget=(cx,cy)=>{ target.x=camX+cx*dpr/zoom; target.y=camY+cy*dpr/zoom; target.set=performance.now(); };
+  const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>6&&Math.hypot(selves[i].x-wx,selves[i].y-wy)<16){ adopt(i); return; } } target.x=wx; target.y=wy; target.set=performance.now(); };
   canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
     if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
     touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
@@ -67,9 +67,24 @@
   const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
   let pendingInjectB=null;
+  // selves: up to three fragments tracked by the reduction. index 0 is "you"; the others are ghosts.
+  const selves=[{x:0,y:0,mass:0,live:true},{x:0,y:0,mass:0,live:false},{x:0,y:0,mass:0,live:false}];
+  function pushCentres(){ let n=0; for(let i=0;i<3;i++){ if(selves[i].live){ SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; n++; } } SIM.nC=Math.max(1,n); }
+  function updateSelves(red){
+    const cl=red.clusters; if(!cl||cl.length<3) return;
+    let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
+    for(const s of live){ if(s!==selves[0] && s.mass<6){ s.live=false; } }
+    let best=selves[0]; for(const s of selves){ if(s.live&&s.mass>best.mass*1.15) best=s; }
+    if(best!==selves[0]){ const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; }
+    if(red.far && red.far.d>BODY.rfar*0.9){ const f=red.far; let farFromAll=true; for(const s of selves){ if(s.live && Math.hypot(s.x-f.x,s.y-f.y)<BODY.rfar*0.9) farFromAll=false; }
+      if(farFromAll){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; } } }
+    pushCentres();
+  }
+  function adopt(i){ if(i<=0||!selves[i].live) return; const tmp=selves[0]; selves[0]=selves[i]; selves[i]=tmp; pushCentres(); target.x=null; AUDIO.tone(500,700,0.15,'sine',0.06); }
   function restart(){ player.x=world.spawn.x; player.y=world.spawn.y; player.px=player.x; player.py=player.y; player.mass=0; player.hp=1; player.dead=false; player.won=false; player.cores=0; player.deaths=0; player.kills=0; player.checkpoint={x:world.spawn.x,y:world.spawn.y}; player.cpIndex=0;
     cores=world.cores.map(c=>({x:c.x,y:c.y,vx:0,vy:0,alive:true})); drones=world.drones.map(d=>({x:d.x,y:d.y,vx:0,vy:0,alive:true,hp:1})); SIM.frame=0;
-    pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30; }
+    pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30;
+    selves[0].x=player.x; selves[0].y=player.y; selves[0].mass=0; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
   restart();
   const solidAt=(x,y)=>{ const xi=x|0, yi=y|0; if(xi<0||yi<0||xi>=W||yi>=H) return true; const t=world.type[yi*W+xi]; return t===1||t>=5&&t<=8; };
   function collide(e,r){
@@ -134,19 +149,20 @@
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
     SIM.probe(probePts,n);
+    updateSelves(red);
     player.mass=red.mass; player.burning=red.burning;
-    if(red.mass>0.5){ player.vx=red.cx-player.px; player.vy=red.cy-player.py; player.px=red.cx; player.py=red.cy; player.x=red.cx; player.y=red.cy; }
+    if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
     player.hp=Math.min(1,player.mass/BODY.massMax);
     player.hurt=Math.min(1,player.hurt*0.9+red.burning*0.02);
     if(red.burning>2&&SIM.frame%12===0) AUDIO.tone(200,90,0.15,'sawtooth',0.05);
     if(alive){
       if(player.respawnT>0) player.respawnT--;
-      else if(player.mass<22){ player.dead=true; player.deadT=90; player.deaths++; shake=4; AUDIO.tone(300,40,0.7,'sawtooth',0.15); AUDIO.noise(0.6,0.25,600); }
+      else if(selves[0].mass<22){ player.dead=true; player.deadT=90; player.deaths++; shake=4; AUDIO.tone(300,40,0.7,'sawtooth',0.15); AUDIO.noise(0.6,0.25,600); }
       { const ci=world.checkpoints.findIndex(c=>Math.hypot(c.x-player.x,c.y-player.y)<12); if(ci>=0&&ci>=player.cpIndex){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=ci+1; pendingInjectB=[player.x,player.y,10,1.0]; AUDIO.tone(600,900,0.2,'sine',0.08); } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
       AUDIO.ambience(Math.hypot(ux/3-player.vx*0.3,uy/3-player.vy*0.3),heat);
-    } else if(--player.deadT<=0){ player.dead=false; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; }
+    } else if(--player.deadT<=0){ player.dead=false; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
     { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass,red.spread||0,red.elong||1,pan,player.dead); }
     shake*=0.85;
   }
@@ -175,6 +191,9 @@
   function drawHud(ms){
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`,pad,pad); }
+    // ghosts: a faint slow pulse around each other self; tap it to become it
+    for(let i=1;i<3;i++){ const g=selves[i]; if(!g.live||g.mass<6||player.dead) continue; const px=(g.x-camX)*zoom, py=(g.y-camY)*zoom; const ph=(performance.now()/1600+i*0.5)%1;
+      c.strokeStyle=`rgba(150,190,255,${0.35*(1-ph)})`; c.lineWidth=1.5*s; c.beginPath(); c.arc(px,py,(10+14*ph)*s,0,6.283); c.stroke(); }
     // target point: a soft animated marker where you asked the body to go
     if(target.x!==null&&!player.dead){ const px=(target.x-camX)*zoom, py=(target.y-camY)*zoom; const ph=(performance.now()/700)%1;
       c.strokeStyle=`rgba(140,220,255,${0.55*(1-ph)})`; c.lineWidth=2*s; c.beginPath(); c.arc(px,py,(6+16*ph)*s,0,6.283); c.stroke();
@@ -205,6 +224,6 @@
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
     SIM.probe(probePts,1); const [pb]=SIM.collect();
-    document.title=`test ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
+    document.title=`test ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();

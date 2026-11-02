@@ -155,6 +155,8 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
+uniform vec2 uC[3]; uniform int uCN;
+vec2 nearestC(vec2 pp){ vec2 c=uC[0]; float bd=distance(pp,c); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; c=uC[j]; } } } return c; }
 float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
@@ -168,7 +170,7 @@ void main(){
   float here=texelFetch(uB,p,0).x;
   float calm=calmAt(p);
   vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
-  vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
+  vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   vec2 v=u*uAdv+uDir*uSwim+g+home;
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
@@ -178,6 +180,8 @@ void main(){
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
+uniform vec2 uC[3]; uniform int uCN;
+float nearestD(vec2 pp){ float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ bd=min(bd,distance(pp,uC[j])); } } return bd; }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
 out vec4 o;
@@ -195,7 +199,7 @@ void main(){
     self-=flux;
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
   }
-  vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC);
+  float dc=nearestD(vec2(p)+0.5);
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   vec4 sp=texelFetch(uS,p,0);
   float before=self;
@@ -279,17 +283,28 @@ precision highp float; uniform sampler2D uT; uniform vec2 uDir; uniform vec2 uTe
 void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=float[5](0.227,0.195,0.122,0.054,0.016);
   acc+=texture(uT,uv).rgb*ws[0]; for(int i=1;i<5;i++){ vec2 off=uDir*uTexel*float(i)*2.0; acc+=texture(uT,uv+off).rgb*ws[i]; acc+=texture(uT,uv-off).rgb*ws[i]; }
   o=vec4(acc,1.0); }`;
-// first reduction: 4x4 blocks of the body texture -> (mass, mass*x, mass*y, burning)
+// reductions: cells are assigned to the nearest live centre (up to 3 selves); sums per centre, second moments
+// of the main self (centre 0), and the farthest cell from the main self (for re-seeding a lost fragment).
+//  T0 (m0, mx0, my0, burn)   T1 (xx0, yy0, xy0, m1)   T2 (mx1, my1, m2, mx2)   T3 (my2, farDist, farX, farY)
 SH.reduce0 = SH.head + `
-uniform sampler2D uB, uS; layout(location=0) out vec4 o; layout(location=1) out vec4 o2;
-void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0), acc2=vec4(0.0);
-  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue; float h=max(texelFetch(uS,q,0).y,0.0); float px=float(q.x)+0.5, py=float(q.y)+0.5; acc+=vec4(s,s*px,s*py,s*h); acc2+=vec4(s*px*px,s*py*py,s*px*py,0.0); }
-  o=acc; o2=acc2; }`;
+uniform sampler2D uB, uS; uniform vec2 uC[3]; uniform int uCN;
+layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=2) out vec4 o2; layout(location=3) out vec4 o3;
+void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
+  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
+    float px=float(q.x)+0.5, py=float(q.y)+0.5; vec2 pp=vec2(px,py);
+    int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } }
+    float h=max(texelFetch(uS,q,0).y,0.0); a0.w+=s*h;
+    if(k==0){ a0.xyz+=vec3(s,s*px,s*py); a1.xyz+=vec3(s*px*px,s*py*py,s*px*py); }
+    else if(k==1){ a1.w+=s; a2.xy+=vec2(s*px,s*py); }
+    else { a2.z+=s; a2.w+=s*px; a3.x+=s*py; }
+    float d0=distance(pp,uC[0]); if(s>0.15 && d0>a3.y){ a3.yzw=vec3(d0,px,py); } }
+  o0=a0; o1=a1; o2=a2; o3=a3; }`;
 SH.reduceN = SH.head + `
-uniform sampler2D uL, uL2; uniform ivec2 uLRes; layout(location=0) out vec4 o; layout(location=1) out vec4 o2;
-void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 acc=vec4(0.0), acc2=vec4(0.0);
-  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uLRes.x||q.y>=uLRes.y) continue; acc+=texelFetch(uL,q,0); acc2+=texelFetch(uL2,q,0); }
-  o=acc; o2=acc2; }`;
+uniform sampler2D uL0, uL1, uL2, uL3; uniform ivec2 uLRes;
+layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=2) out vec4 o2; layout(location=3) out vec4 o3;
+void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
+  for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uLRes.x||q.y>=uLRes.y) continue; a0+=texelFetch(uL0,q,0); a1+=texelFetch(uL1,q,0); a2+=texelFetch(uL2,q,0); vec4 t=texelFetch(uL3,q,0); a3.x+=t.x; if(t.y>a3.y) a3.yzw=t.yzw; }
+  o0=a0; o1=a1; o2=a2; o3=a3; }`;
 
 // ---------------- dynamic mask: copy static then machines are drawn as quads ----------------
 SH.maskCopy = SH.head + `
@@ -316,7 +331,7 @@ uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
-uniform float uPHurt, uPHp;
+uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours
@@ -376,6 +391,7 @@ void main(){
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }
   float self=texelFetch(uB,wrapP(p),0).x;
   self=(self*4.0+texelFetch(uB,wrapP(p+ivec2(1,0)),0).x+texelFetch(uB,wrapP(p-ivec2(1,0)),0).x+texelFetch(uB,wrapP(p+ivec2(0,1)),0).x+texelFetch(uB,wrapP(p-ivec2(0,1)),0).x)/8.0;
-  if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k); bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
+  if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
+    { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
   o=vec4(col,1.0);
 }`;
