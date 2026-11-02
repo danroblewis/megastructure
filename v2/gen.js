@@ -99,6 +99,15 @@ const GEN={
     const src=new Uint8Array(W*H*4);
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const t=type[y*W+x]; if(t<5||t>8) continue; const ch=t-5;
       for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){ if(dx*dx+dy*dy>10) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; src[(ny*W+nx)*4+ch]=255; } }
+    // vents and drains buried by the organic reshaping are moved to the real wall face so they actually breathe
+    const openN=(x,y)=>{ for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const t=type[ny*W+nx]; if(t===M.FLUID||t===M.CHECK||t===M.EXIT||t===M.GRATE) return true; } return false; };
+    const moves=[];
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const t=type[y*W+x]; if((t!==M.VENT&&t!==M.DRAIN)||openN(x,y)) continue;
+      let dx=dirs[(y*W+x)*2], dy=dirs[(y*W+x)*2+1]; const cand=(dx||dy)?[[dx,dy]]:[[1,0],[-1,0],[0,1],[0,-1]];
+      let placed=null;
+      for(const [cx,cy] of cand){ for(let k=1;k<=30;k++){ const nx=x+cx*k, ny=y+cy*k; if(nx<1||ny<1||nx>=W-1||ny>=H-1) break; if(type[ny*W+nx]===M.FLUID){ placed=[nx-cx,ny-cy]; break; } } if(placed) break; }
+      moves.push([x,y,placed,t,dx,dy]); }
+    for(const [x,y,p,t,dx,dy] of moves){ type[y*W+x]=M.WALL; if(p){ type[p[1]*W+p[0]]=t; dirs[(p[1]*W+p[0])*2]=dx; dirs[(p[1]*W+p[0])*2+1]=dy; } }
     for(let i=0;i<W*H;i++){ mask[i*4]=type[i]; mask[i*4+1]=Math.round((dirs[i*2]*0.5+0.5)*255); mask[i*4+2]=Math.round((dirs[i*2+1]*0.5+0.5)*255); mask[i*4+3]=255; }
     return {W,H,mask,src,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
   },
