@@ -23,7 +23,11 @@ uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
-bool solidT(int t){ return t==M_WALL||t==M_MOVING||t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE; }
+uniform sampler2D uWf;     // walls field: solidity, soot, residue, kind (0 metal, 0.5 frost, 1 tissue)
+bool hardT(int t){ return t==M_MOVING||t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE; }
+bool solidT(int t){ return t==M_WALL||hardT(t); }   // legacy: static-mask solidity
+float solidity(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return 1.0; return texelFetch(uWf,p,0).x; }
+bool solidAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return true; int t=mtype(maskAt(p)); if(hardT(t)) return true; if(t==M_VENT||t==M_DRAIN) return false; return texelFetch(uWf,p,0).x>=0.5; }
 uint hashu(uvec3 v){ uint h=v.x*1664525u+v.y*1013904223u+v.z*69069u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15; h*=0x27d4eb2du; h^=h>>13; return h; }
 float rnd(ivec2 p,uint s){ return float(hashu(uvec3(uint(p.x+9999),uint(p.y+9999),uFrame*11u+s))&0xffffffu)/16777216.0; }
 `;
@@ -46,7 +50,7 @@ void main(){
   ivec2 p=ivec2(gl_FragCoord.xy);
   vec4 m=maskAt(p); int t=mtype(m);
   vec4 s=texelFetch(uS,p,0);
-  if(solidT(t)){ outEq(1.0,vec2(0.0)); oC.zw=vec2(0.0); return; }
+  if(solidAt(p)){ outEq(1.0,vec2(0.0)); oC.zw=vec2(0.0); return; }
   if(t==M_VENT){ vec2 d=(m.gb-0.5)*2.0; outEq(1.0+0.12*length(d),d*0.18); return; }
   if(t==M_DRAIN){ outEq(0.90,vec2(0.0)); return; }
   float f[9];
@@ -55,7 +59,7 @@ void main(){
     if(i==0){ f[0]=fget(p,0); continue; }
     if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y){ f[i]=fget(p,OPP[i]); continue; }
     vec4 mq=maskAt(q); int tq=mtype(mq);
-    if(solidT(tq)){
+    if(solidAt(q)){
       vec2 uw=(tq==M_MOVING)?(mq.gb-0.5)*2.0*0.3:vec2(0.0);
       float rho0=texelFetch(uFC,p,0).y;
       f[i]=fget(p,OPP[i]) + 6.0*W[i]*rho0*(float(E[i].x)*uw.x+float(E[i].y)*uw.y);
@@ -71,6 +75,7 @@ void main(){
   float self=texelFetch(uB,p,0).x;
   vec2 F=vec2(0.0,-uBuoy*s.y+0.00015*s.z)+uDir*uPush*self;
   vec2 ueq=u+uTau*F/rho;
+  ueq*=max(0.0,1.0-solidity(p)*1.8);   // porous cells drag the gas
   float sp=length(ueq); if(sp>0.3) ueq*=0.3/sp;
   float g[9];
   for(int i=0;i<9;i++) g[i]=f[i]-(f[i]-feq(i,rho,ueq))/uTau;
@@ -87,18 +92,18 @@ vec4 sampleS(vec2 pos){ // bilinear with wall clamping
   vec2 f=fract(pos-0.5); ivec2 i0=ivec2(floor(pos-0.5));
   vec4 acc=vec4(0.0); float wsum=0.0;
   for(int dy=0;dy<2;dy++) for(int dx=0;dx<2;dx++){ ivec2 q=i0+ivec2(dx,dy); float w=(dx==0?1.0-f.x:f.x)*(dy==0?1.0-f.y:f.y);
-    if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidT(mtype(maskAt(q)))) continue; acc+=w*texelFetch(uS,q,0); wsum+=w; }
+    if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidAt(q)) continue; acc+=w*texelFetch(uS,q,0); wsum+=w; }
   return wsum>0.0? acc/wsum : texelFetch(uS,ivec2(pos),0);
 }
 vec4 sampleD(vec2 pos){ vec2 f=fract(pos-0.5); ivec2 i0=ivec2(floor(pos-0.5)); vec4 acc=vec4(0.0); float wsum=0.0;
   for(int dy=0;dy<2;dy++) for(int dx=0;dx<2;dx++){ ivec2 q=i0+ivec2(dx,dy); float w=(dx==0?1.0-f.x:f.x)*(dy==0?1.0-f.y:f.y);
-    if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidT(mtype(maskAt(q)))) continue; acc+=w*texelFetch(uDye,q,0); wsum+=w; }
+    if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidAt(q)) continue; acc+=w*texelFetch(uDye,q,0); wsum+=w; }
   return wsum>0.0? acc/wsum : texelFetch(uDye,ivec2(pos),0); }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy);
   vec4 m=maskAt(p); int t=mtype(m);
   vec4 me=texelFetch(uS,p,0);
-  if(solidT(t)){
+  if(solidAt(p)){
     // sources live in the wall: they push into neighbouring fluid via the neighbour rule below; keep own value as a marker
     oS=vec4(0.0); oDye=vec4(0.0);
     if(t==M_BURNER) oS.y=1.5; if(t==M_COOLER) oS.y=-1.0; if(t==M_FUEL) oS.x=1.0; if(t==M_SPORE) oS.w=1.0;
@@ -110,7 +115,7 @@ void main(){
   vec4 d=sampleD(back);
   // diffusion
   vec4 nb=vec4(0.0); float n=0.0;
-  for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0, k==2?1:k==3?-1:0); if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidT(mtype(maskAt(q)))) continue; nb+=texelFetch(uS,q,0); n+=1.0; }
+  for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0, k==2?1:k==3?-1:0); if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) continue; if(solidAt(q)) continue; nb+=texelFetch(uS,q,0); n+=1.0; }
   if(n>0.0) s+=uDiff*(nb/n-s);
   // sources (baked once from the static mask): burner, cooler, fuel, spore influence
   vec4 src=texelFetch(uSrc,p,0);
@@ -152,10 +157,10 @@ SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
 out vec4 o;
-float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidT(mtype(maskAt(q)))) return 0.0; return texelFetch(uB,q,0).x; }
+float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
-  if(solidT(t)){ o=vec4(0.0); return; }
+  if(solidAt(p)){ o=vec4(0.0); return; }
   vec2 u=texelFetch(uFC,p,0).zw;
   float gx=(selfAt(p+ivec2(1,0))-selfAt(p-ivec2(1,0)))*0.5+(selfAt(p+ivec2(3,0))-selfAt(p-ivec2(3,0)))/6.0;
   float gy=(selfAt(p+ivec2(0,1))-selfAt(p-ivec2(0,1)))*0.5+(selfAt(p+ivec2(0,3))-selfAt(p-ivec2(0,3)))/6.0;
@@ -175,10 +180,10 @@ uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
 out vec4 o;
-bool fluidAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return false; return !solidT(mtype(maskAt(q))); }
+bool fluidAt(ivec2 q){ return !solidAt(q); }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
-  if(solidT(t)||t==M_DRAIN){ o=vec4(0.0); return; }
+  if(solidAt(p)||t==M_DRAIN){ o=vec4(0.0); return; }
   float self=texelFetch(uB,p,0).x; float s0=self;
   vec2 v0=texelFetch(uBV,p,0).xy;
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
@@ -191,6 +196,7 @@ void main(){
   }
   vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC);
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
+  float before=self;
   if(dc>uRfar) self*=0.95;                                       // stragglers wither
   else if(dc<uRnear) self+=uGrow*avg*max(0.0,1.0-self);         // close cells reinforce each other
   self*=0.9995;
@@ -198,9 +204,39 @@ void main(){
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
   self-=max(sp.w-0.08,0.0)*0.04;
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
+  float lost=max(0.0,before-self);
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); }
-  if(self<0.003) self=0.0;
-  o=vec4(clamp(self,0.0,2.0),0.0,0.0,0.0);
+  if(self<0.003){ lost+=self; self=0.0; }
+  o=vec4(clamp(self,0.0,2.0),lost,0.0,0.0);
+}`;
+// ---------------- walls: solidity, soot, residue, kind ----------------
+SH.wallsInit = SH.head + `
+out vec4 o; void main(){ ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p)); o=vec4(solidT(t)?1.0:0.0,0.0,0.0,0.0); }`;
+SH.walls = SH.head + `
+uniform sampler2D uS, uFC, uB; out vec4 o;
+void main(){
+  ivec2 p=ivec2(gl_FragCoord.xy); vec4 w=texelFetch(uWf,p,0); float phi=w.x, soot=w.y, res=w.z, kind=w.w;
+  int t=mtype(maskAt(p));
+  if(p.x<=0||p.y<=0||p.x>=uRes.x-1||p.y>=uRes.y-1){ o=vec4(1.0,soot,res,0.0); return; }
+  vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; vec2 b=texelFetch(uB,p,0).xy;
+  float nsmoke=0.0, nheat=0.0, nlife=0.0, ncold=0.0, ncond=0.0; bool solidN=false;
+  for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0, k==2?1:k==3?-1:0); vec4 ns=texelFetch(uS,q,0); nsmoke=max(nsmoke,ns.z); nheat=max(nheat,ns.y); nlife=max(nlife,ns.w); ncold=max(ncold,-ns.y); ncond=max(ncond,ns.z+ns.x); if(solidAt(q)) solidN=true; }
+  float heat=max(s.y,nheat);
+  if(hardT(t)){ if(t!=M_MOVING) soot+=nsmoke*0.004+max(heat-0.5,0.0)*0.002; o=vec4(phi,min(soot,1.0),res,kind); return; }
+  if(phi>0.0){
+    float meltT=mix(0.9,0.45,kind);                       // grown material gives way easily
+    if(heat>meltT) phi-=(heat-meltT)*mix(0.004,0.03,kind);
+    soot+=nsmoke*0.004+max(heat-0.5,0.0)*0.002;
+    if(phi<0.5) phi-=length(u)*0.03;                      // porous rubble erodes in the flow
+  }
+  if(phi<1.0 && t!=M_VENT && t!=M_DRAIN && t!=M_EXIT && t!=M_CHECK && solidN){
+    float cold=max(-s.y,ncold); float cond=max(s.z+s.x,ncond);
+    if(cold>0.15 && cond>0.05){ phi+=cold*cond*0.04; kind=mix(kind,0.5,0.05); }   // frost crust
+    float life=max(s.w,nlife); if(life>0.45){ phi+=(life-0.45)*0.012; kind=mix(kind,1.0,0.05); } // tissue
+  }
+  res+=b.y*0.6+b.x*0.0003; res*=0.9994;                   // the trace of lost selves
+  soot*=0.99995;
+  o=vec4(clamp(phi,0.0,1.0),min(soot,1.0),min(res,1.0),clamp(kind,0.0,1.0));
 }`;
 // first reduction: 4x4 blocks of the body texture -> (mass, mass*x, mass*y, burning)
 SH.reduce0 = SH.head + `
@@ -243,22 +279,27 @@ uniform float uPHurt, uPHp;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours
-  float s=0.0; for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); if(!solidT(mtype(maskAt(q)))) s+=(k==3)?0.35:(k==2)?-0.15:0.12; } return s; }
+  float s=0.0; for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); if(!solidAt(q)) s+=(k==3)?0.35:(k==2)?-0.15:0.12; } return s; }
 void main(){
   vec2 wc=uCam+vec2(gl_FragCoord.x,uScreen.y-gl_FragCoord.y)/uZoom;
   ivec2 p=ivec2(floor(wc));
   vec4 m=maskAt(p); int t=mtype(m);
   vec4 s=texelFetch(uS,wrapP(p),0); vec4 c=texelFetch(uFC,wrapP(p),0); vec4 d=texelFetch(uDye,wrapP(p),0);
   vec3 col;
-  if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solidT(t)) col=vec3(0.2); o=vec4(col,1.0); return; }
-  if(uDebug==2){ col=vec3(s.x,max(s.y,0.0),s.w); if(s.y<0.0) col.b+= -s.y; if(solidT(t)) col=vec3(0.2); o=vec4(col,1.0); return; }
-  if(uDebug==3){ float r=c.y; col=mix(vec3(0.1,0.1,0.6),vec3(1.0,0.2,0.1),clamp((r-0.8)*2.0,0.0,1.0)); if(solidT(t)) col=vec3(0.2); o=vec4(col,1.0); return; }
-  if(solidT(t)){
+  vec4 wf=texelFetch(uWf,wrapP(p),0); bool solid=solidAt(p);
+  if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
+  if(uDebug==2){ col=vec3(s.x,max(s.y,0.0),s.w); if(s.y<0.0) col.b+= -s.y; if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
+  if(uDebug==3){ col=vec3(wf.x,wf.y,wf.z); o=vec4(col,1.0); return; }
+  if(solid){
     ivec2 pp=p/24; float pn=float(hashu(uvec3(uint(pp.x+31),uint(pp.y+17),7u))&255u)/255.0;
     float grid=(mod(float(p.x),24.0)<1.0||mod(float(p.y),24.0)<1.0)?0.07:0.0;
     float rivet=((mod(float(p.x),24.0)<3.0&&mod(float(p.y),24.0)<3.0)&&mod(float(p.x),24.0)>=1.0&&mod(float(p.y),24.0)>=1.0)?0.08:0.0;
     float fine=float(hashu(uvec3(uint(p.x),uint(p.y),3u))&255u)/255.0*0.04;
     col=vec3(0.27,0.29,0.33)+pn*0.08+wallShade(p)*0.5-grid+rivet+fine;
+    vec3 frost=vec3(0.72,0.82,0.92), tissue=vec3(0.45,0.22,0.5);
+    if(wf.w>0.0){ col=mix(col, wf.w<0.5? mix(col,frost,wf.w*2.0) : mix(frost,tissue,(wf.w-0.5)*2.0), 0.9); }
+    float er=smoothstep(0.5,0.95,wf.x); col*=0.45+0.55*er; if(er<0.7) col+=fine*6.0*(0.7-er);
+    col=mix(col,vec3(0.06,0.04,0.03),min(0.8,wf.y*0.9));
     if(t==M_BURNER) col=mix(col,vec3(1.0,0.45,0.1),0.7+0.3*sin(uTime*6.0+float(p.x)));
     else if(t==M_COOLER) col=mix(col,vec3(0.3,0.7,1.0),0.7);
     else if(t==M_FUEL) col=mix(col,vec3(0.3,0.9,0.5),0.7);
@@ -271,6 +312,7 @@ void main(){
   vec3 bg=vec3(0.035,0.04,0.055);
   if(t==M_VENT) bg=vec3(0.1,0.25,0.3); if(t==M_DRAIN) bg=vec3(0.25,0.1,0.1); if(t==M_EXIT) bg=vec3(1.0,0.85,0.25)*(0.7+0.3*sin(uTime*4.0)); if(t==M_CHECK) bg=vec3(0.2,0.6,0.3)*(0.7+0.3*sin(uTime*3.0)); if(t==M_GRATE) bg=vec3(0.12,0.13,0.15);
   col=bg;
+  if(wf.x>0.0){ col=mix(col,vec3(0.3,0.3,0.33)*(0.5+0.5*(1.0-wf.y)),wf.x*0.8); }
   float sp=length(c.zw);
   col+=d.rgb*vec3(0.35,0.45,0.6)*(0.5+sp*4.0);            // tracer dye tinted by speed
   col+=vec3(0.15,0.55,0.35)*s.x*0.45;                     // fuel haze
@@ -280,6 +322,7 @@ void main(){
   if(s.y<0.0) col+=vec3(0.1,0.25,0.5)*(-s.y)*0.6;          // cold
   float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0)),clamp(L*1.6,0.0,0.85)); // organism
   float pr=c.y; col+=vec3(0.3,0.25,0.2)*clamp((pr-1.15)*1.5,0.0,1.0);  // pressure fronts
+  col+=vec3(0.35,0.5,0.85)*wf.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
   col=1.0-exp(-col*1.4);
   // entities
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }

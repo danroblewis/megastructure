@@ -96,7 +96,7 @@ const GEN={
       if(m.kind==='fan'){ const a=m.phase+t*m.omega; for(let b=0;b<m.blades;b++){ const ang=a+b*Math.PI*2/m.blades; quad(m.x,m.y,Math.cos(ang),Math.sin(ang),m.r,2.2,0,0,m.omega,M.MOVING); } quad(m.x,m.y,1,0,3,3,0,0,0,M.MOVING); }
       else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5); const ext=ph*m.len; const dirY = m.y<=H/2? 1 : -1; // extends into room
         const vy=Math.cos(m.phase+t*m.speed)*0.5*m.len*m.speed*dirY; const cy=m.y+dirY*ext/2; quad(m.x,cy,0,1,ext/2+1,m.w/2,0,vy,0,M.MOVING); }
-      else if(m.kind==='door'){ const open=(Math.sin(m.phase+t*2*Math.PI/m.period)>0.2); if(!open){ quad(m.x,m.y,0,1,m.h/2,m.w/2,0,0,0,M.WALL); } }
+      else if(m.kind==='door'){ const open=(Math.sin(m.phase+t*2*Math.PI/m.period)>0.2); if(!open){ quad(m.x,m.y,0,1,m.h/2,m.w/2,0,0,0,M.MOVING); } }
     }
     return n/5;
   },

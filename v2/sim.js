@@ -14,6 +14,7 @@ const SIM={
     this.F=[{a:hf(W,H),b:hf(W,H),c:hf(W,H)},{a:hf(W,H),b:hf(W,H),c:hf(W,H)}]; this.Ffbo=this.F.map(f=>fbo([f.a,f.b,f.c]));
     this.S=[hf(W,H),hf(W,H)]; this.D=[tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE),tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE)];
     this.SDfbo=[fbo([this.S[0],this.D[0]]),fbo([this.S[1],this.D[1]])];
+    this.Wf=[hf(W,H),hf(W,H)]; this.Wfbo=this.Wf.map(t=>fbo([t])); this.wcur=0;
     this.B=[hf(W,H),hf(W,H)]; this.Bfbo=this.B.map(t=>fbo([t])); this.bcur=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
     // reduction chain for mass / centroid
     this.levels=[]; let lw=Math.ceil(W/4), lh=Math.ceil(H/4);
@@ -27,7 +28,7 @@ const SIM={
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -37,6 +38,7 @@ const SIM={
     for(let i=0;i<2;i++){ gl.bindFramebuffer(gl.FRAMEBUFFER,this.SDfbo[i]); gl.viewport(0,0,W,H); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); gl.clearBufferfv(gl.COLOR,1,[0,0,0,0]); gl.bindFramebuffer(gl.FRAMEBUFFER,this.Bfbo[i]); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); }
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
     this.probeBuf=new Float32Array(64*4); this.probeBuf2=new Float32Array(64*4); this.pts=new Float32Array(128);
+    this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[1]}); this.draw(this.Wfbo[0],W,H); this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[0]}); this.draw(this.Wfbo[1],W,H);
     this.pbos=[gl.createBuffer(),gl.createBuffer(),gl.createBuffer()]; this.fence=null; this.pending=false;
     const L=this.levels[this.levels.length-1];
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER,this.pbos[0]); gl.bufferData(gl.PIXEL_PACK_BUFFER,64*16,gl.STREAM_READ);
@@ -44,7 +46,7 @@ const SIM={
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER,this.pbos[2]); gl.bufferData(gl.PIXEL_PACK_BUFFER,L.w*L.h*16,gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
     this.red={mass:0,cx:0,cy:0,burning:0};
   },
-  use(pr,texes){ const gl=this.gl; gl.useProgram(pr.p); let u=0; for(const k in texes){ gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,texes[k]); gl.uniform1i(pr.u[k],u); u++; }
+  use(pr,texes){ const gl=this.gl; gl.useProgram(pr.p); let u=0; if(!('uWf' in texes)&&this.Wf) texes.uWf=this.Wf[this.wcur]; for(const k in texes){ gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,texes[k]); gl.uniform1i(pr.u[k],u); u++; }
     gl.uniform2i(pr.u.uRes,this.W,this.H); gl.uniform1f(pr.u.uTime,this.frame/60); gl.uniform1ui(pr.u.uFrame,this.frame>>>0); },
   draw(fbo,w,h){ const gl=this.gl; gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.viewport(0,0,w,h); gl.bindVertexArray(this.quad); gl.drawArrays(gl.TRIANGLES,0,3); gl.bindVertexArray(null); },
   updateMask(machines,t){
@@ -77,6 +79,9 @@ const SIM={
     const ib=bd.injectB; gl.uniform4f(pr.u.uInjectB,ib?ib[0]:-999,ib?ib[1]:-999,ib?ib[2]:0,ib?ib[3]:0);
     gl.uniform2fv(pr.u.uDrones,bd.drones); gl.uniform1i(pr.u.uNDrones,bd.nDrones|0);
     this.draw(this.Bfbo[bo],this.W,this.H); this.bcur=bo;
+    pr=this.P.walls; const wo=1-this.wcur;
+    this.use(pr,{uMask:this.Mdyn,uWf:this.Wf[this.wcur],uS:this.S[this.scur],uFC:this.F[this.cur].c,uB:this.B[this.bcur]});
+    this.draw(this.Wfbo[wo],this.W,this.H); this.wcur=wo;
   },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
