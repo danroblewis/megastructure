@@ -183,8 +183,8 @@ void main(){
   float calm=calmAt(p);
   float shear=0.0; { vec2 u0=u; for(int k=0;k<4;k++){ ivec2 q=wrapP(p+ivec2(k==0?3:k==1?-3:0,k==2?3:k==3?-3:0)); shear=max(shear,length(texelFetch(uFC,q,0).zw-u0)); } }
   float hold=1.0-0.75*smoothstep(0.14,0.30,shear);
-  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense*hold; float gl=length(g); if(gl>0.3) g*=0.3/gl;
-  vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
+  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense*hold; float gl=length(g); if(gl>0.09) g*=0.09/gl;
+  vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.08,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
   vec2 drive=uDirs[ki];
