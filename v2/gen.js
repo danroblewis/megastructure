@@ -54,13 +54,13 @@ const GEN={
     const connectH=(a,b)=>{ // a left of b
       const ch=ri(24,44); const ya=ri(a.y0+16,a.y1-16), yb=ri(b.y0+16,b.y1-16); const mid=Math.round((a.x1+b.x0)/2);
       rect(a.x1,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0,yb+ch/2,M.FLUID);
-      if(R()<0.65 && a.i>0 && b.i>0) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
-      if(R()<0.4) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
+      if(R()<0.65 && a.i>=6 && b.i>=6) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
+      if(R()<0.4 && a.i>=3 && b.i>=3) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
       rect(xa-ch/2,a.y1,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0,M.FLUID);
-      if(a.i>0 && b.i>0) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
+      if(a.i>=6 && b.i>=6) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
     for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1,x+dh/2,b.y0,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
@@ -76,8 +76,8 @@ const GEN={
       // cross vents + opposite drains
       if(R()<0.8){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
       if(R()<0.55){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
-      // sources
-      const role=R();
+      // sources, by progression: the first chambers teach heat and cold; fire comes next; the organism last
+      const role= r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();
       if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
       else if(role<0.6){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
       else if(role<0.78){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
