@@ -5,7 +5,7 @@
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small=Math.min(window.innerWidth,window.innerHeight)<700||isTouch;
-  const W=HASH.lab?512:(+HASH.w||(small?1024:2048)), H=HASH.lab?256:(+HASH.h||(small?512:1024));
+  const W=HASH.lab?512:(+HASH.w||2048), H=HASH.lab?256:(+HASH.h||1024);
   const world= HASH.lab? LAB.build(512,256) : GEN.build(W,H,+HASH.seed||7);
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
@@ -118,7 +118,7 @@
     return dmg; }
   function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
-  let inject=null, shake=0, steps=small?2:3;
+  let inject=null, shake=0, steps=small?1:3;
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   function tick(){
     const inp=readInput(); sparkQ=false;
@@ -277,6 +277,9 @@
     if(HASH.zoom) zoom=+HASH.zoom*dpr;
     let ig=null; if(HASH.ignite){ for(let i=0;i<W*H;i++){ if(world.type[i]===7){ ig={x:i%W,y:(i/W|0)+6}; break; } } if(ig){ HASH.cx=ig.x; HASH.cy=ig.y; } }
     const N=+HASH.n||120; const t0=performance.now(); const trace=[];
+    const fakeTouch=(wx,wy,hold)=>{ const sx=(wx-camX)*zoom/dpr, sy=(wy-camY)*zoom/dpr; const ev={t:performance.now(),x:wx,y:wy,sx,sy,id:99,up:0,dur:0}; touchLog.push(ev); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev);
+      if(hold){ touches.set(99,{x0:sx,y0:sy,x:sx,y:sy,t:performance.now(),moved:false,primary:true}); } else { ev.up=performance.now()+50; ev.dur=50; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); }
+      if(SCHEME.useTarget!==false){ target.x=wx; target.y=wy; target.set=performance.now(); } };
     let bestX=0, stuck=0;
     for(let i=0;i<N;i++){ if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`); }
     SIM.gl.finish(); const ms=performance.now()-t0;
