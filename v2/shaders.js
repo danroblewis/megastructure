@@ -37,7 +37,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3]; uniform float uRadial;
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -75,6 +75,7 @@ void main(){
   float self=texelFetch(uB,p,0).x;
   vec2 pushDir=uDir; if(self>0.0 && uCN>1){ vec2 pp=vec2(p)+0.5; int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } pushDir=uDirs[k]; }
   vec2 F=vec2(0.0,-uBuoy*s.y+0.00015*s.z)+pushDir*uPush*self;
+  if(uRadial!=0.0){ vec2 rv=vec2(p)+0.5-uC[0]; float rl=length(rv); if(rl>0.5 && rl<40.0) F+=rv/rl*uRadial*(1.0-rl/40.0); }
   vec2 ueq=u+uTau*F/rho;
   ueq*=max(0.0,1.0-solidity(p)*1.8);   // porous cells drag the gas
   float sp=length(ueq); if(sp>0.3) ueq*=0.3/sp;
@@ -161,6 +162,10 @@ SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
 uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
+uniform float uDense;                                 // preferred density of the self
+uniform vec3 uApp;                                    // appetites: drift up (+) or down (-) the gradients of heat, fuel, cold
+uniform vec2 uSplitAxis; uniform float uSplitStr, uSplitApp;   // differentiate: push halves apart along an axis; flip appetites across it
 int nearestI(vec2 pp){ int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } return k; }
 vec2 nearestC(vec2 pp){ return uC[nearestI(pp)]; }
 float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
@@ -175,7 +180,7 @@ void main(){
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
   float calm=calmAt(p);
-  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
+  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense; float gl=length(g); if(gl>0.3) g*=0.3/gl;
   vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
@@ -183,7 +188,16 @@ void main(){
   if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
-  vec2 v=u*uAdv+drive*uSwim+g+home;
+  vec2 carry=u*uAdv; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
+  vec2 v=carry+drive*uSwim+g+home;
+  if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
+    vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
+    vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
+    float side=1.0; if(uSplitApp>0.0){ side= dot(vec2(p)+0.5-uC[0],uSplitAxis)>=0.0?1.0:-1.0; }
+    vec3 app=uApp*mix(1.0,side,uSplitApp);
+    vec2 ga=gh*app.x+gf*app.y+gc*app.z; float gl2=length(ga); if(gl2>0.0005) v+=ga/gl2*min(0.35,gl2*4.0);
+  }
+  if(ki==0 && uSplitStr!=0.0){ float side= dot(vec2(p)+0.5-uC[0],uSplitAxis)>=0.0?1.0:-1.0; v+=uSplitAxis*side*uSplitStr; }
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;
