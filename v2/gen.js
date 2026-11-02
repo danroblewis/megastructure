@@ -72,7 +72,7 @@ const GEN={
       if(R()<0.5){ const px=ri(r.x0+30,r.x1-30); rect(px-4,r.y0,px+4,r.y1,M.WALL); rect(px-4,r.cy-22,px+4,r.cy+22,M.FLUID); rect(px-4,r.y1-34,px+4,r.y1-6,M.FLUID); if(R()<0.6) rect(px-4,r.y0+6,px+4,r.y0+30,M.FLUID); }
       // side chambers with a core inside
       const nSide=ri(0,2);
-      for(let k=0;k<nSide;k++){ const top=R()<0.5; const cw=ri(30,70), chh=ri(20,50); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0<4||y1>H-4) continue; rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+ri(6,cw-6); rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); cores.push({x:cx0+cw/2,y:(y0+y1)/2}); if(R()<0.5){ rect(cx0,top?y0-2:y1,cx0+cw,top?y0:y1+2,R()<0.5?M.FUEL:M.SPORE); } }
+      for(let k=0;k<nSide;k++){ const top=R()<0.5; const cw=ri(30,70), chh=ri(20,50); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0<4||y1>H-4) continue; rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+ri(6,cw-6); rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); cores.push({x:cx0+cw/2,y:(y0+y1)/2}); if(R()<0.5 && r.i>=3){ rect(cx0,top?y0-2:y1,cx0+cw,top?y0:y1+2,(R()<0.5||r.i<6)?M.FUEL:M.SPORE); } }
       // cross vents + opposite drains
       if(R()<0.8){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
       if(R()<0.55){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
@@ -80,12 +80,13 @@ const GEN={
       const role= r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();
       if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
       else if(role<0.6){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
-      else if(role<0.78){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
+      else if(role<0.78 && r.i>=6){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
       else { const c2=ri(r.x0+10,r.x1-40); rect(c2,r.y0-3,c2+ri(15,40),r.y0,M.COOLER); const bx=ri(r.x0+10,r.x1-40); rect(bx,r.y1,bx+ri(8,18),r.y1+3,M.BURNER); }
       // machines inside
-      if(r.big){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
+      if(r.i<3){ }
+      else if(r.big && r.i>=6){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
         for(let k=0;k<ri(1,3);k++) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(10,22),len:ri(30,90),speed:0.01+R()*0.02,phase:R()*6.28}); }
-      else { if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
+      else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
       { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); rect(cx0-3,y0,cx0,y1,M.COOLER); rect(cx0+cw,y0,cx0+cw+3,y1,M.COOLER); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh}); } }   // the cold room: where you condense, and where you are remembered
