@@ -42,7 +42,7 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -51,6 +51,7 @@
   const DEAD=10;
   const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>6&&Math.hypot(selves[i].x-wx,selves[i].y-wy)<16){ adopt(i); return; } } target.x=wx; target.y=wy; target.set=performance.now(); };
   canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
+    if(menuHit(e.clientX,e.clientY)){ e.preventDefault(); return; }
     { const ev={t:performance.now(),x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom,sx:e.clientX,sy:e.clientY,id:e.pointerId,up:0,dur:0}; touchLog.push(ev); if(touchLog.length>400) touchLog.shift(); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev); }
     if(SCHEME.useTarget===false){ touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0}); e.preventDefault(); return; }
     if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
@@ -74,6 +75,11 @@
   const DEFAULT_SCHEME='target';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
+  const MENU={open:false,rows:[],pill:null,names:Object.keys(SCHEMES)};
+  function menuHit(cx,cy){ // css px; returns true if the tap was consumed by the menu
+    const p=MENU.pill; if(p&&cx>=p.x&&cx<=p.x+p.w&&cy>=p.y&&cy<=p.y+p.h){ MENU.open=!MENU.open; return true; }
+    if(MENU.open){ for(const r of MENU.rows){ if(cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ location.href=location.pathname+'?scheme='+r.name+(HASH.hud?'&hud=1':''); return true; } } MENU.open=false; return true; }
+    return false; }
   const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
   let pendingInjectB=null;
@@ -218,6 +224,15 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`,pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
+    // scheme menu (bottom-right pill; Tab or ` on a keyboard)
+    { const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='middle'; c.textAlign='left';
+      const label='scheme: '+SCHEME.name+'  ▴'; const tw=c.measureText(label).width; const ph=fs*2, pw=tw+fs*1.6; const px=sw-pw-10*s, py=sh-ph-10*s-(window.safeBottom||0);
+      c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.45)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
+      MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
+      if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py-8*s-rh*MENU.names.length; const rx=sw-rw-10*s;
+        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*MENU.names.length+12*s,10*s); c.fill();
+        for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
+      c.textBaseline='top'; }
     // ghosts: a faint slow pulse around each other self; tap it to become it
     for(let i=1;i<3;i++){ const g=selves[i]; if(!g.live||g.mass<6||player.dead) continue; const px=(g.x-camX)*zoom, py=(g.y-camY)*zoom; const ph=(performance.now()/1600+i*0.5)%1;
       c.strokeStyle=`rgba(150,190,255,${0.35*(1-ph)})`; c.lineWidth=1.5*s; c.beginPath(); c.arc(px,py,(10+14*ph)*s,0,6.283); c.stroke(); }
