@@ -1,7 +1,7 @@
 // v2/check.js — static completability: can a body-sized thing get from the spawn to every cold room and the exit?
 // usage: node v2/check.js [seed] [W] [H] [radius]
 'use strict';
-const {GEN}=require('./gen.js');
+const GEN_=typeof require!=='undefined'?require('./gen.js').GEN:GEN;
 function pathfind(world,r){
   const {W,H,type}=world; const solid=(t)=>t===1||(t>=5&&t<=8);
   // erode: a cell is passable only if no solid within radius r (chebyshev) — the body is roughly 2r wide
@@ -19,16 +19,16 @@ function pathfind(world,r){
 function nearestReachable(res,W,H,x,y,rad){ let best=-1,bd=1e9; for(let dy=-rad;dy<=rad;dy++) for(let dx=-rad;dx<=rad;dx++){ const nx=Math.round(x)+dx, ny=Math.round(y)+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(res.dist[j]>=0){ const d=dx*dx+dy*dy; if(d<bd){ bd=d; best=j; } } } return best; }
 function report(world,r){
   const {W,H}=world; const res=pathfind(world,r); const rows=[]; let ok=true;
-  const targets=[...world.checkpoints.map((c,i)=>({name:'cold room '+(i+1),x:c.x,y:c.y,rad:Math.max(c.w||10,c.h||10)})),{name:'exit',x:world.exit.x,y:world.exit.y,rad:12}];
+  const targets=[...world.checkpoints.map((c,i)=>({name:'cold room '+(i+1),x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{name:'exit',x:world.exit.x,y:world.exit.y,rad:12}];
   for(const t of targets){ const j=nearestReachable(res,W,H,t.x,t.y,t.rad); const d=j>=0?res.dist[j]:-1; rows.push({name:t.name,reachable:d>=0,pathCells:d}); if(d<0) ok=false; }
   return {ok,rows,res};
 }
 function pathTo(res,W,target){ const pts=[]; let j=target; while(j>=0){ pts.push([j%W,(j/W)|0]); j=res.prev[j]; } return pts.reverse(); }
-if(require.main===module){
+if(typeof require!=='undefined'&&require.main===module){
   const seed=+process.argv[2]||7, W=+process.argv[3]||2048, H=+process.argv[4]||1024, r=+process.argv[5]||3;
-  const world=GEN.build(W,H,seed); const {ok,rows}=report(world,r);
+  const world=GEN_.build(W,H,seed); const {ok,rows}=report(world,r);
   console.log(`seed ${seed} ${W}x${H} body radius ${r}: ${ok?'COMPLETABLE':'NOT COMPLETABLE'}`);
   for(const row of rows) console.log(`  ${row.reachable?'ok  ':'FAIL'} ${row.name.padEnd(14)} path ${row.pathCells}`);
   process.exit(ok?0:1);
 }
-module.exports={pathfind,report,pathTo,nearestReachable};
+if(typeof module!=='undefined') module.exports={pathfind,report,pathTo,nearestReachable}; else window.CHECK={pathfind,report,pathTo,nearestReachable};
