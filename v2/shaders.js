@@ -195,9 +195,15 @@ void main(){
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
     float side=1.0; if(uSplitApp>0.0){ side= dot(vec2(p)+0.5-uC[0],uSplitAxis)>=0.0?1.0:-1.0; }
     vec3 app=uApp*mix(1.0,side,uSplitApp);
-    vec2 ga=gh*app.x+gf*app.y+gc*app.z; float gl2=length(ga); if(gl2>0.0005) v+=ga/gl2*min(0.35,gl2*4.0);
+    vec2 ga=gh*app.x+gf*app.y+gc*app.z; float gl2=length(ga); if(gl2>0.0003) v+=ga/gl2*min(0.45,0.12+gl2*8.0); else { float a=float(hashu(uvec3(uFrame/40u,7u,3u))&1023u)/1024.0*6.2832; v+=vec2(cos(a),sin(a))*0.06; }
   }
-  if(ki==0 && uSplitStr!=0.0){ float side= dot(vec2(p)+0.5-uC[0],uSplitAxis)>=0.0?1.0:-1.0; v+=uSplitAxis*side*uSplitStr; }
+  if(ki==0 && uSplitStr>0.0){ // differentiate: matter sorts itself by what it has lived through — warm-remembering cells toward heat, the rest toward cold
+    float ex=texelFetch(uB,p,0).z; float side= ex>0.5?1.0:-1.0;
+    vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
+    vec2 gh=vec2(sr.y-sl.y,sd.y-su.y); float gl3=length(gh); vec2 away=vec2(p)+0.5-uC[0]; float al=length(away);
+    vec2 dirv= gl3>0.0005? gh/gl3*side : (al>0.5? away/al*side : vec2(0.0));
+    v+=dirv*uSplitStr; }
+  if(ki==0 && uSplitStr<0.0){ vec2 toC=uC[0]-(vec2(p)+0.5); float tl=length(toC); if(tl>1.0) v+=toC/tl*(-uSplitStr); }   // integrate: all of it is one
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;
@@ -240,7 +246,10 @@ void main(){
   float lost=max(0.0,before-self);
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); }
   if(self<0.003){ lost+=self; self=0.0; }
-  o=vec4(clamp(self,0.0,2.0),lost,0.0,0.0);
+  // exposure: what this matter has lived through (heat), carried with it
+  float ex=texelFetch(uB,p,0).z; vec2 v0b=texelFetch(uBV,p,0).xy; ivec2 from=ivec2(floor(vec2(p)+0.5-v0b)); float exFrom=texelFetch(uB,wrapP(from),0).z;
+  ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
+  o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),0.0);
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
 SH.wallsInit = SH.head + `
@@ -359,7 +368,7 @@ uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
-uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN;
+uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours
@@ -420,6 +429,8 @@ void main(){
   float self=texelFetch(uB,wrapP(p),0).x;
   self=(self*4.0+texelFetch(uB,wrapP(p+ivec2(1,0)),0).x+texelFetch(uB,wrapP(p-ivec2(1,0)),0).x+texelFetch(uB,wrapP(p+ivec2(0,1)),0).x+texelFetch(uB,wrapP(p-ivec2(0,1)),0).x)/8.0;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
-    { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
+    { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } }
+    if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
+    if(uSplitSideR>0.0){ float ex=texelFetch(uB,wrapP(p),0).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
   o=vec4(col,1.0);
 }`;

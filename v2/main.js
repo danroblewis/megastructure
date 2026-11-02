@@ -70,7 +70,7 @@
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:12, rfar:30, swim:0.11, push:0.022, coh:2.4, spawnR:8};
+  const BODY={massMax:170, rnear:12, rfar:30, swim:0.075, push:0.014, coh:2.4, spawnR:8};
   const DEFAULT_SCHEME='target';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
@@ -134,7 +134,7 @@
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
     bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
-    bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
+    bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
@@ -198,6 +198,7 @@
     let n=0;
     for(const c of cores){ if(!c.alive||n>=48) continue; if(c.x<camX-10||c.x>camX+vw+10||c.y<camY-10||c.y>camY+vh+10) continue; ents[n*4]=c.x; ents[n*4+1]=c.y; ents[n*4+2]=0; ents[n*4+3]=1.8; n++; }
     for(const d of drones){ if(!d.alive||n>=48) continue; if(d.x<camX-10||d.x>camX+vw+10||d.y<camY-10||d.y>camY+vh+10) continue; ents[n*4]=d.x; ents[n*4+1]=d.y; ents[n*4+2]=1; ents[n*4+3]=2.0; n++; }
+    SIM.tint=bd.tint; SIM.splitSideR=bd.splitSideR||0;
     SIM.render([camX+sx,camY+sy],zoom,sw,sh,debug,[player.x,player.y,player.dead?0:BODY.rnear,player.facing],ents,n,player.hurt,player.hp);
     drawHud(now-t0);
     requestAnimationFrame(frame);
