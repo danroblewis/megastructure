@@ -270,7 +270,7 @@
     for(const t of targets){ const j=CHECK.nearestReachable(res,W_,world.H,t.x,t.y,t.rad); if(j<0){ BOT.legs.push(null); continue; } BOT.legs.push(CHECK.pathTo(res,W_,j)); }
     BOT.full=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); }
     SCHEME.useTarget=false;
-    const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base(cx);
+    const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base.call(SCHEME,cx);
       const P=BOT.full; if(!P.length) return;
       let bi=BOT.i, bd2=1e9; for(let k=Math.max(0,BOT.i-40);k<Math.min(P.length,BOT.i+300);k++){ const d=(P[k][0]-cx.player.x)**2+(P[k][1]-cx.player.y)**2; if(d<bd2){ bd2=d; bi=k; } } BOT.i=bi;
       const wp=P[Math.min(P.length-1,bi+24)]; const d=_unit(wp[0]-cx.player.x,wp[1]-cx.player.y);
