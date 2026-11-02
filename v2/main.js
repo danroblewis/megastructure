@@ -78,8 +78,8 @@
     const cl=red.clusters; if(!cl||cl.length<3) return;
     let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
     for(const s of live){ if(s!==selves[0] && s.mass<6){ s.live=false; } }
-    let best=selves[0]; for(const s of selves){ if(s.live&&s.mass>best.mass*1.15) best=s; }
-    if(best!==selves[0]){ const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; }
+    if(selves[0].mass<6){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>22&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
+      if(best){ const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); } }
     if(red.far && red.far.d>BODY.rfar*0.9){ const f=red.far; let farFromAll=true; for(const s of selves){ if(s.live && Math.hypot(s.x-f.x,s.y-f.y)<BODY.rfar*0.9) farFromAll=false; }
       if(farFromAll){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; } } }
     pushCentres();

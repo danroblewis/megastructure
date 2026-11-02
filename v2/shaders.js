@@ -182,7 +182,7 @@ SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
 uniform vec2 uC[3]; uniform int uCN;
-float nearestD(vec2 pp){ float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ bd=min(bd,distance(pp,uC[j])); } } return bd; }
+vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
 out vec4 o;
@@ -200,12 +200,14 @@ void main(){
     self-=flux;
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
   }
-  float dc=nearestD(vec2(p)+0.5);
+  vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; bool ghost=nd.y>0.5;
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   vec4 sp=texelFetch(uS,p,0);
   float before=self;
   if(dc>uRfar) self*=0.95;                                       // stragglers wither
-  else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw))); self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // close cells reinforce; cold still pockets condense you
+  else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
+    if(ghost){ if(calm<0.4) self*=0.986; }                                            // a past life fades unless it rests in a cold still pocket
+    else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
   self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
