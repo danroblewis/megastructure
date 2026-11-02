@@ -44,3 +44,16 @@ There are three kinds of living matter in the structure, and all three are field
 - **The organism**: the only other appetite. It creeps up the gradient of self through fuel-rich gas, feeds on you and grows from what it takes, and gives you back when it burns near you.
 
 Every relation between them is an exchange of mass. There are no enemies, no pickups. The resource is the cold, still pockets where matter condenses, and whoever occupies a pocket is condensed there: a past life settled in a good pocket is a chamber you negotiate by waiting, by heating it out with a spark, or by joining it. Dispersal is an ending, slow and quiet, not a reload.
+
+## Theme: biology in a chemical space (decided 2026-11-02)
+
+The field is chemistry: gas, heat, fuel, smoke, melting, frost, soot. None of it wants anything. It happens because of concentration, temperature and pressure. You are the biological part: the one thing in the field that behaves because of what it wants, and your past lives are biology that has lost its wanting but not its habits. The organism is biology without a self.
+
+Every verb you have should be something a living thing in a fluid actually does, never a thruster:
+
+- **Spread and tighten.** Open up to be carried, close up to coast across the streams. (The `ride` branch makes this the only means of travel.)
+- **Stick.** Cling to a wall or a grate with part of yourself and let the current swing the rest.
+- **Eat.** Take in what is near you in the fluid: fuel, condensable gas, the organism. Mass is the only score.
+- **Burn and breathe.** Fire and heat are chemistry you can trigger, not a weapon: a spark makes an updraft to ride.
+
+The structure is a chemical plant, but it reads as a body: fans as hearts, vents as breath, the organism as tissue, cold pockets as the places where you can condense again.
