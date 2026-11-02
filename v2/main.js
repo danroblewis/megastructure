@@ -223,7 +223,7 @@
   }
   function drawHud(ms){
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
-    if(HASH.hud){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`,pad,pad); }
+    if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
     if(!player.dead&&player.stamina!==undefined&&(player.stamina<0.97||player.dissoc>0)){ const px=(player.x-camX)*zoom, py=(player.y-camY)*zoom; const st=player.dissoc>0?0:player.stamina;
       c.lineWidth=2*s; c.strokeStyle='rgba(255,255,255,0.12)'; c.beginPath(); c.arc(px,py,30*s,0,6.283); c.stroke();
@@ -260,6 +260,23 @@
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
+  // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
+  // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
+  const BOT=HASH.bot? {on:true,path:null,i:0,arrivals:[],lastCp:-1,t0:0} : {on:false};
+  if(BOT.on){
+    const res=CHECK.pathfind(world,COARSE>1?1:3); const W_=world.W;
+    const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
+    BOT.legs=[];
+    for(const t of targets){ const j=CHECK.nearestReachable(res,W_,world.H,t.x,t.y,t.rad); if(j<0){ BOT.legs.push(null); continue; } BOT.legs.push(CHECK.pathTo(res,W_,j)); }
+    BOT.full=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); }
+    SCHEME.useTarget=false;
+    const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base(cx);
+      const P=BOT.full; if(!P.length) return;
+      let bi=BOT.i, bd2=1e9; for(let k=Math.max(0,BOT.i-40);k<Math.min(P.length,BOT.i+300);k++){ const d=(P[k][0]-cx.player.x)**2+(P[k][1]-cx.player.y)**2; if(d<bd2){ bd2=d; bi=k; } } BOT.i=bi;
+      const wp=P[Math.min(P.length-1,bi+24)]; const d=_unit(wp[0]-cx.player.x,wp[1]-cx.player.y);
+      cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
+      if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
+  }
   // lab mode: fixed scenarios with measurements
   if(HASH.lab){
     const labIntent=[0,0];
@@ -288,6 +305,6 @@
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
     SIM.probe(probePts,1); const [pb]=SIM.collect();
-    document.title=`test DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
+    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();
