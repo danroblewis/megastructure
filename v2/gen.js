@@ -88,7 +88,9 @@ const GEN={
       else { if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
-      if(r.i>0){ const cx3=(r.tier%2===0)?r.x0+8:r.x1-8; checkpoints.push({x:cx3,y:Math.round(r.cy)}); disc(cx3,Math.round(r.cy),4,M.CHECK); }
+      if(r.i>0){ const cx3=(r.tier%2===0)?r.x0+8:r.x1-8; const cy3=Math.round(r.cy); checkpoints.push({x:cx3,y:cy3}); disc(cx3,cy3,4,M.CHECK);
+        const wx=(r.tier%2===0)?r.x0:r.x1; rect(wx-(r.tier%2===0?3:0),cy3-7,wx+(r.tier%2===0?0:3),cy3+7,M.COOLER); }   // a cold mirror behind every checkpoint
+      if(R()<0.35){ const top=R()<0.5; const cw=ri(16,28), chh=ri(12,20); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-8-chh:r.y1+8, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-3,top?y1:r.y1,dx+3,top?r.y0:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); } }   // an unmarked cold alcove
     }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};

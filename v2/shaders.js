@@ -153,8 +153,9 @@ void main(){
 // ---------------- body: the player as a cohesive cloud of matter ----------------
 // pass 1: velocity of the body matter in each cell (gas drag + swimming + cohesion + homing)
 SH.bodyVel = SH.head + `
-uniform sampler2D uB, uFC;
+uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
+float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
 void main(){
@@ -165,7 +166,8 @@ void main(){
   float gy=(selfAt(p+ivec2(0,1))-selfAt(p-ivec2(0,1)))*0.5+(selfAt(p+ivec2(0,3))-selfAt(p-ivec2(0,3)))/6.0;
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
-  vec2 g=vec2(gx,gy)*uCoh*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
+  float calm=calmAt(p);
+  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
   vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   vec2 v=u*uAdv+uDir*uSwim+g+home;
@@ -174,7 +176,7 @@ void main(){
 }`;
 // pass 2: conservative flux transport, then growth / withering / damage / injection
 SH.body = SH.head + `
-uniform sampler2D uB, uBV, uS;
+uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
@@ -195,11 +197,11 @@ void main(){
   }
   vec2 toC=uCentroid-(vec2(p)+0.5); float dc=length(toC);
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
+  vec4 sp=texelFetch(uS,p,0);
   float before=self;
   if(dc>uRfar) self*=0.95;                                       // stragglers wither
-  else if(dc<uRnear) self+=uGrow*avg*max(0.0,1.0-self);         // close cells reinforce each other
+  else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw))); self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // close cells reinforce; cold still pockets condense you
   self*=0.9995;
-  vec4 sp=texelFetch(uS,p,0);
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
   self-=max(sp.w-0.08,0.0)*0.04;
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
