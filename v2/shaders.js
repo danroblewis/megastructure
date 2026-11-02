@@ -398,7 +398,7 @@ void main(){
     float er=smoothstep(0.5,0.95,wf.x); col*=0.45+0.55*er; if(er<0.7) col+=fine*6.0*(0.7-er);
     col=mix(col,vec3(0.06,0.04,0.03),min(0.8,wf.y*0.9));
     if(t==M_BURNER) col=mix(col,vec3(1.0,0.45,0.1),0.7+0.3*sin(uTime*6.0+float(p.x)));
-    else if(t==M_COOLER) col=mix(col,vec3(0.3,0.7,1.0),0.7);
+    else if(t==M_COOLER) col=mix(col,vec3(0.3,0.7,1.0),0.7)*(0.8+0.2*sin(uTime*2.0));
     else if(t==M_FUEL) col=mix(col,vec3(0.3,0.9,0.5),0.7);
     else if(t==M_SPORE) col=mix(col,vec3(0.8,0.3,0.9),0.7);
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
@@ -420,7 +420,7 @@ void main(){
   col*=lit;                                               // lit by the self and by fire
   float h=max(s.y,0.0);
   col+=vec3(1.0,0.5,0.15)*h*0.8+vec3(1.0,0.9,0.7)*h*h*0.5; // heat glow
-  if(s.y<0.0) col+=vec3(0.1,0.25,0.5)*(-s.y)*0.6;          // cold
+  if(s.y<0.0) col+=vec3(0.18,0.42,0.8)*min(1.0,-s.y*1.6);     // cold: a blue breath you can see
   float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0)),clamp(L*1.6,0.0,0.85)); // organism
   float pr=c.y; col+=vec3(0.3,0.25,0.2)*clamp((pr-1.15)*1.5,0.0,1.0);  // pressure fronts
   col+=vec3(0.35,0.5,0.85)*wf.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
