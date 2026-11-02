@@ -9,8 +9,8 @@
   const world=GEN.build(W,H,+HASH.seed||7);
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
-  let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1;
-  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); sw=Math.floor(window.innerWidth*dpr); sh=Math.floor(window.innerHeight*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; zoom=(small?2.0:2.5)*dpr; }
+  let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1; const ZOOMK=(HASH.ride===undefined||HASH.ride!=='0')?0.8:1.0;
+  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); sw=Math.floor(window.innerWidth*dpr); sh=Math.floor(window.innerHeight*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; zoom=(small?2.0:2.5)*dpr*ZOOMK; }
   window.addEventListener('resize',resize); resize();
 
   // ---------- audio ----------
@@ -42,14 +42,14 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='Space'||e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX'||(e.code==='Space'&&!(HASH.ride===undefined||HASH.ride!=='0'))) sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
   // second finger tap = spark; holding one finger still = contract
   const target={x:null,y:null,set:0};
   const DEAD=10;
-  const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>6&&Math.hypot(selves[i].x-wx,selves[i].y-wy)<16){ adopt(i); return; } } target.x=wx; target.y=wy; target.set=performance.now(); };
+  const setTarget=(cx,cy)=>{ if(RIDE) return; const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>6&&Math.hypot(selves[i].x-wx,selves[i].y-wy)<16){ adopt(i); return; } } target.x=wx; target.y=wy; target.set=performance.now(); };
   canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
     if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
     touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
@@ -61,13 +61,16 @@
     let tx=0,ty=0,puff=false;
     if(keys.ArrowLeft||keys.KeyA) tx-=1; if(keys.ArrowRight||keys.KeyD) tx+=1; if(keys.ArrowUp||keys.KeyW) ty-=1; if(keys.ArrowDown||keys.KeyS) ty+=1;
     if(keys.KeyC||keys.ShiftLeft) puff=true;
+    if(RIDE){ if(touches.size>0) puff=true; if(keys.Space||keys.ShiftLeft||keys.KeyC||keys.ArrowDown||keys.KeyS) puff=true; tx=0; ty=0; return {tx,ty,spark:sparkQ,puff}; }
     for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; }
     if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>2.5){ const k=Math.min(1,0.35+d/30); tx=dx/d*k; ty=dy/d*k; } }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:12, rfar:30, swim:0.11, push:0.022, coh:2.4, spawnR:8};
+  const RIDE = HASH.ride===undefined ? true : HASH.ride!=='0';   // ride mode: no steering; hold to tighten, release to spread
+  const BODY= RIDE ? {massMax:170, rnear:12, rfar:30, swim:0.0, push:0.0, coh:1.6, spawnR:8}
+                   : {massMax:170, rnear:12, rfar:30, swim:0.11, push:0.022, coh:2.4, spawnR:8};
   const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
   let pendingInjectB=null;
@@ -106,7 +109,7 @@
     return dmg; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   let inject=null, shake=0, steps=small?2:3;
-  const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
+  const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,grip:1,inertia:0,ivx:0,ivy:0,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   function tick(){
     const inp=readInput(); sparkQ=false;
     // probe at the centroid, visible cores and drones
@@ -124,9 +127,12 @@
     bd.dir[0]=dirS[0]; bd.dir[1]=dirS[1];
     const effort=Math.min(1,Math.hypot(dirS[0],dirS[1]));
     bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh*(1.0+1.2*(1-effort));
+    bd.dense=contract?1.4:0.9;
+    if(RIDE){ bd.grip=contract?0.25:2.4; bd.inertia=contract?1.0:0.0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.coh=contract?BODY.coh*2.2:BODY.coh; } else { bd.grip=1.0; bd.inertia=0.0; bd.ivx=0; bd.ivy=0; }
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
     bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
+    if(contract&&!player.wasContract) AUDIO.tone(140,90,0.25,'sine',0.05); if(!contract&&player.wasContract) AUDIO.tone(90,130,0.3,'sine',0.04); player.wasContract=contract;
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
     if(alive){
@@ -214,6 +220,7 @@
     let msg=null;
     if(player.won) msg= player.winT<240?'YOU REACHED THE CORE EXIT':`exit reached · ${player.cores} cores · ${player.deaths} deaths · tap or R to restart`;
     else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
+    else if(SIM.frame<900 && RIDE) msg= isTouch? 'you cannot steer · the currents carry you · hold the screen to tighten and coast across them · release to spread and be carried' : 'you cannot steer · the currents carry you · hold space to tighten and coast across them · release to spread and be carried';
     else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
@@ -224,7 +231,7 @@
     let ig=null; if(HASH.ignite){ for(let i=0;i<W*H;i++){ if(world.type[i]===7){ ig={x:i%W,y:(i/W|0)+6}; break; } } if(ig){ HASH.cx=ig.x; HASH.cy=ig.y; } }
     const N=+HASH.n||120; const t0=performance.now(); const trace=[];
     let bestX=0, stuck=0;
-    for(let i=0;i<N;i++){ if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`); }
+    for(let i=0;i<N;i++){ if(HASH.hold){ keys.Space=((i/(+HASH.hold))|0)%2===1; } if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`); }
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);

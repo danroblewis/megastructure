@@ -83,7 +83,8 @@ const GEN={
       else if(role<0.78){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
       else { const c2=ri(r.x0+10,r.x1-40); rect(c2,r.y0-3,c2+ri(15,40),r.y0,M.COOLER); const bx=ri(r.x0+10,r.x1-40); rect(bx,r.y1,bx+ri(8,18),r.y1+3,M.BURNER); }
       // machines inside
-      if(r.big){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
+      if(r.i===0){ }
+      else if(r.big){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
         for(let k=0;k<ri(1,3);k++) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(10,22),len:ri(30,90),speed:0.01+R()*0.02,phase:R()*6.28}); }
       else { if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
@@ -94,7 +95,17 @@ const GEN={
     }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
+    { const r0=rooms[0]; for(let k=-9;k<=9;k++){ set(r0.x0,spawn.y+k,M.VENT); setDir(r0.x0,spawn.y+k,1,0); set(r0.x1,Math.min(r0.y1,Math.max(r0.y0,spawn.y+k*2)),M.DRAIN); } }   // the first breath carries you in
     for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(type[i]===M.FLUID && type[i-1]===M.WALL&&type[i+1]===M.WALL&&type[i-W]===M.WALL&&type[i+W]===M.WALL) type[i]=M.WALL; }
+    // vents and drains buried by the organic reshaping are moved to the real wall face so they actually breathe
+    const openN=(x,y)=>{ for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const t=type[ny*W+nx]; if(t===M.FLUID||t===M.CHECK||t===M.EXIT||t===M.GRATE) return true; } return false; };
+    const moves=[];
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const t=type[y*W+x]; if((t!==M.VENT&&t!==M.DRAIN)||openN(x,y)) continue;
+      let dx=dirs[(y*W+x)*2], dy=dirs[(y*W+x)*2+1]; const cand=(dx||dy)?[[dx,dy]]:[[1,0],[-1,0],[0,1],[0,-1]];
+      let placed=null;
+      for(const [cx,cy] of cand){ for(let k=1;k<=30;k++){ const nx=x+cx*k, ny=y+cy*k; if(nx<1||ny<1||nx>=W-1||ny>=H-1) break; if(type[ny*W+nx]===M.FLUID){ placed=[nx-cx,ny-cy]; break; } } if(placed) break; }
+      moves.push([x,y,placed,t,dx,dy]); }
+    for(const [x,y,p,t,dx,dy] of moves){ type[y*W+x]=M.WALL; if(p){ type[p[1]*W+p[0]]=t; dirs[(p[1]*W+p[0])*2]=dx; dirs[(p[1]*W+p[0])*2+1]=dy; } }
     // bake source influence: which source blocks lie within ~3 cells of each fluid cell
     const src=new Uint8Array(W*H*4);
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const t=type[y*W+x]; if(t<5||t>8) continue; const ch=t-5;

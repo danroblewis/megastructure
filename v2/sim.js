@@ -74,6 +74,7 @@ const SIM={
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
     // body
     pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform2fv(pr.u.uDirs,this.dirs);
+    gl.uniform1f(pr.u.uGrip,bd.grip===undefined?1:bd.grip); gl.uniform1f(pr.u.uInertia,bd.inertia||0); gl.uniform2f(pr.u.uIVel,bd.ivx||0,bd.ivy||0); gl.uniform1f(pr.u.uDense,bd.dense||0.9);
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uSwim,bd.swim); gl.uniform1f(pr.u.uCoh,bd.coh); gl.uniform1f(pr.u.uRnear,bd.rnear);
     this.draw(this.BVfbo,this.W,this.H);
     pr=this.P.body; const bo=1-this.bcur;

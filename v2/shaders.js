@@ -51,7 +51,7 @@ void main(){
   vec4 m=maskAt(p); int t=mtype(m);
   vec4 s=texelFetch(uS,p,0);
   if(solidAt(p)){ outEq(1.0,vec2(0.0)); oC.zw=vec2(0.0); return; }
-  if(t==M_VENT){ vec2 d=(m.gb-0.5)*2.0; outEq(1.0+0.12*length(d),d*0.18); return; }
+  if(t==M_VENT){ vec2 d=(m.gb-0.5)*2.0; outEq(1.0+0.14*length(d),d*0.24); return; }
   if(t==M_DRAIN){ outEq(0.90,vec2(0.0)); return; }
   float f[9];
   for(int i=0;i<9;i++){
@@ -138,7 +138,9 @@ void main(){
   if(s.y>0.35) s.w-=(s.y-0.35)*0.6;
   // the body burns into smoke, and feeds the organism a little
   float selfHere=texelFetch(uB,p,0).x; s.z+=selfHere*max(s.y-0.35,0.0)*0.6;
-  s.w+=selfHere*max(s.w-0.08,0.0)*0.5;                      // the organism grows from the self it feeds on
+  s.x-=min(s.x,selfHere*0.05);                              // you eat the fuel you move through
+  float ex=(selfHere-s.w)*selfHere*s.w*0.6;                 // predation by density: the denser one feeds on the other
+  s.w-=ex;
   // cooling, smoke settling
   s.y-=uCool*(s.y>0.0?s.y:s.y*0.5);
   s.z*=0.996;
@@ -161,6 +163,8 @@ SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
 uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+uniform float uGrip, uInertia; uniform vec2 uIVel;   // ride mode: how much the gas grips the self, and the self's own coasting velocity
+uniform float uDense;                                 // preferred density of the self (rises when tightened)
 int nearestI(vec2 pp){ int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } return k; }
 vec2 nearestC(vec2 pp){ return uC[nearestI(pp)]; }
 float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
@@ -175,7 +179,7 @@ void main(){
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
   float calm=calmAt(p);
-  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(0.9-here)/0.9; float gl=length(g); if(gl>0.3) g*=0.3/gl;
+  vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense; float gl=length(g); if(gl>0.3) g*=0.3/gl;
   vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.2,(dc-uRnear)*0.01): vec2(0.0);
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
@@ -183,7 +187,9 @@ void main(){
   if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
-  vec2 v=u*uAdv+drive*uSwim+g+home;
+  vec2 carry=u*uAdv; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
+  vec2 v=carry+drive*uSwim+g+home;
+  if(ki==0 && uGrip<0.5){ bool wall=solidAt(p+ivec2(1,0))||solidAt(p-ivec2(1,0))||solidAt(p+ivec2(0,1))||solidAt(p-ivec2(0,1)); if(wall) v*=0.04; }   // tightened cells cling to walls
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;
@@ -220,7 +226,8 @@ void main(){
     else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
-  self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
+  float ex=(self-sp.w)*self*sp.w*0.6; self+=ex*0.8;                 // predation by density, both ways
+  if(!ghost && dc<uRfar) self+=sp.x*self*0.035*max(0.0,1.2-self);  // fuel you eat becomes you
   if(sp.y>0.35 && sp.w>0.05 && dc<uRfar) self+=sp.w*(sp.y-0.35)*0.35;   // organism burning near you becomes you
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
   float lost=max(0.0,before-self);
