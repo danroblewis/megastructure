@@ -5,8 +5,11 @@
   const canvas=document.getElementById('c'), hud=document.getElementById('hud'), hctx=hud.getContext('2d');
   const isTouch=('ontouchstart' in window);
   const small= HASH.small? true : (HASH.test||HASH.lab)? false : (Math.min(window.innerWidth,window.innerHeight)<700||isTouch);
-  const FULLW=+HASH.w||2048, FULLH=+HASH.h||1024; const DETAIL=(()=>{ try{ return localStorage.getItem('v2detail')||'half'; }catch(e){ return 'half'; } })(); /* half resolution by default everywhere; 'full' is the opt-in */ const COARSE=((small||DETAIL==='half')&&!HASH.w&&!HASH.lab)?2:1;
-  const world= HASH.lab? LAB.build(512,256) : (COARSE>1? GEN.downsample(CHECK.buildWorld(FULLW,FULLH,+HASH.seed||7),COARSE) : CHECK.buildWorld(FULLW,FULLH,+HASH.seed||7));
+  const MAPS=[{seed:7,w:2048,h:1024},{seed:42,w:1536,h:768},{seed:3,w:2048,h:1024},{seed:8,w:1536,h:768},{seed:11,w:2048,h:1024},{seed:2,w:1536,h:768},{seed:5,w:2048,h:1024},{seed:12,w:2048,h:1024},{seed:1,w:2048,h:1024},{seed:9,w:2048,h:1024}];
+  const MAPI=(()=>{ let m=+HASH.map; if(!(m>=1)){ try{ m=+localStorage.getItem('v2map')||1; }catch(e){ m=1; } } return ((m-1)%MAPS.length+MAPS.length)%MAPS.length; })(); const MAP=MAPS[MAPI];
+  const setMap=(i)=>{ try{ localStorage.setItem('v2map',String(((i%MAPS.length)+MAPS.length)%MAPS.length+1)); }catch(e){} location.href=location.pathname+(HASH.hud?'?hud=1':''); };
+  const FULLW=+HASH.w||MAP.w, FULLH=+HASH.h||MAP.h; const DETAIL=(()=>{ try{ return localStorage.getItem('v2detail')||'half'; }catch(e){ return 'half'; } })(); /* half resolution by default everywhere; 'full' is the opt-in */ const COARSE=((small||DETAIL==='half')&&!HASH.w&&!HASH.lab)?2:1;
+  const world= HASH.lab? LAB.build(512,256) : (COARSE>1? GEN.downsample(CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed),COARSE) : CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed));
   const W=world.W, H=world.H;
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
@@ -93,7 +96,7 @@
   // audio unlock: the first gesture of any kind starts the context; coming back to the tab resumes it
   for(const ev of ['touchstart','touchend','pointerdown','pointerup','mousedown','mouseup','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&AUDIO.ctx&&AUDIO.ctx.state!=='running') AUDIO.ctx.resume().catch(()=>{}); });
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&player.won&&player.winT>120) setMap(MAPI+1); else if(e.code==='KeyR'&&player.dead) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -107,7 +110,7 @@
     if(SCHEME.useTarget===false){ touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0}); e.preventDefault(); return; }
     if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
     touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
-    if(player.dead||(player.won&&player.winT>120)) restart(); e.preventDefault(); });
+    if(player.won&&player.winT>120) setMap(MAPI+1); else if(player.dead) restart(); e.preventDefault(); });
   const hover={x:0,y:0,set:false};
   canvas.addEventListener('pointermove',e=>{ hover.x=camX+e.clientX*dpr/zoom; hover.y=camY+e.clientY*dpr/zoom; hover.set=true; const t=touches.get(e.pointerId); if(t){ t.x=e.clientX; t.y=e.clientY; if(Math.hypot(t.x-t.x0,t.y-t.y0)>DEAD) t.moved=true; if(t.primary&&SCHEME.useTarget!==false) setTarget(e.clientX,e.clientY); if(SCHEME.onMove) SCHEME.onMove(ctxNow(),{id:e.pointerId,sx:e.clientX,sy:e.clientY,x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom}); } e.preventDefault(); });
   const up=e=>{ const ev=touchLog.find(v=>v.id===e.pointerId&&!v.up); if(ev){ ev.up=performance.now(); ev.dur=ev.up-ev.t; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); } touches.delete(e.pointerId); e.preventDefault(); }; canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); canvas.addEventListener('pointerout',up);
@@ -321,8 +324,8 @@
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.25)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
       if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
-        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*4+12*s,10*s); c.fill();
-        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
+        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*5+12*s,10*s); c.fill();
+        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:`map ${MAPI+1} of ${MAPS.length}   ▸ next`,act:()=>setMap(MAPI+1)},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         for(const n of (MENU.showSchemes?MENU.names:[])){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
     // target point: a soft animated marker where you asked the body to go
@@ -338,9 +341,9 @@
         c.font=`${Math.round(10*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.7)'; c.fillText(`${Math.round(d)}`,ax+10*s,ay-16*s); }
     }
     let msg=null;
-    if(player.won) msg= player.winT<240?'YOU REACHED THE CORE EXIT':`exit reached · ${player.cores} cores · ${player.deaths} deaths · tap or R to restart`;
+    if(player.won) msg= player.winT<240?`map ${MAPI+1} cleared`:`map ${MAPI+1} cleared · ${player.deaths} deaths · tap or R for map ${(MAPI+1)%MAPS.length+1}`;
     else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
-    else if(SIM.frame<900) msg= (SCHEME.name+' · '+SCHEME.blurb);
+    else if(SIM.frame<600) msg= `map ${MAPI+1} of ${MAPS.length}`;
     else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
