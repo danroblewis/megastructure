@@ -209,6 +209,12 @@
       if(player.depositing&&SIM.frame%20===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*4,0.012,0,0.4,'sine');
       if(alc.repair>=REPAIR_NEED) repairAlcove(alc); } else player.depositing=false;
     player.alc=alc; bd.alcove=alc?[alc.x-alc.w/2,alc.y-alc.h/2,alc.x+alc.w/2,alc.y+alc.h/2]:[0,0,0,0];
+    // a few words the first time something new happens
+    if(player.hintT>0) player.hintT--;
+    if(!player.hintedOre&&pb2[1]>0.12){ player.hintedOre=true; player.hint='gold ore · carry it to a dark alcove'; player.hintT=420; }
+    if(alc&&player.depositing&&!player.hintedDep){ player.hintedDep=true; player.hint='repairing'; player.hintT=240; }
+    if(alc&&!alc.dead&&alc.repairedAt&&SIM.frame-alc.repairedAt<2&&!player.hintedRep){ player.hintedRep=true; player.hint='the alcove is cold again · it remembers you now'; player.hintT=420; }
+    if(player.charged===1&&!player.hintedOrb){ player.hintedOrb=true; player.hint='charged · these cells swim hard for a while'; player.hintT=360; }
     if(player.pickT>0){ player.pickT--; if(player.pickT===0) bd.pick=[0,0,0,0]; }
     else if(world.orbs&&!player.dead){ for(const ob of world.orbs){ if(ob.taken) continue; if(Math.hypot(ob.x-player.x,ob.y-player.y)<ob.r+BODY.rnear*0.8){ ob.taken=true; player.pickT=3; bd.pick=[ob.x,ob.y,ob.r+BODY.rnear,1.0]; player.charged=(player.charged||0)+1;
         const q=[ob.x-ob.r,ob.y-ob.r,ob.x+ob.r+1,ob.y+ob.r+1]; SIM.patchMask(q[0],q[1],q[2],q[3],0); for(let y=q[1];y<q[3];y++) for(let x=q[0];x<q[2];x++){ if(world.type[y*W+x]===14) world.type[y*W+x]=0; }
@@ -364,6 +370,7 @@
     let msg=null;
     if(player.won) msg= player.winT<240?`map ${MAPI+1} cleared`:`map ${MAPI+1} cleared · ${player.deaths} deaths · tap or R for map ${(MAPI+1)%MAPS.length+1}`;
     else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
+    else if(player.hintT>0) msg=player.hint;
     else if(SIM.frame<600) msg= `map ${MAPI+1} of ${MAPS.length}`;
     else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;

@@ -282,7 +282,7 @@ void main(){
   float lost=max(0.0,before-self);
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; }
   if(self<0.003){ lost+=self; self=0.0; }
-  if(self<st && st>0.0) pay*=self/st;                                  // cells that wither take their load with them
+  if(self<st*0.9 && st>0.0) pay*=self/st;                              // a cell that loses a real part of itself loses that part of its load; ordinary metabolism keeps it
   if(ore && pay>=0.0) pay=min(self,pay+0.04);                          // touching ore: the cell fills up
   if(uAlcove.z>uAlcove.x && pay>0.0 && float(p.x)>=uAlcove.x && float(p.x)<=uAlcove.z && float(p.y)>=uAlcove.y && float(p.y)<=uAlcove.w) pay*=0.96;   // inside a dead alcove: deposited
   if(uPick.z>0.0 && distance(vec2(p)+0.5,uPick.xy)<uPick.z) pay=-self*uPick.w;   // a power pickup charges the cells that touch it
@@ -447,7 +447,7 @@ void main(){
     else if(t==M_SPORE) col=mix(col,vec3(0.8,0.3,0.9),0.7);
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
     else if(t==M_ORE) col=mix(col,vec3(0.95,0.72,0.3),0.55+0.15*sin(uTime*2.5+float(p.x*7+p.y*3)));
-    else if(t==M_DEAD) col=mix(col,vec3(0.16,0.2,0.28),0.75);
+    else if(t==M_DEAD) col=mix(col,vec3(0.16,0.2,0.28),0.75)+vec3(0.3,0.22,0.06)*(0.35+0.35*sin(uTime*1.6+float(p.x)*0.1));
     bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE||t==M_ORE);
     col*=src? max(lit,0.08) : lit;   // sources sit in the same shadow as everything else
     if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5)*min(1.0,lit+0.1); // hot walls glow, in the light of the fire
