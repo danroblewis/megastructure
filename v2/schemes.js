@@ -72,8 +72,7 @@ SCHEMES.attention={name:'attention',blurb:'hold a spot to attend to it · the se
   hud(ctx,c){ const s=this.st, d=ctx.dpr; const sp=s.spots[s.spots.length-1]; const held=ctx.touches.size>0&&sp;
     if(held){ const px=(sp.x-ctx.camX)*ctx.zoom, py=(sp.y-ctx.camY)*ctx.zoom; c.strokeStyle='rgba(200,220,255,0.25)'; c.lineWidth=3*d; c.beginPath(); c.arc(px,py,14*d,0,6.283); c.stroke();
       c.strokeStyle='rgba(200,230,255,0.9)'; c.beginPath(); c.arc(px,py,14*d,-Math.PI/2,-Math.PI/2+6.283*(1-s.fat)); c.stroke(); }
-    // what attention you have left, shown as a thin arc around you
-    const px=(ctx.player.x-ctx.camX)*ctx.zoom, py=(ctx.player.y-ctx.camY)*ctx.zoom; c.strokeStyle=`rgba(255,255,255,${held?0.5:0.18})`; c.lineWidth=1.5*d; c.beginPath(); c.arc(px,py,22*d,-Math.PI/2,-Math.PI/2+6.283*(1-s.fat)); c.stroke(); }};
+  }};
 
 // 6. MEMORY — three layers of retention. Each touch is remembered as a direction in a short, a medium and a long trace; the self moves by their sum. Burning wipes the medium trace.
 SCHEMES.memory={name:'memory',blurb:'each touch is remembered in three layers · the self moves by what it remembers · pain erases the middle layer',useTarget:false,

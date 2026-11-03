@@ -284,9 +284,11 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
-    if(!player.dead&&player.stamina!==undefined&&(player.stamina<0.97||player.dissoc>0)){ const px=(player.x-camX)*zoom, py=(player.y-camY)*zoom; const st=player.dissoc>0?0:player.stamina;
-      c.lineWidth=(2+3*(1-st))*s; c.strokeStyle='rgba(255,255,255,0.12)'; c.beginPath(); c.arc(px,py,30*s,0,6.283); c.stroke();
-      c.strokeStyle= player.dissoc>0? 'rgba(160,160,170,0.7)' : st<0.3? 'rgba(255,150,120,0.8)' : 'rgba(220,235,255,0.6)'; c.beginPath(); c.arc(px,py,30*s,-Math.PI/2,-Math.PI/2+6.283*st); c.stroke(); }
+    // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
+    { const bars=[]; if(!player.dead&&player.stamina!==undefined){ const st=player.dissoc>0?0:player.stamina; if(st<0.97||player.dissoc>0) bars.push({v:st,col:player.dissoc>0?'rgba(160,160,170,0.8)':st<0.3?'rgba(255,150,120,0.85)':'rgba(220,235,255,0.7)'}); }
+      if(SCHEME.name==='attention'&&SCHEME.st&&SCHEME.st.fat>0.03) bars.push({v:1-SCHEME.st.fat,col:'rgba(200,230,255,0.7)'});
+      let by=sh-(14+(window.safeBottom||0))*s; const bw=Math.round(sw*0.28), bx=(sw-bw)/2;
+      for(const b of bars){ c.fillStyle='rgba(255,255,255,0.10)'; c.fillRect(bx,by,bw,2*s); c.fillStyle=b.col; c.fillRect(bx,by,bw*Math.max(0,Math.min(1,b.v)),2*s); by-=5*s; } }
     // scheme menu (bottom-right pill; Tab or ` on a keyboard)
     { const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='middle'; c.textAlign='left';
       const label='scheme: '+SCHEME.name+'  ▾'; const tw=c.measureText(label).width; const ph=fs*2, pw=tw+fs*1.6; const px=sw-pw-10*s, py=10*s+(window.safeTop||0)*s;
@@ -297,9 +299,6 @@
         for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
-    // ghosts: a faint slow pulse around each other self; tap it to become it
-    for(let i=1;i<3;i++){ const g=selves[i]; if(!g.live||g.mass<6*MK||player.dead) continue; const px=(g.x-camX)*zoom, py=(g.y-camY)*zoom; const ph=(performance.now()/1600+i*0.5)%1;
-      c.strokeStyle=`rgba(150,190,255,${0.35*(1-ph)})`; c.lineWidth=1.5*s; c.beginPath(); c.arc(px,py,(10+14*ph)*s,0,6.283); c.stroke(); }
     // target point: a soft animated marker where you asked the body to go
     if(target.x!==null&&!player.dead){ const px=(target.x-camX)*zoom, py=(target.y-camY)*zoom; const ph=(performance.now()/700)%1;
       c.strokeStyle=`rgba(140,220,255,${0.55*(1-ph)})`; c.lineWidth=2*s; c.beginPath(); c.arc(px,py,(6+16*ph)*s,0,6.283); c.stroke();
