@@ -418,7 +418,7 @@ void main(){
     else if(t==M_SPORE) col=mix(col,vec3(0.8,0.3,0.9),0.7);
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
     bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE);
-    col*=src? max(lit,0.55) : lit;
+    col*=src? max(lit,0.08) : lit;   // sources sit in the same shadow as everything else
     if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5); // hot walls glow
     o=vec4(col,1.0); return;
   }
@@ -443,7 +443,7 @@ void main(){
   col=1.0-exp(-col*1.4);
   col=mix(col,vec3(0.16,0.17,0.19)*max(lit,0.3),smoothstep(0.28,0.5,cov));   // soft wall edge
   // entities
-  for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }
+  for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); float el=min(1.0,lit+0.08); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec*el,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5))*el; } }
   float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
     { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } }
