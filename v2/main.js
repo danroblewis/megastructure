@@ -36,7 +36,7 @@
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
       const stretch=Math.max(0,Math.min(1,(spread/r0-1.0)/1.4));       // 0 round .. 1 torn apart
-      const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022);
+      const act=0.1+0.9*(this.act||0); const breath=0.85+0.15*Math.sin(t/4.5); const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022)*act*breath;   // idle self fades to a tenth and breathes slowly
       const w=stretch*0.9; const pa=Math.max(-1,Math.min(1,pan-w)), pb=Math.max(-1,Math.min(1,pan+w));
       const base=(this.root||110)*(mass>90?0.5:1); const semi=stretch<0.25?7:stretch<0.5?5:stretch<0.75?6:1; // fifth .. fourth .. tritone .. minor second as you tear
       this.psf(this.vA.o.frequency,base,t,0.3); this.psf(this.vB.o.frequency,base*Math.pow(2,semi/12)+Math.min(2,Math.max(0,elong-1.3))*1.5,t,0.3); this.beat=performance.now();
@@ -57,7 +57,7 @@
       this.root=root;
       // world sources within earshot (recomputed every half second)
       if(m.frame-this.srcT>30||!this.near.length){ this.srcT=m.frame; const near=[]; for(const q of m.srcs){ const dx=q.x-m.x, dy=q.y-m.y; const d=Math.hypot(dx,dy); if(d<260) near.push({q,d,dx}); } near.sort((a,b)=>a.d-b.d); this.near=near.slice(0,8); }
-      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ this.psg(v.g.gain,0,t,0.3); continue; } const q=n.q; const prox=1/(1+(n.d/70)*(n.d/70));
+      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ this.psg(v.g.gain,0,t,0.3); continue; } const q=n.q; const prox=(0.3+0.7*(this.act||0))/(1+(n.d/70)*(n.d/70));
         let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.016*prox*(0.7+0.3*Math.sin(m.frame*0.021+q.h)); cut=700; }            // vent: a pipe breathing
         else if(q.k===3){ f=root*0.5; vol=0.012*prox*(0.6+0.4*Math.sin(m.frame*0.013+q.h)); cut=260; }                                              // drain: pulls the key down an octave
         else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.006*prox*Math.max(0,Math.sin(m.frame*0.03+q.h*1.7)); cut=6000; }             // cooler: a high bell that comes and goes
@@ -243,7 +243,11 @@
       if(player.won) player.winT++;
       try{ AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat); }catch(e){ AUDIO.panic(e); }
     } else if(--player.deadT<=0){ player.dead=false; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
-    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); try{ AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead); }catch(e){ AUDIO.panic(e); }
+    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2));
+      { const pb=SIM.probeBuf; const dm=Math.abs(player.mass-(player.pmass||player.mass)); player.pmass=player.mass;
+        const want=Math.min(1,Math.hypot(player.vx,player.vy)/0.6+Math.hypot(pb[0],pb[1])/0.12+dm/(3*MK)+(touches.size>0||Object.values(keys).some(v=>v)?0.6:0));
+        player.act=(player.act||0)+(want-(player.act||0))*(want>(player.act||0)?0.08:0.006); AUDIO.act=isFinite(player.act)?player.act:0; }   // release ~ 5 s
+      try{ AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead); }catch(e){ AUDIO.panic(e); }
       if(SIM.frame%2===0){ const r=world.rooms.find(r=>player.x>=r.x0&&player.x<=r.x1&&player.y>=r.y0&&player.y<=r.y1); const pb=SIM.probeBuf;
         try{ AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); }catch(e){ AUDIO.panic(e); } if(r) player.roomI=r.i; } }
     shake*=0.85;
