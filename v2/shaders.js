@@ -21,6 +21,7 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 #define M_GRATE 11
 #define M_ORE 12
 #define M_DEAD 13
+#define M_ORB 14
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
@@ -449,7 +450,7 @@ void main(){
   }
   // gas volume
   vec3 bg=vec3(0.035,0.04,0.055);
-  if(t==M_VENT) bg=vec3(0.1,0.25,0.3); if(t==M_DRAIN) bg=vec3(0.25,0.1,0.1); if(t==M_EXIT) bg=vec3(1.0,0.85,0.25)*(0.7+0.3*sin(uTime*4.0)); if(t==M_CHECK) bg=vec3(0.2,0.6,0.3)*(0.7+0.3*sin(uTime*3.0)); if(t==M_GRATE) bg=vec3(0.12,0.13,0.15);
+  if(t==M_VENT) bg=vec3(0.1,0.25,0.3); if(t==M_DRAIN) bg=vec3(0.25,0.1,0.1); if(t==M_ORB) bg=vec3(0.35,0.9,0.85)*(0.7+0.3*sin(uTime*5.0)); if(t==M_EXIT) bg=vec3(1.0,0.85,0.25)*(0.7+0.3*sin(uTime*4.0)); if(t==M_CHECK) bg=vec3(0.2,0.6,0.3)*(0.7+0.3*sin(uTime*3.0)); if(t==M_GRATE) bg=vec3(0.12,0.13,0.15);
   col=bg;
   if(wfl.x>0.0){ col=mix(col,vec3(0.3,0.3,0.33)*(0.5+0.5*(1.0-wfl.y)),wfl.x*0.8); }
   float sp=length(c.zw);

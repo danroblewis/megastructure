@@ -1,6 +1,6 @@
 // v2/gen.js — procedural megastructure: chambers, ducts, shafts, machines, sources
 'use strict';
-const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13};
+const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13,ORB:14};
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const GEN={
   build(W,H,seed){
@@ -122,7 +122,7 @@ const GEN={
   // the same world at 1/f resolution: structure, machines and markers all scaled; sources and vents survive the coarsening
   downsample(w,f){
     const W=Math.floor(w.W/f), H=Math.floor(w.H/f); const type=new Uint8Array(W*H), mask=new Uint8Array(W*H*4), src=new Uint8Array(W*H*4);
-    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)||t===12||t===13?5 : t===4?4 : t===1?3 : t===9||t===10?2 : 0;   // what wins when cells merge
+    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)||t===12||t===13?5 : t===4?4 : t===1?3 : t===9||t===10||t===14?2 : 0;   // what wins when cells merge
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){
       let best=0,bp=-1,g=128,b=128,solid=0,n=0; const s4=[0,0,0,0];
       for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)||t===12||t===13) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
@@ -167,4 +167,11 @@ GEN.alignRoute=function(w,paths,r,ray){ ray=ray||60; const {W,H,type,mask}=w; co
     for(let k=2;k<=ray;k++){ const qx=Math.round(x0+ox*k), qy=Math.round(y0+oy*k); if(qx<0||qy<0||qx>=W||qy>=H) break; const j=qy*W+qx; if(solid(type[j])) break;
       let t=null; for(let dy=-2;dy<=2&&!t;dy++) for(let dx=-2;dx<=2&&!t;dx++){ const tt=tang.get((qy+dy)*W+qx+dx); if(tt) t=tt; } if(t){ done[i]=1; setDir(i,t[0],t[1]); break; } } }
   return n; };
+// power pickups: discs of ORB cells in open spots along the chained route, one every `spacing` route cells.
+// cells that touch one are charged (negative payload): they swim harder and are carried less for about ten seconds.
+GEN.placeOrbs=function(w,legs,spacing,r){ const {W,H,type}=w; const orbs=[]; let full=[]; for(const l of legs){ if(l) full=full.concat(l); }
+  const solid=t=>t===1||t===3||(t>=5&&t<=8)||t===12||t===13; const clear=(x,y,rr)=>{ for(let dy=-rr;dy<=rr;dy++) for(let dx=-rr;dx<=rr;dx++){ const xx=x+dx, yy=y+dy; if(xx<1||yy<1||xx>=W-1||yy>=H-1||solid(type[yy*W+xx])) return false; } return true; };
+  let next=spacing*0.6; for(let k=0;k<full.length;k++){ if(k<next) continue; const [x,y]=full[k]; if(!clear(x,y,r+3)) continue; for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy<=r*r) type[(y+dy)*W+x+dx]=M.ORB; } orbs.push({x,y,r}); next=k+spacing; }
+  for(let i=0;i<W*H;i++){ if(type[i]===M.ORB){ w.mask[i*4]=M.ORB; } }
+  return orbs; };
 if(typeof module!=='undefined') module.exports={GEN,M};
