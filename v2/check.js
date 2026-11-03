@@ -24,7 +24,10 @@ function spawnPaths(world,r,drainsPass){ const {W,H}=world; const pass=erode(wor
   const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
   return targets.map(t=>{ const j=nearestReachable(res,W,H,t.x,t.y,t.rad); return j<0?null:pathTo(res,W,j); }); }
 // the game's world: built, then its required route widened to fit the body (radius 8 at full resolution)
-function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); const paths=spawnPaths(w,1,true).concat(route(w,1,true)); w.widened=GEN_.widenRoute(w,paths,8); w.aligned=GEN_.alignRoute(w,paths,12); return w; }   // both the spawn-to-target paths and the chained cold-room route   // route found with drains passable, then walls and drains near it are cleared
+// the world as played: built at full size, downsampled if asked, THEN its required route (spawn-to-target paths and the
+// chained cold-room route, found on that grid) widened and its vents aligned, so the route the body follows is the one that
+// was prepared for it. radii scale with the grid.
+function buildWorld(W,H,seed,coarse){ let w=GEN_.build(W,H,seed); const f=coarse>1?coarse:1; if(f>1) w=GEN_.downsample(w,f); const legs=route(w,1,true); const paths=legs.concat(spawnPaths(w,1,true)); w.widened=GEN_.widenRoute(w,paths,Math.max(3,Math.round(8/f))); w.aligned=GEN_.alignRoute(w,legs,Math.max(6,Math.round(16/f)),Math.round(60/f)); return w; }   // widened along every path; vents aligned to the chained cold-room route only, so crossing paths do not fight over a vent   // route found with drains passable, then walls and drains near it are cleared
 // the route a body would take: spawn -> cold room 1 -> cold room 2 -> ... -> exit, each leg searched from the end of the last
 function route(world,r,drainsPass){
   const {W,H}=world; const pass=erode(world,r,drainsPass); let at=world.spawn; const legs=[];

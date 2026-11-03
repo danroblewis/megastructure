@@ -153,11 +153,18 @@ const GEN={
 GEN.widenRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const seen=new Uint8Array(W*H);
   for(const path of paths){ if(!path) continue; for(const [px,py] of path){ for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<1||yy>=H-1) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<1||xx>=W-1) continue; const i=yy*W+xx; if(seen[i]) continue; seen[i]=1; if(type[i]===M.WALL||type[i]===M.DRAIN){ type[i]=M.FLUID; mask[i*4]=0; mask[i*4+1]=128; mask[i*4+2]=128; n++; } /* drains erase the body, so none may sit on the required route */ } } } }
   return n; };
-// vents near the required route blow along it: the way you must go is a downstream way (side ducts keep their own winds)
-GEN.alignRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const done=new Uint8Array(W*H);
-  for(const path of paths){ if(!path) continue; for(let k=0;k<path.length;k++){ const a=path[Math.max(0,k-6)], b=path[Math.min(path.length-1,k+6)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
-    const [px,py]=path[k]; for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<0||yy>=H) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<0||xx>=W) continue; const i=yy*W+xx; if(done[i]||type[i]!==M.VENT) continue; done[i]=1;
-      const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(ox*tx+oy*ty>=0.5) continue;   // already blowing along the route
-      mask[i*4+1]=Math.round((tx*0.5+0.5)*255); mask[i*4+2]=Math.round((ty*0.5+0.5)*255); n++; } } } }
+// vents near the required route blow along it, and so does any vent whose jet would land on the route (the ray along its
+// direction reaches a route cell within 60 cells before a wall): the way you must go is a downstream way. side ducts keep their winds.
+GEN.alignRoute=function(w,paths,r,ray){ ray=ray||60; const {W,H,type,mask}=w; const r2=r*r; let n=0; const tang=new Map();
+  for(const path of paths){ if(!path) continue; for(let k=0;k<path.length;k++){ const a=path[Math.max(0,k-6)], b=path[Math.min(path.length-1,k+6)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; const [px,py]=path[k]; const i=py*W+px; if(!tang.has(i)) tang.set(i,[tx/tl,ty/tl]); } }
+  const solid=t=>t===1||(t>=5&&t<=8)||t===12||t===13;
+  const setDir=(i,tx,ty)=>{ const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(ox*tx+oy*ty>=0.5) return; mask[i*4+1]=Math.round((tx*0.5+0.5)*255); mask[i*4+2]=Math.round((ty*0.5+0.5)*255); n++; };
+  // 1. vents within r of a route cell take that cell's tangent
+  const done=new Uint8Array(W*H);
+  for(const [i,t] of tang){ const px=i%W, py=(i/W)|0; for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<0||yy>=H) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<0||xx>=W) continue; const j=yy*W+xx; if(done[j]||type[j]!==M.VENT) continue; done[j]=1; setDir(j,t[0],t[1]); } } }
+  // 2. any other vent whose jet lands on the route takes the tangent where it lands
+  for(let i=0;i<W*H;i++){ if(type[i]!==M.VENT||done[i]) continue; const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(Math.hypot(ox,oy)<0.5) continue; const x0=i%W, y0=(i/W)|0;
+    for(let k=2;k<=ray;k++){ const qx=Math.round(x0+ox*k), qy=Math.round(y0+oy*k); if(qx<0||qy<0||qx>=W||qy>=H) break; const j=qy*W+qx; if(solid(type[j])) break;
+      let t=null; for(let dy=-2;dy<=2&&!t;dy++) for(let dx=-2;dx<=2&&!t;dx++){ const tt=tang.get((qy+dy)*W+qx+dx); if(tt) t=tt; } if(t){ done[i]=1; setDir(i,t[0],t[1]); break; } } }
   return n; };
 if(typeof module!=='undefined') module.exports={GEN,M};

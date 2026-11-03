@@ -9,7 +9,7 @@
   const MAPI=(()=>{ let m=+HASH.map; if(!(m>=1)){ try{ m=+localStorage.getItem('v2map')||1; }catch(e){ m=1; } } return ((m-1)%MAPS.length+MAPS.length)%MAPS.length; })(); const MAP=MAPS[MAPI];
   const setMap=(i)=>{ try{ localStorage.setItem('v2map',String(((i%MAPS.length)+MAPS.length)%MAPS.length+1)); }catch(e){} location.href=location.pathname+(HASH.hud?'?hud=1':''); };
   const FULLW=+HASH.w||MAP.w, FULLH=+HASH.h||MAP.h; const DETAIL=(()=>{ try{ return localStorage.getItem('v2detail')||'half'; }catch(e){ return 'half'; } })(); /* half resolution by default everywhere; 'full' is the opt-in */ const COARSE=((small||DETAIL==='half')&&!HASH.w&&!HASH.lab)?2:1;
-  const world= HASH.lab? LAB.build(512,256) : (COARSE>1? GEN.downsample(CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed),COARSE) : CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed));
+  const world= HASH.lab? LAB.build(512,256) : CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed,COARSE);
   const W=world.W, H=world.H;
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
