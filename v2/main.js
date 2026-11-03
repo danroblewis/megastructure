@@ -162,6 +162,7 @@
     pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30;
     selves[0].x=player.x; selves[0].y=player.y; selves[0].mass=0; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
   restart();
+  if(HASH.cp) player.cpIndex=+HASH.cp;
   if(HASH.spawn){ const [sx,sy]=HASH.spawn.split(',').map(Number); player.x=sx; player.y=sy; player.px=sx; player.py=sy; player.checkpoint={x:sx,y:sy}; pendingInjectB=[sx,sy,BODY.spawnR,1.0]; selves[0].x=sx; selves[0].y=sy; pushCentres(); }   // test hook: start the body somewhere else
   const solidAt=(x,y)=>{ const xi=x|0, yi=y|0; if(xi<0||yi<0||xi>=W||yi>=H) return true; const t=world.type[yi*W+xi]; return t===1||t>=5&&t<=8; };
   function collide(e,r){

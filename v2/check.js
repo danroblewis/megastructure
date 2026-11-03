@@ -24,10 +24,10 @@ function spawnPaths(world,r,drainsPass){ const {W,H}=world; const pass=erode(wor
   const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
   return targets.map(t=>{ const j=nearestReachable(res,W,H,t.x,t.y,t.rad); return j<0?null:pathTo(res,W,j); }); }
 // the game's world: built, then its required route widened to fit the body (radius 8 at full resolution)
-function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); w.widened=GEN_.widenRoute(w,spawnPaths(w,1,true),8); return w; }   // route found with drains passable, then walls and drains near it are cleared
+function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); const paths=spawnPaths(w,1,true).concat(route(w,1,true)); w.widened=GEN_.widenRoute(w,paths,8); w.aligned=GEN_.alignRoute(w,paths,12); return w; }   // both the spawn-to-target paths and the chained cold-room route   // route found with drains passable, then walls and drains near it are cleared
 // the route a body would take: spawn -> cold room 1 -> cold room 2 -> ... -> exit, each leg searched from the end of the last
-function route(world,r){
-  const {W,H}=world; const pass=erode(world,r); let at=world.spawn; const legs=[];
+function route(world,r,drainsPass){
+  const {W,H}=world; const pass=erode(world,r,drainsPass); let at=world.spawn; const legs=[];
   const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
   for(const t of targets){ const res=search(world,pass,at.x,at.y); const j=nearestReachable(res,W,H,t.x,t.y,t.rad); if(j<0){ legs.push(null); continue; } const leg=pathTo(res,W,j); legs.push(leg); at={x:j%W,y:(j/W)|0}; }
   return legs;
@@ -42,7 +42,7 @@ function report(world,r){
 function pathTo(res,W,target){ const pts=[]; let j=target; while(j>=0){ pts.push([j%W,(j/W)|0]); j=res.prev[j]; } return pts.reverse(); }
 if(typeof require!=='undefined'&&require.main===module){
   const seed=+process.argv[2]||7, W=+process.argv[3]||2048, H=+process.argv[4]||1024, r=+process.argv[5]||3;
-  const world=buildWorld(W,H,seed); const {ok,rows}=report(world,r); console.log(`route widened: ${world.widened} cells carved`);
+  const world=buildWorld(W,H,seed); const {ok,rows}=report(world,r); console.log(`route widened: ${world.widened} cells carved; ${world.aligned} vent cells turned to blow along the route`);
   console.log(`seed ${seed} ${W}x${H} body radius ${r}: ${ok?'COMPLETABLE':'NOT COMPLETABLE'}`);
   for(const row of rows) console.log(`  ${row.reachable?'ok  ':'FAIL'} ${row.name.padEnd(14)} path ${row.pathCells}`);
   process.exit(ok?0:1);

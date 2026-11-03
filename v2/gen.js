@@ -151,4 +151,11 @@ const GEN={
 GEN.widenRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const seen=new Uint8Array(W*H);
   for(const path of paths){ if(!path) continue; for(const [px,py] of path){ for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<1||yy>=H-1) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<1||xx>=W-1) continue; const i=yy*W+xx; if(seen[i]) continue; seen[i]=1; if(type[i]===M.WALL||type[i]===M.DRAIN){ type[i]=M.FLUID; mask[i*4]=0; mask[i*4+1]=128; mask[i*4+2]=128; n++; } /* drains erase the body, so none may sit on the required route */ } } } }
   return n; };
+// vents near the required route blow along it: the way you must go is a downstream way (side ducts keep their own winds)
+GEN.alignRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const done=new Uint8Array(W*H);
+  for(const path of paths){ if(!path) continue; for(let k=0;k<path.length;k++){ const a=path[Math.max(0,k-6)], b=path[Math.min(path.length-1,k+6)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+    const [px,py]=path[k]; for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<0||yy>=H) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<0||xx>=W) continue; const i=yy*W+xx; if(done[i]||type[i]!==M.VENT) continue; done[i]=1;
+      const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(ox*tx+oy*ty>=0.5) continue;   // already blowing along the route
+      mask[i*4+1]=Math.round((tx*0.5+0.5)*255); mask[i*4+2]=Math.round((ty*0.5+0.5)*255); n++; } } } }
+  return n; };
 if(typeof module!=='undefined') module.exports={GEN,M};
