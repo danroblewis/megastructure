@@ -55,7 +55,7 @@
     // pipes: vents near you sing a scale degree, panned where they are, breathing slowly; drains hum an octave down; coolers ring like bells.
     // pulse: a plucked walk on the chamber's pentatonic, clocked by the gas speed at your body: still means silence, a jet means a run;
     //        the walk climbs in a rising current and falls in a sinking one; the register comes from your mass; stamina thins it.
-    musicInit(){ const C=this.ctx; this.pipes=[]; for(let i=0;i<8;i++){ const o=C.createOscillator(); o.type=i<6?'triangle':'sine'; const f=C.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; const g=C.createGain(); g.gain.value=0; const p=C.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); this.pipes.push({o,f,g,p,src:null}); }
+    musicInit(){ this.pipes=[];
       this.pulsePhase=0; this.deg=4; this.lastMass=0; this.root=110; this.srcT=0; this.near=[]; },
     pluck(freq,vol,pan,dur,type){ if(!(isFinite(freq)&&isFinite(vol)&&isFinite(pan)&&isFinite(dur)&&dur>0&&vol>0&&freq>0)) return; const C=this.ctx,t=C.currentTime; const o=C.createOscillator(); o.type=type||'sine'; o.frequency.value=freq; const g=C.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); const p=C.createStereoPanner(); p.pan.value=pan; o.connect(g); g.connect(p); p.connect(this.mbus); o.start(t); try{ o.stop(t+dur+0.02); }catch(e){ o.stop(); } this.track(o,dur); },
     music(m){ if(!this.ctx||this.muted||!this.music||!this.pipes) return; const t=this.ctx.currentTime, C=this.ctx;
@@ -63,12 +63,13 @@
       this.root=root;
       // world sources within earshot (recomputed every half second)
       if(m.frame-this.srcT>30||!this.near.length){ this.srcT=m.frame; const near=[]; for(const q of m.srcs){ const dx=q.x-m.x, dy=q.y-m.y; const d=Math.hypot(dx,dy); if(d<260) near.push({q,d,dx}); } near.sort((a,b)=>a.d-b.d); this.near=near.slice(0,8); }
-      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ this.psg(v.g.gain,0,t,0.3); continue; } const q=n.q; const prox=(0.3+0.7*(this.act||0))/(1+(n.d/70)*(n.d/70));
-        const sw=(w,pw)=>Math.pow(Math.max(0,Math.sin(m.frame*w+q.h)),pw); let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.012*prox*sw(0.011+0.004*(q.h%3),3); cut=700; }            // vent: a pipe that breathes every 8-12 s, silent between
-        else if(q.k===3){ f=root*0.5; vol=0.010*prox*sw(0.008+0.003*(q.h%3),2); cut=260; }                                              // drain: a slow pull, an octave down
-        else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.005*prox*sw(0.03+0.01*(q.h%3),4); cut=6000; }             // cooler: a high bell that rings now and then
-        else { f=root*0.75; vol=0.007*prox*sw(0.19,1)*sw(0.009,2); cut=180; }                                                       // burner: a hot shudder that comes in waves
-        if(v.src!==q){ v.src=q; this.psf(v.o.frequency,f,t,0.05); } this.psg(v.g.gain,vol,t,0.15); this.psf(v.f.frequency,cut,t,0.2); this.psp(v.p.pan,Math.max(-1,Math.min(1,n.dx/160)),t,0.2); }
+      // the structure speaks in short notes, never sustained: each source near you sounds once every several seconds
+      const nowS=performance.now()/1000; for(const n of this.near){ const q=n.q; const prox=(0.3+0.7*(this.act||0))/(1+(n.d/70)*(n.d/70)); if(prox<0.04) continue; const pan=Math.max(-1,Math.min(1,n.dx/160));
+        if(q.nextT===undefined) q.nextT=nowS+Math.random()*4; if(nowS<q.nextT) continue;
+        if(q.k===2){ const f=root*Math.pow(2,PENT[q.h%5]/12)*2; this.pluck(f,0.012*prox,pan,0.7,'triangle'); setTimeout(()=>this.pluck(f*Math.pow(2,2/12),0.008*prox,pan,0.9,'triangle'),180); q.nextT=nowS+5+Math.random()*4; }   // vent: a two-note breath
+        else if(q.k===3){ this.pluck(root*0.5,0.012*prox,pan,1.0,'sine'); q.nextT=nowS+6+Math.random()*5; }                                                                           // drain: one low pull
+        else if(q.k===6){ const f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; this.pluck(f,0.004*prox,pan,1.4,'sine'); q.nextT=nowS+4+Math.random()*6; }                                      // cooler: a bell ping
+        else { this.noise(0.35,0.03*prox,260); q.nextT=nowS+3+Math.random()*3; } }                                                                                                     // burner: a puff of rumble
       // pulse: tempo from the gas speed at the body
       const x=Math.max(0,Math.min(1,(m.speed-0.02)/0.18)); const rate=x<0.02?0:(0.6+x*x*7.0)/60;   // plucks per tick: ~0.6/s drifting, ~7.6/s in a full jet
       this.pulsePhase+=rate; if(this.pulsePhase>=1&&!m.dead){ this.pulsePhase-=1;
