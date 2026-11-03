@@ -276,7 +276,7 @@
         if(player.coldT>90){ const ci=world.checkpoints.findIndex(c=>!c.dead&&Math.abs(c.x-player.x)<c.w/2+6&&Math.abs(c.y-player.y)<c.h/2+6); if(ci>=0&&(player.checkpoint.x!==world.checkpoints[ci].x)){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=Math.max(player.cpIndex,ci+1); AUDIO.tone(520,780,0.5,'sine',0.06); setTimeout(()=>AUDIO.tone(780,1040,0.6,'sine',0.05),300); } }
         if(heat<-0.08){ bd.grow*=2.5; bd.coh*=1.3; bd.tint=[0.6,0.85,1.0,Math.max(bd.tint?bd.tint[3]:0,0.45)]; } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
-      if(player.won) player.winT++;
+      if(player.won){ player.winT++; if(player.winT===240&&!HASH.test&&!HASH.lab) setMap(MAPI+1); }   // the exit ends the map: four seconds of 'cleared', then the next one
       try{ AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat); }catch(e){ AUDIO.panic(e); }
     } else if(--player.deadT<=0){ player.dead=false; player.camSnap=true; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
     { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2));
