@@ -29,7 +29,7 @@
     panic(e){ if(!this.ctx) return; try{ const t=this.ctx.currentTime; const all=[this.wind,this.roar,this.hiss,this.vA,this.vB,...(this.pipes||[])];
       for(const v of all){ if(!v) continue; if(v.g){ v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(0,t); v.g.gain._v=0; } if(v.o){ v.o.frequency.cancelScheduledValues(t); v.o.frequency.setValueAtTime(110,t); v.o.frequency._v=110; } }
       for(const n of this.live){ try{ n.stop(t); }catch(_){ } } this.live.clear(); this.pulsePhase=0; this.deg=4; }catch(_){ }
-      if((this.panics=(this.panics||0)+1)<=3) console.warn('audio panic',e); },
+      this.panics=(this.panics||0)+1; if(window.REPORT) REPORT('panic',e&&e.message||e,e&&e.stack,{panics:this.panics}); else if(this.panics<=3) console.warn('audio panic',e); },
     // start or resume the context inside a user gesture; iOS also wants a silent buffer played once
     unlock(){ this.init(); const c=this.ctx; if(!c) return; if(c.state!=='running'){ c.resume().catch(()=>{}); } if(!this.unlocked){ try{ const b=c.createBuffer(1,1,c.sampleRate); const s=c.createBufferSource(); s.buffer=b; s.connect(c.destination); s.start(0); this.unlocked=true; }catch(e){} } },
     setMusic(on){ this.music=on; try{ localStorage.setItem('v2music',on?'1':'0'); }catch(e){} if(this.mbus) this.ps(this.mbus.gain,on?1:0,this.ctx.currentTime,0.1); },
@@ -165,6 +165,9 @@
   function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
+  window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
+    audio:AUDIO.ctx?{state:AUDIO.ctx.state,t:+AUDIO.ctx.currentTime.toFixed(1),vA:AUDIO.vA&&[+AUDIO.vA.o.frequency.value.toFixed(1),+AUDIO.vA.g.gain.value.toFixed(4)],vB:AUDIO.vB&&[+AUDIO.vB.o.frequency.value.toFixed(1),+AUDIO.vB.g.gain.value.toFixed(4)],pipes:AUDIO.pipes&&AUDIO.pipes.map(v=>[+v.o.frequency.value.toFixed(0),+v.g.gain.value.toFixed(4)]),wind:AUDIO.wind&&+AUDIO.wind.g.gain.value.toFixed(4),live:AUDIO.live&&AUDIO.live.size,panics:AUDIO.panics||0,music:AUDIO.music,muted:AUDIO.muted}:null,
+    glerr:SIM.gl.getError()});
   const SRCS=(()=>{ const B=24, bw=Math.ceil(world.W/B), acc=new Map(); const ty=world.type; for(let y=0;y<world.H;y+=2) for(let x=0;x<world.W;x+=2){ const k=ty[y*world.W+x]; if(k!==2&&k!==3&&k!==5&&k!==6) continue; const key=k*1e6+((y/B)|0)*bw+((x/B)|0); let a=acc.get(key); if(!a){ a={k,n:0,x:0,y:0}; acc.set(key,a); } a.n++; a.x+=x; a.y+=y; }
     const out=[]; let h=0; for(const a of acc.values()){ if(a.n<3) continue; out.push({k:a.k,x:a.x/a.n,y:a.y/a.n,n:a.n,h:(h++*7919)%1000}); } return out; })();
   let inject=null, shake=0, steps=small?2:3;
