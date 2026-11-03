@@ -135,3 +135,28 @@ Rules that produced them: the self swims through the gas and does not push it; c
 - **PWA** (manifest, service worker, offline verified), **GitHub Pages** at danroblewis.github.io/megastructure/v2/, **ten maps** in sequence with a real win.
 - **Remote debugging**: `tools/devserver.py` + `v2/report.js` (+ `tools/rjs.sh`) run JavaScript on the phone and record errors with state snapshots.
 - **Bot**: chained route between cold rooms, line-of-sight steering with a breadth-first detour.
+
+---
+
+## 11. Carried resource and repair — idea 2026-11-03
+
+Some alcoves are dead: their coolers dark, no cold, no checkpoint. Elsewhere there is a resource (a mineral, an ash) that
+body cells pick up when they pass over it. The payload lives in the body texture's spare channel, per cell: it travels
+with the cells that carry it, cannot spread across the self, and dies with them. Deposit enough inside a dead alcove and
+it comes alive: cold flows, the checkpoint works. Repair as reciprocity. This gives tearing, stamina, walls and currents a
+reason: you must bring particular cells through. Mechanism: payload channel in SH.body (pickup from a baked source, kept
+through transport, cleared when the cell dies); a probe/reduction of payload inside each alcove rect; alcove state in the
+walls field (frost grows as it heals). Order of work: first.
+
+## 12. Pickups that power some of your cells — idea 2026-11-03
+
+Same channel, another payload kind: cells that touch a pickup gain a property (extra swim, immunity to carry, heat
+tolerance). Only those cells have it, so the body stretches as the powered cells pull ahead; the player decides whether
+to let them lead or hold the self together. Nearly free once 11 exists. Order: second.
+
+## 13. Other wisps — idea 2026-11-03
+
+NPC wisps with simple drives (head for the next alcove; stall against a current; hide in calm). The reduction already
+tracks three centres with habits. Helping them: the self does not push gas, so help is bringing payload to repair a dead
+vent that would carry them, or sheltering them in your calm, or towing a part of them. The most on-theme idea (helping
+another through a tight spot) and the most work. Order: third, once payload exists to give them something to need.
