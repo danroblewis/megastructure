@@ -16,7 +16,7 @@
 
   // ---------- audio ----------
   const AUDIO={ctx:null,muted:false,music:(localStorage.getItem('v2music')||'1')!=='0',init(){ if(this.ctx) return; try{ const C=window.AudioContext||window.webkitAudioContext; this.ctx=new C(); const sr=this.ctx.sampleRate; const buf=this.ctx.createBuffer(1,sr*2,sr); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; this.nb=buf;
-      this.master=this.ctx.createGain(); this.master.gain.value=0.35; this.lp=this.ctx.createBiquadFilter(); this.lp.type='lowpass'; this.lp.frequency.value=3000; this.lp.Q.value=0.5; this.comp=this.ctx.createDynamicsCompressor(); this.comp.threshold.value=-20; this.comp.ratio.value=8; this.master.connect(this.lp); this.lp.connect(this.comp); this.comp.connect(this.ctx.destination); this.out=this.master; this.live=new Set(); this.mbus=this.ctx.createGain(); this.mbus.gain.value=this.music?1:0; this.mbus.connect(this.master);
+      this.master=this.ctx.createGain(); this.master.gain.value=0.35; this.lp=this.ctx.createBiquadFilter(); this.lp.type='lowpass'; this.lp.frequency.value=3000; this.lp.Q.value=0.5; this.comp=this.ctx.createDynamicsCompressor(); this.comp.threshold.value=-20; this.comp.ratio.value=8; this.an=this.ctx.createAnalyser(); this.an.fftSize=4096; this.an.smoothingTimeConstant=0.5; this.anBuf=new Float32Array(this.an.frequencyBinCount); this.master.connect(this.lp); this.lp.connect(this.comp); this.comp.connect(this.an); this.an.connect(this.ctx.destination); this.out=this.master; this.live=new Set(); this.created=0; this.ended=0; this.peaks=[]; this.mbus=this.ctx.createGain(); this.mbus.gain.value=this.music?1:0; this.mbus.connect(this.master);
       const mk=(f,q,type)=>{ const s=this.ctx.createBufferSource(); s.buffer=buf; s.loop=true; const fl=this.ctx.createBiquadFilter(); fl.type=type||'bandpass'; fl.frequency.value=f; fl.Q.value=q; const g=this.ctx.createGain(); g.gain.value=0; s.connect(fl); fl.connect(g); g.connect(this.out); s.start(); return {g,fl}; };
       this.wind=mk(320,0.7,'lowpass'); this.roar=mk(120,0.8); this.hiss=mk(3000,0.6);
       // two voices of the self: together they hum in the middle; as you spread they drift apart and detune
@@ -24,7 +24,13 @@
       this.vA=voice(); this.vB=voice(); this.musicInit(); }catch(e){} },
     psg(p,v,t,tc){ this.ps(p,Math.min(0.25,Math.max(0,v)),t,tc); }, psf(p,v,t,tc){ this.ps(p,Math.min(2500,Math.max(20,v)),t,tc); }, psp(p,v,t,tc){ this.ps(p,Math.min(1,Math.max(-1,v)),t,tc); },
     ps(p,v,t,tc){ if(!isFinite(v)) return; const l=p._v; if(l!==undefined&&Math.abs(v-l)<=0.015*Math.max(Math.abs(l),Math.abs(v))+1e-5) return; p._v=v; p.setTargetAtTime(v,t,tc); },
-    track(n,dur){ this.live.add(n); n.onended=()=>this.live.delete(n); setTimeout(()=>this.live.delete(n),(dur+1)*1000); },
+    track(n,dur){ this.live.add(n); this.created++; n.onended=()=>{ this.live.delete(n); this.ended++; }; setTimeout(()=>this.live.delete(n),(dur+1)*1000); },
+    // what the speaker is actually playing: the loudest bin of the output spectrum. a loud peak that stays on one
+    // pitch for 5 s while the self is idle is a stuck tone: it is reported with the whole graph's state, then silenced.
+    spectrum(){ if(!this.an) return null; this.an.getFloatFrequencyData(this.anBuf); let bi=0,bv=-200; for(let i=2;i<this.anBuf.length;i++){ if(this.anBuf[i]>bv){ bv=this.anBuf[i]; bi=i; } } return {hz:Math.round(bi*this.ctx.sampleRate/this.an.fftSize),db:Math.round(bv)}; },
+    watch(){ const pk=this.spectrum(); if(!pk) return; this.peaks.push(pk); if(this.peaks.length>10) this.peaks.shift(); this.lastPeak=pk;
+      const recent=this.peaks.slice(-10); if(recent.length<10) return; const loud=recent.every(q=>q.db>-38); const same=recent.every(q=>Math.abs(q.hz-recent[0].hz)<=recent[0].hz*0.06+12);
+      if(loud&&same&&(this.act||0)<0.25&&recent[0].hz>60){ if(window.REPORT) REPORT('stuck',`sustained ${recent[0].hz} Hz at ${recent[0].db} dB for 5 s`,null,{peaks:recent,created:this.created,ended:this.ended,live:this.live.size}); this.peaks=[]; this.panic('stuck tone '+recent[0].hz+'Hz'); } },
     // silence everything continuous, stop every one-shot, reset pitches; the next good update rebuilds from here
     panic(e){ if(!this.ctx) return; try{ const t=this.ctx.currentTime; const all=[this.wind,this.roar,this.hiss,this.vA,this.vB,...(this.pipes||[])];
       for(const v of all){ if(!v) continue; if(v.g){ v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(0,t); v.g.gain._v=0; } if(v.o){ v.o.frequency.cancelScheduledValues(t); v.o.frequency.setValueAtTime(110,t); v.o.frequency._v=110; } }
@@ -166,7 +172,7 @@
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
   window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
-    audio:AUDIO.ctx?{state:AUDIO.ctx.state,t:+AUDIO.ctx.currentTime.toFixed(1),vA:AUDIO.vA&&[+AUDIO.vA.o.frequency.value.toFixed(1),+AUDIO.vA.g.gain.value.toFixed(4)],vB:AUDIO.vB&&[+AUDIO.vB.o.frequency.value.toFixed(1),+AUDIO.vB.g.gain.value.toFixed(4)],pipes:AUDIO.pipes&&AUDIO.pipes.map(v=>[+v.o.frequency.value.toFixed(0),+v.g.gain.value.toFixed(4)]),wind:AUDIO.wind&&+AUDIO.wind.g.gain.value.toFixed(4),live:AUDIO.live&&AUDIO.live.size,panics:AUDIO.panics||0,music:AUDIO.music,muted:AUDIO.muted}:null,
+    audio:AUDIO.ctx?{state:AUDIO.ctx.state,t:+AUDIO.ctx.currentTime.toFixed(1),vA:AUDIO.vA&&[+AUDIO.vA.o.frequency.value.toFixed(1),+AUDIO.vA.g.gain.value.toFixed(4)],vB:AUDIO.vB&&[+AUDIO.vB.o.frequency.value.toFixed(1),+AUDIO.vB.g.gain.value.toFixed(4)],pipes:AUDIO.pipes&&AUDIO.pipes.map(v=>[+v.o.frequency.value.toFixed(0),+v.g.gain.value.toFixed(4)]),wind:AUDIO.wind&&+AUDIO.wind.g.gain.value.toFixed(4),live:AUDIO.live&&AUDIO.live.size,created:AUDIO.created,ended:AUDIO.ended,peak:AUDIO.lastPeak,act:+(AUDIO.act||0).toFixed(2),panics:AUDIO.panics||0,music:AUDIO.music,muted:AUDIO.muted}:null,
     glerr:SIM.gl.getError()});
   const SRCS=(()=>{ const B=24, bw=Math.ceil(world.W/B), acc=new Map(); const ty=world.type; for(let y=0;y<world.H;y+=2) for(let x=0;x<world.W;x+=2){ const k=ty[y*world.W+x]; if(k!==2&&k!==3&&k!==5&&k!==6) continue; const key=k*1e6+((y/B)|0)*bw+((x/B)|0); let a=acc.get(key); if(!a){ a={k,n:0,x:0,y:0}; acc.set(key,a); } a.n++; a.x+=x; a.y+=y; }
     const out=[]; let h=0; for(const a of acc.values()){ if(a.n<3) continue; out.push({k:a.k,x:a.x/a.n,y:a.y/a.n,n:a.n,h:(h++*7919)%1000}); } return out; })();
@@ -271,6 +277,7 @@
     steps=Math.floor(acc); acc-=steps;
     try{ tick(); }catch(e){ if((frame.errs=(frame.errs||0)+1)<=5) console.error('tick',e); AUDIO.panic(e); }
     if(AUDIO.ctx&&AUDIO.beat&&performance.now()-AUDIO.beat>1500&&!AUDIO.muted){ AUDIO.beat=performance.now(); AUDIO.panic('stale voices'); }
+    if(AUDIO.ctx&&SIM.frame%30===0){ try{ AUDIO.watch(); }catch(e){} } if(window.REPORT&&SIM.frame%600===0&&SIM.frame>0) REPORT('heartbeat','ok');
     const vw=sw/zoom, vh=sh/zoom;
     { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
       if(jd>20&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0]});
@@ -301,8 +308,8 @@
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.45)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
       if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
-        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*(MENU.names.length+3)+12*s,10*s); c.fill();
-        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
+        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*(MENU.names.length+4)+12*s,10*s); c.fill();
+        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
     // target point: a soft animated marker where you asked the body to go
