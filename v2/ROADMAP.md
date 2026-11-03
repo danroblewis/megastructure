@@ -138,7 +138,7 @@ Rules that produced them: the self swims through the gas and does not push it; c
 
 ---
 
-## 11. Carried resource and repair — idea 2026-11-03
+## 11. Carried resource and repair — done 2026-11-03
 
 Some alcoves are dead: their coolers dark, no cold, no checkpoint. Elsewhere there is a resource (a mineral, an ash) that
 body cells pick up when they pass over it. The payload lives in the body texture's spare channel, per cell: it travels
@@ -148,15 +148,23 @@ reason: you must bring particular cells through. Mechanism: payload channel in S
 through transport, cleared when the cell dies); a probe/reduction of payload inside each alcove rect; alcove state in the
 walls field (frost grows as it heals). Order of work: first.
 
-## 12. Pickups that power some of your cells — idea 2026-11-03
+## 12. Pickups that power some of your cells — done 2026-11-03
 
 Same channel, another payload kind: cells that touch a pickup gain a property (extra swim, immunity to carry, heat
 tolerance). Only those cells have it, so the body stretches as the powered cells pull ahead; the player decides whether
 to let them lead or hold the self together. Nearly free once 11 exists. Order: second.
 
-## 13. Other wisps — idea 2026-11-03
+## 13. Other wisps — first version done 2026-11-03
 
 NPC wisps with simple drives (head for the next alcove; stall against a current; hide in calm). The reduction already
 tracks three centres with habits. Helping them: the self does not push gas, so help is bringing payload to repair a dead
 vent that would carry them, or sheltering them in your calm, or towing a part of them. The most on-theme idea (helping
 another through a tight spot) and the most work. Order: third, once payload exists to give them something to need.
+
+Shipped 2026-11-03: payload channel (ore gold / charge bright, per cell, dies with the cell); every third cold room dead,
+ore in the chamber before it, 60 units (scaled) to repair; orbs every ~700 route cells charging the cells that touch
+them (2.6x swim, 30% carry, ~10 s); one other wisp waiting before the first dead alcove, travelling the route after the
+repair, resting in live cold rooms, leaving at the exit. Verified headless: pickup (~50 units in 300 ticks pressed into
+ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
+Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
+as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
