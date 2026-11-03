@@ -419,7 +419,7 @@ void main(){
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
     bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE);
     col*=src? max(lit,0.08) : lit;   // sources sit in the same shadow as everything else
-    if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5); // hot walls glow
+    if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5)*min(1.0,lit+0.1); // hot walls glow, in the light of the fire
     o=vec4(col,1.0); return;
   }
   // gas volume
@@ -435,10 +435,10 @@ void main(){
   col*=lit;                                               // lit by the self and by fire
   float h=max(s.y,0.0);
   col+=vec3(1.0,0.5,0.15)*h*0.8+vec3(1.0,0.9,0.7)*h*h*0.5; // heat glow
-  if(s.y<0.0) col+=vec3(0.18,0.42,0.8)*min(1.0,-s.y*1.6);     // cold: a blue breath you can see
-  float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0)),clamp(L*1.6,0.0,0.85)); // organism
+  if(s.y<0.0) col+=vec3(0.18,0.42,0.8)*min(1.0,-s.y*1.6)*min(1.0,lit+0.05);     // cold: a blue breath, seen only where there is light
+  float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0))*min(1.0,lit+0.1),clamp(L*1.6,0.0,0.85)); // organism
   float pr=c.y; col+=vec3(0.3,0.25,0.2)*clamp((pr-1.15)*1.5,0.0,1.0);  // pressure fronts
-  col+=vec3(0.35,0.5,0.85)*wfl.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
+  col+=vec3(0.35,0.5,0.85)*wfl.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2))*min(1.0,lit+0.1);   // residue: where selves were lost
   col+=texture(uBloom,gl_FragCoord.xy/uScreen).rgb*0.55;
   col=1.0-exp(-col*1.4);
   col=mix(col,vec3(0.16,0.17,0.19)*max(lit,0.3),smoothstep(0.28,0.5,cov));   // soft wall edge
