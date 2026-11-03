@@ -146,4 +146,9 @@ const GEN={
     return n/5;
   },
 };
+  // the required route (spawn -> every cold room -> exit) is widened so the body fits: plain wall within r of any
+// route cell becomes fluid. the lattice elsewhere is untouched, so side passages may still be tight squeezes.
+GEN.widenRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const seen=new Uint8Array(W*H);
+  for(const path of paths){ if(!path) continue; for(const [px,py] of path){ for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<1||yy>=H-1) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<1||xx>=W-1) continue; const i=yy*W+xx; if(seen[i]) continue; seen[i]=1; if(type[i]===M.WALL){ type[i]=M.FLUID; mask[i*4]=0; mask[i*4+1]=128; mask[i*4+2]=128; n++; } } } } }
+  return n; };
 if(typeof module!=='undefined') module.exports={GEN,M};

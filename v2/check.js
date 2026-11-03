@@ -19,6 +19,12 @@ function search(world,pass,sx,sy){
   return {pass,dist,prev,start};
 }
 function pathfind(world,r,start){ const pass=erode(world,r); const s0=start||world.spawn; return search(world,pass,s0.x,s0.y); }
+// one search from the spawn; the path to every cold room and the exit (their union is the required route)
+function spawnPaths(world,r){ const {W,H}=world; const pass=erode(world,r); const res=search(world,pass,world.spawn.x,world.spawn.y);
+  const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
+  return targets.map(t=>{ const j=nearestReachable(res,W,H,t.x,t.y,t.rad); return j<0?null:pathTo(res,W,j); }); }
+// the game's world: built, then its required route widened to fit the body (radius 8 at full resolution)
+function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); w.widened=GEN_.widenRoute(w,spawnPaths(w,1),8); return w; }
 // the route a body would take: spawn -> cold room 1 -> cold room 2 -> ... -> exit, each leg searched from the end of the last
 function route(world,r){
   const {W,H}=world; const pass=erode(world,r); let at=world.spawn; const legs=[];
@@ -36,9 +42,9 @@ function report(world,r){
 function pathTo(res,W,target){ const pts=[]; let j=target; while(j>=0){ pts.push([j%W,(j/W)|0]); j=res.prev[j]; } return pts.reverse(); }
 if(typeof require!=='undefined'&&require.main===module){
   const seed=+process.argv[2]||7, W=+process.argv[3]||2048, H=+process.argv[4]||1024, r=+process.argv[5]||3;
-  const world=GEN_.build(W,H,seed); const {ok,rows}=report(world,r);
+  const world=buildWorld(W,H,seed); const {ok,rows}=report(world,r); console.log(`route widened: ${world.widened} cells carved`);
   console.log(`seed ${seed} ${W}x${H} body radius ${r}: ${ok?'COMPLETABLE':'NOT COMPLETABLE'}`);
   for(const row of rows) console.log(`  ${row.reachable?'ok  ':'FAIL'} ${row.name.padEnd(14)} path ${row.pathCells}`);
   process.exit(ok?0:1);
 }
-if(typeof module!=='undefined') module.exports={pathfind,report,pathTo,nearestReachable,route,erode,search}; else window.CHECK={pathfind,report,pathTo,nearestReachable,route,erode,search};
+if(typeof module!=='undefined') module.exports={pathfind,report,pathTo,nearestReachable,route,erode,search,spawnPaths,buildWorld}; else window.CHECK={pathfind,report,pathTo,nearestReachable,route,erode,search,spawnPaths,buildWorld};
