@@ -172,12 +172,16 @@ vec2 nearestC(vec2 pp){ return uC[nearestI(pp)]; }
 float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw; return smoothstep(0.08,0.35,-s.y)*(1.0-smoothstep(0.01,0.04,length(u))); }
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
+// self n cells along d, or this cell's own value if a wall lies on the way (so gradients never pull across a wall)
+float selfThru(ivec2 p, ivec2 d, int n, float h0){ for(int k=1;k<=n;k++){ ivec2 q=p+d*k; if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return h0; } return texelFetch(uB,p+d*n,0).x; }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
   if(solidAt(p)){ o=vec4(0.0); return; }
   vec2 u=texelFetch(uFC,p,0).zw;
-  float gx=(selfAt(p+ivec2(1,0))-selfAt(p-ivec2(1,0)))*0.5+(selfAt(p+ivec2(3,0))-selfAt(p-ivec2(3,0)))/6.0;
-  float gy=(selfAt(p+ivec2(0,1))-selfAt(p-ivec2(0,1)))*0.5+(selfAt(p+ivec2(0,3))-selfAt(p-ivec2(0,3)))/6.0;
+  // the gradient does not see through walls: a tap whose line crosses solid reads as this cell, so two halves split by a thin girder do not cling to each other across it
+  float h0=texelFetch(uB,p,0).x;
+  float gx=(selfThru(p,ivec2(1,0),1,h0)-selfThru(p,ivec2(-1,0),1,h0))*0.5+(selfThru(p,ivec2(1,0),3,h0)-selfThru(p,ivec2(-1,0),3,h0))/6.0;
+  float gy=(selfThru(p,ivec2(0,1),1,h0)-selfThru(p,ivec2(0,-1),1,h0))*0.5+(selfThru(p,ivec2(0,1),3,h0)-selfThru(p,ivec2(0,-1),3,h0))/6.0;
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
   float calm=calmAt(p);

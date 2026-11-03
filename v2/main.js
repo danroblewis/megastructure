@@ -369,7 +369,7 @@
         if(found>=0){ bi=BOT.pathSet.get(found); const route=[]; for(let i=found;i!==-1&&i!==undefined;i=prev.get(i)) route.push(i); route.reverse(); let step=route[Math.min(route.length-1,12)]; for(let k=route.length-1;k>0;k--){ const x=route[k]%W_, y=(route[k]/W_)|0; if(los(x+0.5,y+0.5)){ step=route[k]; break; } } BOT.detour=[step%W_+0.5,((step/W_)|0)+0.5]; } else { BOT.detour=null; bi=BOT.i; }
       } else BOT.detour=null;
       BOT.i=bi;
-      let wp=P[Math.min(P.length-1,bi+24)]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=4){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;
+      let wp=P[bi]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;   // the farthest visible path point ahead; the nearest visible one if none
       const d=_unit(wp[0]-px,wp[1]-py);
       cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
       if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
