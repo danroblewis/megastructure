@@ -215,11 +215,12 @@ void main(){
     vec2 dirv= gl3>0.0005? gh/gl3*side : (al>0.5? away/al*side : vec2(0.0));
     v+=dirv*uSplitStr; }
   if(ki==0 && uSplitStr<0.0){ vec2 toC=uC[0]-(vec2(p)+0.5); float tl=length(toC); if(tl>1.0) v+=toC/tl*(-uSplitStr); }   // integrate: all of it is one
-  if(ki==0){ // stick: press into a wall and the cells touching it hold on
-    float press=0.0;
-    if(solidAt(p+ivec2(1,0))) press=max(press,drive.x); if(solidAt(p-ivec2(1,0))) press=max(press,-drive.x);
-    if(solidAt(p+ivec2(0,1))) press=max(press,drive.y); if(solidAt(p-ivec2(0,1))) press=max(press,-drive.y);
-    if(press>0.2) v*=mix(1.0,0.05,min(1.0,(press-0.2)/0.4)); }
+  if(ki==0){ // stick: press into a wall and the cells touching it hold on, but they slide along it rather than freeze
+    vec2 nrm=vec2(0.0); float press=0.0;
+    if(solidAt(p+ivec2(1,0))){ nrm.x+=1.0; press=max(press,drive.x); } if(solidAt(p-ivec2(1,0))){ nrm.x-=1.0; press=max(press,-drive.x); }
+    if(solidAt(p+ivec2(0,1))){ nrm.y+=1.0; press=max(press,drive.y); } if(solidAt(p-ivec2(0,1))){ nrm.y-=1.0; press=max(press,-drive.y); }
+    if(press>0.2){ float k=min(1.0,(press-0.2)/0.4); float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0) v-=vn*nrm*k; }   // the part of the motion into the wall is taken away
+      v*=mix(1.0,0.4,k); } }   // what is left is held to 40%: enough grip to resist a current, not enough to pin you
   float sp=length(v); if(sp>0.45) v*=0.45/sp;
   o=vec4(v,0.0,0.0);
 }`;
