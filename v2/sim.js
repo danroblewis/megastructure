@@ -22,7 +22,7 @@ const SIM={
     this.levels=[]; let lw=Math.ceil(W/4), lh=Math.ceil(H/4);
     while(true){ const ts=[0,1,2,3].map(()=>tex(lw,lh,gl.RGBA32F,gl.RGBA,gl.FLOAT)); this.levels.push({ts,f:fbo(ts),w:lw,h:lh}); if(lw*lh<=16) break; lw=Math.ceil(lw/4); lh=Math.ceil(lh/4); }
     this.redBufs=[0,1,2,3].map(()=>new Float32Array(16*4));
-    this.centres=new Float32Array(6); this.nC=1; this.dirs=new Float32Array(6);
+    this.centres=new Float32Array(6); this.nC=1; this.npcK=-1; this.dirs=new Float32Array(6);
     this.Src=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,srcData);
     this.maskData=maskData; this.Mstatic=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,maskData); this.Mdyn=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE); this.Mfbo=fbo([this.Mdyn]);
     this.probeTex=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo=fbo([this.probeTex]);
@@ -67,7 +67,7 @@ const SIM={
     const f=this.F[this.cur], o=1-this.cur;
     let pr=this.P.lbm; this.use(pr,{uMask:this.Mdyn,uFA:f.a,uFB:f.b,uFC:f.c,uS:this.S[this.scur],uB:this.B[this.bcur]});
     gl.uniform1f(pr.u.uTau,P.tau); gl.uniform1f(pr.u.uBuoy,P.buoy); gl.uniform1f(pr.u.uIgn,P.ign); gl.uniform1f(pr.u.uBurnP,P.burnP);
-    gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform1f(pr.u.uPush,bd.push); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform2fv(pr.u.uDirs,this.dirs); gl.uniform1f(pr.u.uRadial,bd.radial||0);
+    gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform1f(pr.u.uPush,bd.push); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs); gl.uniform1f(pr.u.uRadial,bd.radial||0);
     this.draw(this.Ffbo[o],this.W,this.H); this.cur=o;
     pr=this.P.species; const so=1-this.scur;
     this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uSrc:this.Src});
@@ -75,14 +75,14 @@ const SIM={
     gl.uniform4f(pr.u.uInject,inject?inject.x:-999,inject?inject.y:-999,inject?inject.r:0,0); gl.uniform4f(pr.u.uInjectAmt,inject?inject.fuel:0,inject?inject.heat:0,inject?inject.smoke:0,inject?inject.life:0);
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
     // body
-    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform2fv(pr.u.uDirs,this.dirs);
+    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs);
     gl.uniform1f(pr.u.uGrip,bd.grip===undefined?1:bd.grip); gl.uniform1f(pr.u.uInertia,bd.inertia||0); gl.uniform2f(pr.u.uIVel,bd.ivx||0,bd.ivy||0); gl.uniform1f(pr.u.uDense,bd.dense||0.9);
     const ap=bd.app||[0,0,0]; gl.uniform3f(pr.u.uApp,ap[0],ap[1],ap[2]); gl.uniform1f(pr.u.uJet,bd.jet===undefined?1.8:bd.jet); const sa=bd.splitAxis||[1,0]; gl.uniform2f(pr.u.uSplitAxis,sa[0],sa[1]); gl.uniform1f(pr.u.uSplitStr,bd.splitStr||0); gl.uniform1f(pr.u.uSplitApp,bd.splitApp||0);
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uSwim,bd.swim); gl.uniform1f(pr.u.uCoh,bd.coh); gl.uniform1f(pr.u.uRnear,bd.rnear);
     this.draw(this.BVfbo,this.W,this.H);
     pr=this.P.body; const bo=1-this.bcur;
     this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c});
-    gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform4fv(pr.u.uAlcove,bd.alcove||[0,0,0,0]); gl.uniform4fv(pr.u.uPick,bd.pick||[0,0,0,0]); gl.uniform1f(pr.u.uPayInit,bd.payInit||0);
+    gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform4fv(pr.u.uAlcove,bd.alcove||[0,0,0,0]); gl.uniform4fv(pr.u.uPick,bd.pick||[0,0,0,0]); gl.uniform1f(pr.u.uPayInit,bd.payInit||0); gl.uniform1f(pr.u.uNpcGrow,bd.npcGrow||0);
     gl.uniform1f(pr.u.uRnear,bd.rnear); gl.uniform1f(pr.u.uRfar,bd.rfar); gl.uniform1f(pr.u.uGrow,bd.grow); gl.uniform1f(pr.u.uDroneR,bd.droneR||5);
     const ib=bd.injectB; gl.uniform4f(pr.u.uInjectB,ib?ib[0]:-999,ib?ib[1]:-999,ib?ib[2]:0,ib?ib[3]:0);
     gl.uniform2fv(pr.u.uDrones,bd.drones); gl.uniform1i(pr.u.uNDrones,bd.nDrones|0);
@@ -97,7 +97,7 @@ const SIM={
   },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
-    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
+    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
     for(let i=1;i<this.levels.length;i++){ pr=this.P.reduceN; const L=this.levels[i-1]; this.use(pr,{uMask:this.Mdyn,uL0:L.ts[0],uL1:L.ts[1],uL2:L.ts[2],uL3:L.ts[3]}); gl.uniform2i(pr.u.uLRes,L.w,L.h); this.draw(this.levels[i].f,this.levels[i].w,this.levels[i].h); }
   },
   // sample fields at up to 64 points and reduce the body; results are read back asynchronously
@@ -146,7 +146,7 @@ const SIM={
     this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uLight:this.L[this.lcur]});
     gl.activeTexture(gl.TEXTURE0+9); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uBloom,9);
     gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); gl.uniform1i(pr.u.uDebug,debug);
-    gl.uniform4f(pr.u.uPlayer,player[0],player[1],player[2],player[3]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC);
+    gl.uniform4f(pr.u.uPlayer,player[0],player[1],player[2],player[3]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK);
     const tt=this.tint||[0,0,0,0]; gl.uniform4f(pr.u.uTint,tt[0],tt[1],tt[2],tt[3]); gl.uniform1f(pr.u.uSplitSideR,this.splitSideR||0); gl.uniform4fv(pr.u.uEnt,ents); gl.uniform1i(pr.u.uNEnt,nEnt); gl.uniform1f(pr.u.uPHurt,hurt); gl.uniform1f(pr.u.uPHp,hp);
     this.draw(null,sw,sh);
   },

@@ -23,6 +23,7 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 #define M_DEAD 13
 #define M_ORB 14
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
+uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
@@ -197,11 +198,11 @@ void main(){
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
   vec2 drive=uDirs[ki];
-  if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
+  if(ki>0 && ki!=uNpcK){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
   float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
-  vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
+  vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92; else if(ki==uNpcK) carry=carry*uGrip;   // another wisp grips the gas as you do
   vec2 coh=g+home; float dl=length(drive); if(dl>0.05){ vec2 dd=drive/dl; float along=dot(coh,dd); if(along<0.0) coh-=along*dd*0.85; }   // cohesion does not fight locomotion
   float pw=clamp(-texelFetch(uB,p,0).w/max(0.02,here),0.0,1.0);   // power charge fraction of this cell
   vec2 v=carry*(1.0-0.7*pw)+drive*uSwim*(1.0+1.6*pw)+coh;
@@ -239,6 +240,7 @@ uniform vec2 uDrones[16]; uniform int uNDrones;
 uniform vec4 uAlcove;               // x0 y0 x1 y1 of a dead alcove being repaired (zeros: none)
 uniform vec4 uPick;                 // x y radius charge of a power pickup being taken (radius 0: none)
 uniform float uPayInit;             // test hook: payload given to injected cells
+uniform float uNpcGrow;             // another wisp's regrowth, capped by its mass on the CPU
 out vec4 o;
 bool fluidAt(ivec2 q){ return !solidAt(q); }
 void main(){
@@ -261,13 +263,14 @@ void main(){
   }
   for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE) ore=true; }
   float st=max(self,0.0);
-  vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; bool ghost=nd.y>0.5;
+  vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; int kk=int(nd.y+0.5); bool npc=(kk>0 && kk==uNpcK); bool ghost=kk>0 && !npc;
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   vec4 sp=texelFetch(uS,p,0);
   float before=self;
   if(dc>uRfar) self*=0.988;                                      // stragglers wither over a few seconds
   else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
     if(ghost){ if(calm<0.4) self*=0.986; }                                            // a past life fades unless it rests in a cold still pocket
+    else if(npc) self+=uNpcGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                   // another wisp keeps itself together much as you do
     else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
@@ -472,7 +475,7 @@ void main(){
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); float el=min(1.0,lit+0.08); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec*el,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5))*el; } }
   float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
-    { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } }
+    { float d0=distance(wc,uC[0]); int gk=0; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0){ d0=distance(wc,uC[j]); gk=j; } } if(gk>0){ if(gk==uNpcK) bc=mix(bc,vec3(0.72,1.0,0.62),0.6); else { bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } } }   // another wisp is green; your past lives are blue
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
     { float pay=texture(uB,uv).w; float pf=clamp(abs(pay)/max(0.05,self),0.0,1.0); if(pay>0.0) bc=mix(bc,vec3(1.0,0.78,0.3),0.75*pf); else if(pay<0.0) bc=mix(bc,vec3(0.55,1.0,0.95),0.75*pf); }   // what the cells carry: ore is gold, a charge is bright
     if(uSplitSideR>0.0){ float ex=texture(uB,uv).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }

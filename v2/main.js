@@ -140,16 +140,16 @@
   const dirS=[0,0];
   // selves: up to three fragments tracked by the reduction. index 0 is "you"; the others are ghosts.
   const selves=[{x:0,y:0,mass:0,live:true,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0}];
-  function pushCentres(){ let n=0; for(let i=0;i<3;i++){ if(selves[i].live){ SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:[selves[i].hx*0.45,selves[i].hy*0.45]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; n++; } } SIM.nC=Math.max(1,n); }
+  function pushCentres(){ let n=0; SIM.npcK=-1; for(let i=0;i<3;i++){ if(selves[i].live){ if(selves[i].npc) SIM.npcK=n; SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:selves[i].npc?[selves[i].hx,selves[i].hy]:[selves[i].hx*0.45,selves[i].hy*0.45]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; n++; } } SIM.nC=Math.max(1,n); }
   const TR=[];   // last 24 ticks of self bookkeeping, attached to camera-jump reports
   function updateSelves(red){
     const cl=red.clusters; if(!cl||cl.length<3) return;
     if(window.REPORT){ TR.push({f:SIM.frame,nc:SIM.nC,cen:Array.from(SIM.centres).map(v=>v|0),cl:cl.map(c=>[+c.mass.toFixed(1),c.cx|0,c.cy|0]),s:selves.map(s=>[s.live?1:0,+s.mass.toFixed(1),s.x|0,s.y|0]),far:red.far&&[red.far.d|0,red.far.x|0,red.far.y|0],px:player.x|0,py:player.y|0}); if(TR.length>24) TR.shift(); }
     let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
-    for(const s of live){ if(s===selves[0]) continue; s.age=(s.age||0)+1; if(s.mass<6*MK&&s.age>30){ s.lowN=(s.lowN||0)+1; if(s.lowN>30){ s.live=false; s.lowN=0; } } else s.lowN=0; }
+    for(const s of live){ if(s===selves[0]||s.npc) continue; s.age=(s.age||0)+1; if(s.mass<6*MK&&s.age>30){ s.lowN=(s.lowN||0)+1; if(s.lowN>30){ s.live=false; s.lowN=0; } } else s.lowN=0; }
     // you stay you. only when you have been below the living threshold for most of a second, and a part left behind is clearly alive, does it take over; then it locks for four seconds so the view never flips back and forth
     player.lowT=selves[0].mass<22*MK?(player.lowT||0)+1:0; player.switchLock=Math.max(0,(player.switchLock||0)-1);
-    if(player.lowT>=45&&player.switchLock===0&&!player.dead){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>30*MK&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
+    if(player.lowT>=45&&player.switchLock===0&&!player.dead){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&!selves[i].npc&&selves[i].mass>30*MK&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
       if(best){ player.switchLock=240; player.lowT=0; const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; dirS[0]=best.hx; dirS[1]=best.hy; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); } }
     if(red.far && red.far.d>BODY.rfar*0.9){ const f=red.far; let farFromAll=true; for(const s of selves){ if(s.live && Math.hypot(s.x-f.x,s.y-f.y)<BODY.rfar*0.9) farFromAll=false; }
       player.farN=farFromAll?(player.farN||0)+1:0; if(farFromAll&&player.farN>20){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; slot.age=0; slot.lowN=0; slot.hx=dirS[0]; slot.hy=dirS[1]; player.farN=0; } } } else player.farN=0;
@@ -225,6 +225,7 @@
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
+    npcTick();
     // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
     { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
       const fx=pb[0], fy=pb[1], fl=Math.hypot(fx,fy); const dl=Math.hypot(bd.dir[0],bd.dir[1]);
@@ -262,7 +263,7 @@
     SIM.lightStep(3);
     SIM.probe(probePts,(alc||HASH.test)?64:n);
     updateSelves(red);
-    player.mass=red.mass; player.burning=red.burning;
+    player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
     if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
     player.hp=Math.min(1,player.mass/BODY.massMax);
     player.hurt=Math.min(1,player.hurt*0.9+red.burning*0.02);
@@ -367,6 +368,34 @@
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
+  // following a path through the structure, used by the test bot and by another wisp: the nearest path point in line of
+  // sight (walls, drains, blades, sources block sight), the farthest visible point up to 40 ahead as the waypoint, and a
+  // local breadth-first detour when nothing is visible. st keeps i, full, pathSet, detour, wp.
+  function followPath(st,px,py){ const P=st.full; if(!P||!P.length) return null; const W_=world.W, ty=world.type;
+    const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4||(t>=5&&t<=8)||t===12||t===13; };
+    const los=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
+    let bi=-1, bd2=1e9; for(let k=Math.max(0,st.i-40);k<Math.min(P.length,st.i+300);k++){ const d=(P[k][0]-px)**2+(P[k][1]-py)**2; if(d<bd2&&los(P[k][0],P[k][1])){ bd2=d; bi=k; } }
+    if(bi<0){ if(!st.pathSet){ st.pathSet=new Map(); P.forEach((q,k)=>{ if(!st.pathSet.has(q[1]*W_+q[0])) st.pathSet.set(q[1]*W_+q[0],k); }); }
+      const start=(py|0)*W_+(px|0); const prev=new Map([[start,-1]]); const q=[start]; let found=-1, qh=0;
+      while(qh<q.length&&qh<40000){ const i=q[qh++]; if(st.pathSet.has(i)&&i!==start){ found=i; break; } const x=i%W_, y=(i/W_)|0; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; const j=ny*W_+nx; if(solidC(nx,ny)||prev.has(j)) continue; prev.set(j,i); q.push(j); } }
+      if(found>=0){ bi=st.pathSet.get(found); const route=[]; for(let i=found;i!==-1&&i!==undefined;i=prev.get(i)) route.push(i); route.reverse(); let step=route[Math.min(route.length-1,12)]; for(let k=route.length-1;k>0;k--){ const x=route[k]%W_, y=(route[k]/W_)|0; if(los(x+0.5,y+0.5)){ step=route[k]; break; } } st.detour=[step%W_+0.5,((step/W_)|0)+0.5]; } else { st.detour=null; bi=st.i; }
+    } else st.detour=null;
+    st.i=bi; let wp=P[bi]; if(!st.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=st.detour;
+    st.wp=wp; return {d:_unit(wp[0]-px,wp[1]-py),bi,wp}; }
+  // another wisp (roadmap 13): it waits before the first dead alcove, withering slowly outside the cold, until you repair
+  // the alcove; then it goes on along the route, resting in each live cold room, until the exit. it is centre slot 2.
+  const NPC=(()=>{ if(HASH.lab||!world.legs||HASH.nonpc) return null; const k=world.checkpoints.findIndex(c=>c.dead); if(k<0) return null; const leg=world.legs[k]; if(!leg||leg.length<80) return null; const p=leg[leg.length-45];
+    let full=[]; const legEnds=[]; for(let j=k+1;j<world.legs.length;j++){ if(world.legs[j]){ full=full.concat(world.legs[j]); legEnds.push([full.length-1,j]); } }
+    return {alc:world.checkpoints[k],x:p[0],y:p[1],ax:p[0],ay:p[1],state:'waiting',i:0,full,legEnds,spawnAt:90,restT:0,rested:new Set(),lowT:0}; })();
+  function npcTick(){ if(!NPC||NPC.state==='dead'||NPC.state==='gone') return; const s=selves[2];
+    if(NPC.state==='waiting'&&!s.live&&SIM.frame>=NPC.spawnAt&&!pendingInjectB){ s.live=true; s.npc=true; s.x=NPC.x; s.y=NPC.y; s.mass=0; s.hx=0; s.hy=0; s.age=0; pushCentres(); pendingInjectB=[NPC.x,NPC.y,BODY.spawnR,1.0]; NPC.born=SIM.frame; return; }
+    if(!s.live||!s.npc) return;
+    if(NPC.born&&SIM.frame-NPC.born>120){ NPC.lowT=s.mass<2*MK?NPC.lowT+1:0; if(NPC.lowT>200){ s.live=false; s.npc=false; NPC.state='dead'; pushCentres(); return; } }
+    const px=s.mass>0.5?s.x:NPC.x, py=s.mass>0.5?s.y:NPC.y; NPC.x=px; NPC.y=py; let d=[0,0];
+    if(NPC.state==='waiting'){ if(NPC.alc.repairedAt){ NPC.state='going'; NPC.i=0; AUDIO.tone(440,660,0.4,'sine',0.05); } else { const dx=NPC.ax-px, dy=NPC.ay-py; const dd=Math.hypot(dx,dy); if(dd>5) d=[dx/dd*0.6,dy/dd*0.6]; } }
+    if(NPC.state==='going'){ const r=followPath(NPC,px,py); if(r){ d=r.d; const le=NPC.legEnds.find(e=>e[0]>=NPC.i-6&&!NPC.rested.has(e[1])); if(le&&NPC.i>=le[0]-6){ if(NPC.restT<300){ NPC.restT++; d=[0,0]; } else { NPC.rested.add(le[1]); NPC.restT=0; } }
+        if(NPC.i>=NPC.full.length-8){ NPC.state='gone'; s.npc=false; pushCentres(); } } }
+    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=0.05*Math.max(0,1-s.mass/BODY.massMax); }
   // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
   const BOT=HASH.bot? {on:true,path:null,i:+HASH.boti||0,arrivals:[],lastCp:-1,t0:0} : {on:false};
@@ -375,21 +404,7 @@
     BOT.full=[]; BOT.legEnds=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); BOT.legEnds.push(BOT.full.length-1); }
     SCHEME.useTarget=false;
     const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base.call(SCHEME,cx);
-      const P=BOT.full; if(!P.length) return;
-      // nearest path index that the body can actually see (the straight line crosses no wall); then the farthest
-      // visible point up to 40 ahead is the waypoint, so the drive never aims through a pillar
-      const px=cx.player.x, py=cx.player.y; const W_=world.W, ty=world.type; const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4||(t>=5&&t<=8)||t===12||t===13; };   // walls, drains, blades, sources, ore and dead coolers: nothing to drive through
-      const los=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
-      let bi=-1, bd2=1e9; for(let k=Math.max(0,BOT.i-40);k<Math.min(P.length,BOT.i+300);k++){ const d=(P[k][0]-px)**2+(P[k][1]-py)**2; if(d<bd2&&los(P[k][0],P[k][1])){ bd2=d; bi=k; } }
-      if(bi<0){ // nothing visible: breadth-first from the body's cell to the closest path cell, head for its first visible step
-        if(!BOT.pathSet){ BOT.pathSet=new Map(); P.forEach((q,k)=>{ if(!BOT.pathSet.has(q[1]*W_+q[0])) BOT.pathSet.set(q[1]*W_+q[0],k); }); }
-        const start=(py|0)*W_+(px|0); const prev=new Map([[start,-1]]); const q=[start]; let found=-1, qh=0;
-        while(qh<q.length&&qh<40000){ const i=q[qh++]; if(BOT.pathSet.has(i)&&i!==start){ found=i; break; } const x=i%W_, y=(i/W_)|0; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; const j=ny*W_+nx; if(solidC(nx,ny)||prev.has(j)) continue; prev.set(j,i); q.push(j); } }
-        if(found>=0){ bi=BOT.pathSet.get(found); const route=[]; for(let i=found;i!==-1&&i!==undefined;i=prev.get(i)) route.push(i); route.reverse(); let step=route[Math.min(route.length-1,12)]; for(let k=route.length-1;k>0;k--){ const x=route[k]%W_, y=(route[k]/W_)|0; if(los(x+0.5,y+0.5)){ step=route[k]; break; } } BOT.detour=[step%W_+0.5,((step/W_)|0)+0.5]; } else { BOT.detour=null; bi=BOT.i; }
-      } else BOT.detour=null;
-      BOT.i=bi;
-      let wp=P[bi]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;   // the farthest visible path point ahead; the nearest visible one if none
-      let d=_unit(wp[0]-px,wp[1]-py); BOT.wp=wp;
+      const px=cx.player.x, py=cx.player.y; const fr=followPath(BOT,px,py); if(!fr) return; let d=fr.d; const bi=fr.bi;
       { const le=BOT.legEnds[player.cpIndex]; if(le!==undefined&&player.cpIndex<world.checkpoints.length&&!world.checkpoints[player.cpIndex].dead&&bi>=le-6&&(BOT.wait||0)<600){ BOT.wait=(BOT.wait||0)+1; d=[0,0]; } else if(le!==undefined&&bi<le-6) BOT.wait=0; }   // arrived at a cold room: stay until it registers
       cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
       if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
@@ -422,6 +437,6 @@
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
     SIM.probe(probePts,64); const [pb]=SIM.collect();
-    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} charged ${player.charged||0} orbs ${world.orbs?world.orbs.length:0} paytot ${(()=>{ let t=0; for(let k=40;k<64;k++) t+=SIM.probeBuf2[k*4+1]; return (t*9).toFixed(1); })()} cellmap ${HASH.cell?(()=>{ const [cx,cy]=HASH.cell.split(',').map(Number); const rows=[]; for(let y=cy-5;y<=cy+5;y++){ let r=''; for(let x=cx-16;x<=cx+16;x++){ const t=world.type[y*W+x]; const m=SIM.maskData[(y*W+x)*4]; r+= (x===cx&&y===cy)?'@': t===12?'O': t===13?'X': t===1?'#': t===6?'C': t===2?'V': t===3?'D': t===0?(m===0?'.':'?'):String(t); } rows.push(r); } return rows.join('/'); })():'-'} pay ${SIM.probeBuf2[1].toFixed(2)} alc ${player.alc?(player.alc.repair||0).toFixed(1)+'/'+REPAIR_NEED.toFixed(0)+(player.alc.dead?'':' repaired'):'-'} repaired ${world.checkpoints.filter(c=>c.repairedAt).length} vB ${AUDIO.vB?AUDIO.vB.o.frequency.value.toFixed(0)+'Hz/'+AUDIO.vB.g.gain.value.toFixed(4):'-'} elong ${(SIM.red.elong||0).toFixed(1)} panics ${AUDIO.panics||0} music ${AUDIO.near?AUDIO.near.length+'/'+AUDIO.deg+'/'+(AUDIO.root|0):'-'} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
+    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} npc ${NPC?NPC.state+'/'+(selves[2].mass|0)+'@'+(selves[2].x|0)+','+(selves[2].y|0)+'/i'+NPC.i:'-'} charged ${player.charged||0} orbs ${world.orbs?world.orbs.length:0} paytot ${(()=>{ let t=0; for(let k=40;k<64;k++) t+=SIM.probeBuf2[k*4+1]; return (t*9).toFixed(1); })()} cellmap ${HASH.cell?(()=>{ const [cx,cy]=HASH.cell.split(',').map(Number); const rows=[]; for(let y=cy-5;y<=cy+5;y++){ let r=''; for(let x=cx-16;x<=cx+16;x++){ const t=world.type[y*W+x]; const m=SIM.maskData[(y*W+x)*4]; r+= (x===cx&&y===cy)?'@': t===12?'O': t===13?'X': t===1?'#': t===6?'C': t===2?'V': t===3?'D': t===0?(m===0?'.':'?'):String(t); } rows.push(r); } return rows.join('/'); })():'-'} pay ${SIM.probeBuf2[1].toFixed(2)} alc ${player.alc?(player.alc.repair||0).toFixed(1)+'/'+REPAIR_NEED.toFixed(0)+(player.alc.dead?'':' repaired'):'-'} repaired ${world.checkpoints.filter(c=>c.repairedAt).length} vB ${AUDIO.vB?AUDIO.vB.o.frequency.value.toFixed(0)+'Hz/'+AUDIO.vB.g.gain.value.toFixed(4):'-'} elong ${(SIM.red.elong||0).toFixed(1)} panics ${AUDIO.panics||0} music ${AUDIO.near?AUDIO.near.length+'/'+AUDIO.deg+'/'+(AUDIO.root|0):'-'} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();
