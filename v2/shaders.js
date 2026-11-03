@@ -388,11 +388,15 @@ float wallShade(ivec2 p){ // bevel from neighbours
   float s=0.0; for(int k=0;k<4;k++){ ivec2 q=p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); if(!solidAt(q)) s+=(k==3)?0.35:(k==2)?-0.15:0.12; } return s; }
 void main(){
   vec2 wc=uCam+vec2(gl_FragCoord.x,uScreen.y-gl_FragCoord.y)/uZoom;
-  ivec2 p=ivec2(floor(wc));
+  ivec2 p=ivec2(floor(wc)); vec2 uv=wc/vec2(uRes);
   vec4 m=maskAt(p); int t=mtype(m);
-  vec4 s=texelFetch(uS,wrapP(p),0); vec4 c=texelFetch(uFC,wrapP(p),0); vec4 d=texelFetch(uDye,wrapP(p),0);
+  // the fields are sampled bilinearly for display, so cells never show as squares; walls keep their cell texture
+  vec4 s=texture(uS,uv); vec4 c=texture(uFC,uv); vec4 d=texture(uDye,uv);
   vec3 col;
-  vec4 wf=texelFetch(uWf,wrapP(p),0); bool solid=solidAt(p);
+  vec4 wf=texelFetch(uWf,wrapP(p),0); vec4 wfl=texture(uWf,uv);
+  // wall coverage at this screen pixel: bilinear over the four nearest cells' solidity, so edges follow a smooth contour
+  float cov; { vec2 q=wc-0.5; ivec2 q0=ivec2(floor(q)); vec2 f=fract(q); float a=solidAt(q0)?1.0:0.0, b=solidAt(q0+ivec2(1,0))?1.0:0.0, cc=solidAt(q0+ivec2(0,1))?1.0:0.0, dd=solidAt(q0+ivec2(1,1))?1.0:0.0; cov=mix(mix(a,b,f.x),mix(cc,dd,f.x),f.y); }
+  bool solid=cov>=0.5; if(solid && !solidAt(p)){ p=ivec2(floor(wc-0.5+vec2(cov>=0.5?0.5:0.0))); if(!solidAt(p)){ ivec2 q0=ivec2(floor(wc-0.5)); p=solidAt(q0)?q0:solidAt(q0+ivec2(1,0))?q0+ivec2(1,0):solidAt(q0+ivec2(0,1))?q0+ivec2(0,1):q0+ivec2(1,1); } wf=texelFetch(uWf,wrapP(p),0); }
   float light=texture(uLight,(wc)/vec2(uRes)).r; float lit=0.045+min(1.6,light*1.6);
   if(uDebug==4){ o=vec4(vec3(min(1.0,light)),1.0); return; }
   if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
@@ -422,7 +426,7 @@ void main(){
   vec3 bg=vec3(0.035,0.04,0.055);
   if(t==M_VENT) bg=vec3(0.1,0.25,0.3); if(t==M_DRAIN) bg=vec3(0.25,0.1,0.1); if(t==M_EXIT) bg=vec3(1.0,0.85,0.25)*(0.7+0.3*sin(uTime*4.0)); if(t==M_CHECK) bg=vec3(0.2,0.6,0.3)*(0.7+0.3*sin(uTime*3.0)); if(t==M_GRATE) bg=vec3(0.12,0.13,0.15);
   col=bg;
-  if(wf.x>0.0){ col=mix(col,vec3(0.3,0.3,0.33)*(0.5+0.5*(1.0-wf.y)),wf.x*0.8); }
+  if(wfl.x>0.0){ col=mix(col,vec3(0.3,0.3,0.33)*(0.5+0.5*(1.0-wfl.y)),wfl.x*0.8); }
   float sp=length(c.zw);
   float streak=(d.r+d.g+d.b)/3.0-0.5;                       // signed noise, stretched along the flow
   col+=vec3(0.30,0.40,0.55)*(0.10+min(1.0,sp*6.0)*0.55)*(0.5+streak);  // streaklines, brighter where the gas moves
@@ -434,16 +438,16 @@ void main(){
   if(s.y<0.0) col+=vec3(0.18,0.42,0.8)*min(1.0,-s.y*1.6);     // cold: a blue breath you can see
   float L=s.w; col=mix(col,vec3(0.75,0.25,0.9)*(0.6+0.4*sin(uTime*2.0+L*12.0)),clamp(L*1.6,0.0,0.85)); // organism
   float pr=c.y; col+=vec3(0.3,0.25,0.2)*clamp((pr-1.15)*1.5,0.0,1.0);  // pressure fronts
-  col+=vec3(0.35,0.5,0.85)*wf.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
+  col+=vec3(0.35,0.5,0.85)*wfl.z*0.9*(0.85+0.15*sin(uTime*1.5+float(p.x+p.y)*0.2));   // residue: where selves were lost
   col+=texture(uBloom,gl_FragCoord.xy/uScreen).rgb*0.55;
   col=1.0-exp(-col*1.4);
+  col=mix(col,vec3(0.16,0.17,0.19)*max(lit,0.3),smoothstep(0.28,0.5,cov));   // soft wall edge
   // entities
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5)); } }
-  float self=texelFetch(uB,wrapP(p),0).x;
-  self=(self*4.0+texelFetch(uB,wrapP(p+ivec2(1,0)),0).x+texelFetch(uB,wrapP(p-ivec2(1,0)),0).x+texelFetch(uB,wrapP(p+ivec2(0,1)),0).x+texelFetch(uB,wrapP(p-ivec2(0,1)),0).x)/8.0;
+  float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
     { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } }
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
-    if(uSplitSideR>0.0){ float ex=texelFetch(uB,wrapP(p),0).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
+    if(uSplitSideR>0.0){ float ex=texture(uB,uv).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
   o=vec4(col,1.0);
 }`;

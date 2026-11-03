@@ -10,14 +10,14 @@ const SIM={
     this.quad=gl.createVertexArray(); gl.bindVertexArray(this.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0); gl.bindVertexArray(null);
     const tex=(w,h,ifmt,fmt,type,data,lin)=>{ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t); const f=lin?gl.LINEAR:gl.NEAREST; gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,f); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,f); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D,0,ifmt,w,h,0,fmt,type,data||null); return t; };
     const fbo=(ts)=>{ const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f); ts.forEach((t,i)=>gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0+i,gl.TEXTURE_2D,t,0)); gl.drawBuffers(ts.map((_,i)=>gl.COLOR_ATTACHMENT0+i)); if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE) throw new Error('fbo'); gl.bindFramebuffer(gl.FRAMEBUFFER,null); return f; };
-    const hf=(w,h)=>tex(w,h,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT);
-    this.F=[{a:hf(W,H),b:hf(W,H),c:hf(W,H)},{a:hf(W,H),b:hf(W,H),c:hf(W,H)}]; this.Ffbo=this.F.map(f=>fbo([f.a,f.b,f.c]));
-    this.S=[hf(W,H),hf(W,H)]; this.D=[tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE),tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE)];
+    const hf=(w,h)=>tex(w,h,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT); const hfl=(w,h)=>tex(w,h,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true);   // hfl: linear filtered for display (the sim fetches texels and is unaffected)
+    this.F=[{a:hf(W,H),b:hf(W,H),c:hfl(W,H)},{a:hf(W,H),b:hf(W,H),c:hfl(W,H)}]; this.Ffbo=this.F.map(f=>fbo([f.a,f.b,f.c]));
+    this.S=[hfl(W,H),hfl(W,H)]; this.D=[tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,null,true),tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,null,true)];
     this.SDfbo=[fbo([this.S[0],this.D[0]]),fbo([this.S[1],this.D[1]])];
     this.LW=Math.ceil(W/4); this.LH=Math.ceil(H/4);
     this.L=[tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true),tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true)]; this.Lfbo=this.L.map(t=>fbo([t])); this.lcur=0;
-    this.Wf=[hf(W,H),hf(W,H)]; this.Wfbo=this.Wf.map(t=>fbo([t])); this.wcur=0;
-    this.B=[hf(W,H),hf(W,H)]; this.Bfbo=this.B.map(t=>fbo([t])); this.bcur=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
+    this.Wf=[hfl(W,H),hfl(W,H)]; this.Wfbo=this.Wf.map(t=>fbo([t])); this.wcur=0;
+    this.B=[hfl(W,H),hfl(W,H)]; this.Bfbo=this.B.map(t=>fbo([t])); this.bcur=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
     // reduction chain for mass / centroid
     this.levels=[]; let lw=Math.ceil(W/4), lh=Math.ceil(H/4);
     while(true){ const ts=[0,1,2,3].map(()=>tex(lw,lh,gl.RGBA32F,gl.RGBA,gl.FLOAT)); this.levels.push({ts,f:fbo(ts),w:lw,h:lh}); if(lw*lh<=16) break; lw=Math.ceil(lw/4); lh=Math.ceil(lh/4); }
