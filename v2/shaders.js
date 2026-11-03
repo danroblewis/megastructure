@@ -185,6 +185,8 @@ void main(){
   float hold=1.0-0.5*smoothstep(0.16,0.32,shear);
   vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense*hold; float gl=length(g); if(gl>0.09) g*=0.09/gl;
   vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.08,(dc-uRnear)*0.01): vec2(0.0);
+  // no homing through a wall: if the straight line to the centre crosses solid, this cell only follows its local gradient
+  if(dc>uRnear){ for(int k=1;k<=6;k++){ vec2 q=vec2(p)+0.5+toC*(float(k)/6.0); if(solidAt(ivec2(floor(q)))){ home=vec2(0.0); break; } } }
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
   vec2 drive=uDirs[ki];
