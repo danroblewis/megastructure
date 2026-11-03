@@ -24,7 +24,7 @@ const SIM={
     this.redBufs=[0,1,2,3].map(()=>new Float32Array(16*4));
     this.centres=new Float32Array(6); this.nC=1; this.dirs=new Float32Array(6);
     this.Src=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,srcData);
-    this.Mstatic=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,maskData); this.Mdyn=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE); this.Mfbo=fbo([this.Mdyn]);
+    this.maskData=maskData; this.Mstatic=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,maskData); this.Mdyn=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE); this.Mfbo=fbo([this.Mdyn]);
     this.probeTex=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo=fbo([this.probeTex]);
     this.probeTex2=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo2=fbo([this.probeTex2]);
     this.cur=0; this.scur=0;
@@ -53,6 +53,8 @@ const SIM={
   use(pr,texes){ const gl=this.gl; gl.useProgram(pr.p); let u=0; if(!('uWf' in texes)&&this.Wf) texes.uWf=this.Wf[this.wcur]; for(const k in texes){ gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,texes[k]); gl.uniform1i(pr.u[k],u); u++; }
     gl.uniform2i(pr.u.uRes,this.W,this.H); gl.uniform1f(pr.u.uTime,this.frame/60); gl.uniform1ui(pr.u.uFrame,this.frame>>>0); },
   draw(fbo,w,h){ const gl=this.gl; gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.viewport(0,0,w,h); gl.bindVertexArray(this.quad); gl.drawArrays(gl.TRIANGLES,0,3); gl.bindVertexArray(null); },
+  // change cell types in the static mask (repairs): rect [x0,y0,x1,y1) set to type t
+  patchMask(x0,y0,x1,y1,t){ const gl=this.gl; const w=x1-x0, h=y1-y0; if(w<=0||h<=0) return; const buf=new Uint8Array(w*h*4); for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=((y0+y)*this.W+x0+x)*4, j=(y*w+x)*4; this.maskData[i]=t; buf[j]=t; buf[j+1]=this.maskData[i+1]; buf[j+2]=this.maskData[i+2]; buf[j+3]=255; } gl.bindTexture(gl.TEXTURE_2D,this.Mstatic); gl.texSubImage2D(gl.TEXTURE_2D,0,x0,y0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,buf); },
   updateMask(machines,t){
     const gl=this.gl; this.use(this.P.maskCopy,{uStatic:this.Mstatic}); this.draw(this.Mfbo,this.W,this.H);
     const n=GEN.machineQuads(machines,t,this.machData,this.H); if(!n) return;
@@ -80,7 +82,7 @@ const SIM={
     this.draw(this.BVfbo,this.W,this.H);
     pr=this.P.body; const bo=1-this.bcur;
     this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c});
-    gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC);
+    gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform4fv(pr.u.uAlcove,bd.alcove||[0,0,0,0]); gl.uniform4fv(pr.u.uPick,bd.pick||[0,0,0,0]); gl.uniform1f(pr.u.uPayInit,bd.payInit||0);
     gl.uniform1f(pr.u.uRnear,bd.rnear); gl.uniform1f(pr.u.uRfar,bd.rfar); gl.uniform1f(pr.u.uGrow,bd.grow); gl.uniform1f(pr.u.uDroneR,bd.droneR||5);
     const ib=bd.injectB; gl.uniform4f(pr.u.uInjectB,ib?ib[0]:-999,ib?ib[1]:-999,ib?ib[2]:0,ib?ib[3]:0);
     gl.uniform2fv(pr.u.uDrones,bd.drones); gl.uniform1i(pr.u.uNDrones,bd.nDrones|0);

@@ -1,6 +1,6 @@
 // v2/gen.js — procedural megastructure: chambers, ducts, shafts, machines, sources
 'use strict';
-const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11};
+const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13};
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const GEN={
   build(W,H,seed){
@@ -96,8 +96,10 @@ const GEN={
       else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=6) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
-      { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-5,top?y1:r.y1-AMP-4,dx+5,top?r.y0+AMP+4:y0,M.FLUID); rect(cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3,M.COOLER); rect(cx0-3,y0,cx0,y1,M.COOLER); rect(cx0+cw,y0,cx0+cw+3,y1,M.COOLER); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh}); } }   // the cold room: where you condense, and where you are remembered
+      { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-5,top?y1:r.y1-AMP-4,dx+5,top?r.y0+AMP+4:y0,M.FLUID); const dead=r.i>0&&checkpoints.length%3===1; const CT=dead?M.DEAD:M.COOLER; const rects=[[cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3],[cx0-3,y0,cx0,y1],[cx0+cw,y0,cx0+cw+3,y1]]; for(const q of rects) rect(q[0],q[1],q[2],q[3],CT); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh,dead,room:r.i,rects}); } }   // the cold room: where you condense, and where you are remembered. every third one is dead and must be repaired with ore
     }
+    // ore: a deposit in the chamber of the cold room before each dead one, so the resource is found on the way
+    for(let k=1;k<checkpoints.length;k++){ if(!checkpoints[k].dead) continue; const pr=rooms[checkpoints[k-1].room]; const ox=ri(pr.x0+15,pr.x1-35); if(R()<0.5) rect(ox,pr.y1,ox+18,pr.y1+3,M.ORE); else rect(ox,pr.y0-3,ox+18,pr.y0,M.ORE); checkpoints[k].ore={x:ox+9,y:pr.cy}; }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
     for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(type[i]===M.FLUID && type[i-1]===M.WALL&&type[i+1]===M.WALL&&type[i-W]===M.WALL&&type[i+W]===M.WALL) type[i]=M.WALL; }
@@ -120,14 +122,14 @@ const GEN={
   // the same world at 1/f resolution: structure, machines and markers all scaled; sources and vents survive the coarsening
   downsample(w,f){
     const W=Math.floor(w.W/f), H=Math.floor(w.H/f); const type=new Uint8Array(W*H), mask=new Uint8Array(W*H*4), src=new Uint8Array(W*H*4);
-    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)?5 : t===4?4 : t===1?3 : t===9||t===10?2 : 0;   // what wins when cells merge
+    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)||t===12||t===13?5 : t===4?4 : t===1?3 : t===9||t===10?2 : 0;   // what wins when cells merge
     for(let y=0;y<H;y++) for(let x=0;x<W;x++){
       let best=0,bp=-1,g=128,b=128,solid=0,n=0; const s4=[0,0,0,0];
-      for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
+      for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)||t===12||t===13) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
       if(best===1 && solid<n) best=0;   // a passage survives coarsening; only fully solid blocks stay wall
       const j=y*W+x; type[j]=best; mask[j*4]=best; mask[j*4+1]=g; mask[j*4+2]=b; mask[j*4+3]=255; for(let c=0;c<4;c++) src[j*4+c]=s4[c]; }
     const sc=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==='number'&&['x','y','r','w','h','len','x0','x1','y0','y1','cx','cy'].includes(k)?v/f:v]));
-    return {W,H,mask,src,type,machines:w.machines.map(sc),cores:[],drones:[],checkpoints:w.checkpoints.map(sc),rooms:w.rooms.map(sc),spawn:sc(w.spawn),exit:sc(w.exit),jet:w.jet&&sc(w.jet)};
+    return {W,H,mask,src,type,machines:w.machines.map(sc),cores:[],drones:[],checkpoints:w.checkpoints.map(c=>Object.assign(sc(c),{rects:c.rects&&c.rects.map(q=>q.map(v=>Math.round(v/f))),ore:c.ore&&sc(c.ore)})),rooms:w.rooms.map(sc),spawn:sc(w.spawn),exit:sc(w.exit),jet:w.jet&&sc(w.jet)};
   },
   // machine quads for this frame: returns Float32Array of [x,y,vx,vy,type] per vertex (6 per quad)
   machineQuads(machines,t,out,H){ H=H||1024;

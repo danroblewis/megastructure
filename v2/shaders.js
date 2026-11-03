@@ -19,12 +19,14 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 #define M_EXIT 9
 #define M_CHECK 10
 #define M_GRATE 11
+#define M_ORE 12
+#define M_DEAD 13
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
 uniform sampler2D uWf;     // walls field: solidity, soot, residue, kind (0 metal, 0.5 frost, 1 tissue)
-bool hardT(int t){ return t==M_MOVING||t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE; }
+bool hardT(int t){ return t==M_MOVING||t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE||t==M_ORE||t==M_DEAD; }
 bool solidT(int t){ return t==M_WALL||hardT(t); }   // legacy: static-mask solidity
 float solidity(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return 1.0; return texelFetch(uWf,p,0).x; }
 bool solidAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return true; int t=mtype(maskAt(p)); if(hardT(t)) return true; if(t==M_VENT||t==M_DRAIN) return false; return texelFetch(uWf,p,0).x>=0.5; }
@@ -200,7 +202,8 @@ void main(){
   float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
   vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92;
   vec2 coh=g+home; float dl=length(drive); if(dl>0.05){ vec2 dd=drive/dl; float along=dot(coh,dd); if(along<0.0) coh-=along*dd*0.85; }   // cohesion does not fight locomotion
-  vec2 v=carry+drive*uSwim+coh;
+  float pw=clamp(-texelFetch(uB,p,0).w/max(0.02,here),0.0,1.0);   // power charge fraction of this cell
+  vec2 v=carry*(1.0-0.7*pw)+drive*uSwim*(1.0+1.6*pw)+coh;
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
@@ -232,13 +235,19 @@ uniform vec2 uC[3]; uniform int uCN;
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
+uniform vec4 uAlcove;               // x0 y0 x1 y1 of a dead alcove being repaired (zeros: none)
+uniform vec4 uPick;                 // x y radius charge of a power pickup being taken (radius 0: none)
+uniform float uPayInit;             // test hook: payload given to injected cells
 out vec4 o;
 bool fluidAt(ivec2 q){ return !solidAt(q); }
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
-  if(t==M_MOVING){ vec4 bb=texelFetch(uB,p,0); o=vec4(bb.x*0.9,bb.x*0.1,bb.z,0.0); return; }   // a blade wears at what it sweeps through; it does not erase it
+  if(t==M_MOVING){ vec4 bb=texelFetch(uB,p,0); o=vec4(bb.x*0.9,bb.x*0.1,bb.z,bb.w*0.9); return; }   // a blade wears at what it sweeps through; it does not erase it
   if(solidAt(p)||t==M_DRAIN){ o=vec4(0.0); return; }
   float self=texelFetch(uB,p,0).x; float s0=self;
+  // payload: what these cells carry. positive is resource (ore) to deposit in a dead alcove, negative is a power charge.
+  // it moves with the cells (same upwind flux and exchange as self), so it cannot spread across the self, and it dies with them.
+  float pay=texelFetch(uB,p,0).w; float w0=pay; bool ore=false;
   vec2 v0=texelFetch(uBV,p,0).xy;
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
   for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(!fluidAt(q)) continue;
@@ -247,7 +256,10 @@ void main(){
     float flux= vf>0.0? vf*s0 : vf*sq;                // upwind
     self-=flux;
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
+    float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
   }
+  for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE) ore=true; }
+  float st=max(self,0.0);
   vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; bool ghost=nd.y>0.5;
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   vec4 sp=texelFetch(uS,p,0);
@@ -262,12 +274,18 @@ void main(){
   if(sp.y>0.35 && sp.w>0.05 && dc<uRfar) self+=sp.w*(sp.y-0.35)*0.35;   // organism burning near you becomes you
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
   float lost=max(0.0,before-self);
-  vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); }
+  vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; }
   if(self<0.003){ lost+=self; self=0.0; }
+  if(self<st && st>0.0) pay*=self/st;                                  // cells that wither take their load with them
+  if(ore && pay>=0.0) pay=min(self,pay+0.04);                          // touching ore: the cell fills up
+  if(uAlcove.z>uAlcove.x && pay>0.0 && float(p.x)>=uAlcove.x && float(p.x)<=uAlcove.z && float(p.y)>=uAlcove.y && float(p.y)<=uAlcove.w) pay*=0.96;   // inside a dead alcove: deposited
+  if(uPick.z>0.0 && distance(vec2(p)+0.5,uPick.xy)<uPick.z) pay=-self*uPick.w;   // a power pickup charges the cells that touch it
+  if(pay<0.0) pay*=0.9985;                                            // a charge fades in about ten seconds
+  pay=clamp(pay,-self,self); if(self<=0.0) pay=0.0;
   // exposure: what this matter has lived through (heat), carried with it
   float ex=texelFetch(uB,p,0).z; vec2 v0b=texelFetch(uBV,p,0).xy; ivec2 from=ivec2(floor(vec2(p)+0.5-v0b)); float exFrom=texelFetch(uB,wrapP(from),0).z;
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
-  o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),0.0);
+  o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay);
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
 SH.wallsInit = SH.head + `
@@ -378,7 +396,7 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
   o=vec4(c.z,c.w,s.y,float(t)+ (s.x<0.0?0.0:0.0)); }`;
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
-void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); float b=texelFetch(uB,p,0).x; o=vec4(s.x,s.z,s.w,b); }`;
+void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
 
 // ---------------- render ----------------
 SH.render = SH.head + `
@@ -422,7 +440,9 @@ void main(){
     else if(t==M_FUEL) col=mix(col,vec3(0.3,0.9,0.5),0.7);
     else if(t==M_SPORE) col=mix(col,vec3(0.8,0.3,0.9),0.7);
     else if(t==M_MOVING) col=vec3(0.55,0.5,0.45)+wallShade(p)*0.3;
-    bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE);
+    else if(t==M_ORE) col=mix(col,vec3(0.95,0.72,0.3),0.55+0.15*sin(uTime*2.5+float(p.x*7+p.y*3)));
+    else if(t==M_DEAD) col=mix(col,vec3(0.16,0.2,0.28),0.75);
+    bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE||t==M_ORE);
     col*=src? max(lit,0.08) : lit;   // sources sit in the same shadow as everything else
     if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5)*min(1.0,lit+0.1); // hot walls glow, in the light of the fire
     o=vec4(col,1.0); return;
@@ -453,6 +473,7 @@ void main(){
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
     { float d0=distance(wc,uC[0]); bool ghost=false; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0) ghost=true; } if(ghost){ bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } }
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
+    { float pay=texture(uB,uv).w; float pf=clamp(abs(pay)/max(0.05,self),0.0,1.0); if(pay>0.0) bc=mix(bc,vec3(1.0,0.78,0.3),0.75*pf); else if(pay<0.0) bc=mix(bc,vec3(0.55,1.0,0.95),0.75*pf); }   // what the cells carry: ore is gold, a charge is bright
     if(uSplitSideR>0.0){ float ex=texture(uB,uv).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
   o=vec4(col,1.0);
 }`;

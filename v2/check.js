@@ -3,7 +3,7 @@
 'use strict';
 const GEN_=typeof require!=='undefined'?require('./gen.js').GEN:GEN;
 function erode(world,r,drainsPass){
-  const {W,H,type}=world; const solid=(t)=>t===1||(t===3&&!drainsPass)||(t>=5&&t<=8);   // drains (3) count as solid unless asked otherwise: they erase body cells
+  const {W,H,type}=world; const solid=(t)=>t===1||(t===3&&!drainsPass)||(t>=5&&t<=8)||t===12||t===13;   // drains (3) count as solid unless asked otherwise: they erase body cells
   // erode: a cell is passable only if no solid within radius r (euclidean disc) — the body is roughly 2r wide
   const pass=new Uint8Array(W*H);
   const r2=r*r; for(let y=0;y<H;y++) for(let x=0;x<W;x++){ let ok=!solid(type[y*W+x]); for(let dy=-r;ok&&dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H||solid(type[ny*W+nx])){ ok=false; break; } } pass[y*W+x]=ok?1:0; }   // round body: a disc of radius r must be clear

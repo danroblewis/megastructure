@@ -157,6 +157,9 @@
     pushCentres();
   }
   function adopt(i){ if(i<=0||!selves[i].live) return; const tmp=selves[0]; tmp.hx=dirS[0]; tmp.hy=dirS[1]; selves[0]=selves[i]; selves[i]=tmp; dirS[0]=selves[0].hx; dirS[1]=selves[0].hy; pushCentres(); target.x=null; AUDIO.tone(500,700,0.15,'sine',0.06); }
+  const REPAIR_NEED=60*MK;   // ore to bring: about a third of a full body's load, so some can be lost on the way
+  function repairAlcove(alc){ alc.dead=false; alc.repairedAt=SIM.frame; for(const q of alc.rects){ SIM.patchMask(q[0],q[1],q[2],q[3],6); for(let y=q[1];y<q[3];y++) for(let x=q[0];x<q[2];x++){ if(x>=0&&y>=0&&x<W&&y<H) world.type[y*W+x]=6; } }
+    [392,523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.5,'sine',0.06),i*140)); }
   function restart(){ player.camSnap=true; player.stamina=1; player.dissoc=0; player.x=world.spawn.x; player.y=world.spawn.y; player.px=player.x; player.py=player.y; player.mass=0; player.hp=1; player.dead=false; player.won=false; player.cores=0; player.deaths=0; player.kills=0; player.checkpoint={x:world.spawn.x,y:world.spawn.y}; player.cpIndex=0;
     cores=[]; drones=[]; SIM.frame=0;
     pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30;
@@ -187,15 +190,24 @@
     const out=[]; let h=0; for(const a of acc.values()){ if(a.n<3) continue; out.push({k:a.k,x:a.x/a.n,y:a.y/a.n,n:a.n,h:(h++*7919)%1000}); } return out; })();
   let inject=null, shake=0, steps=small?2:3;
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
+  if(HASH.pay) bd.payInit=+HASH.pay;   // test hook: injected cells carry this much ore
   function tick(){
     const inp=readInput(); sparkQ=false;
     // probe at the centroid, visible cores and drones
     let n=0; const list=[];
     probePts[0]=player.x; probePts[1]=player.y; n=1;
-    for(const c of cores){ if(!c.alive||n>=64) continue; if(Math.abs(c.x-player.x)>sw/zoom||Math.abs(c.y-player.y)>sh/zoom) continue; probePts[n*2]=c.x; probePts[n*2+1]=c.y; list.push(c); n++; }
+    for(const c of cores){ if(!c.alive||n>=40) continue; if(Math.abs(c.x-player.x)>sw/zoom||Math.abs(c.y-player.y)>sh/zoom) continue; probePts[n*2]=c.x; probePts[n*2+1]=c.y; list.push(c); n++; }
     let nd=0;
-    for(const d of drones){ if(!d.alive||n>=64) continue; if(Math.abs(d.x-player.x)>sw/zoom*1.2||Math.abs(d.y-player.y)>sh/zoom*1.2) continue; probePts[n*2]=d.x; probePts[n*2+1]=d.y; list.push(d); n++; if(nd<16){ droneArr[nd*2]=d.x; droneArr[nd*2+1]=d.y; nd++; } }
+    for(const d of drones){ if(!d.alive||n>=40) continue; if(Math.abs(d.x-player.x)>sw/zoom*1.2||Math.abs(d.y-player.y)>sh/zoom*1.2) continue; probePts[n*2]=d.x; probePts[n*2+1]=d.y; list.push(d); n++; if(nd<16){ droneArr[nd*2]=d.x; droneArr[nd*2+1]=d.y; nd++; } }
+    // dead alcoves: when you are in one, its interior is probed for the ore your cells carry; what they deposit repairs it
+    const alc=world.checkpoints.find(c=>c.dead&&Math.abs(c.x-player.x)<c.w/2+10&&Math.abs(c.y-player.y)<c.h/2+10)||null;
+    if(alc){ let k=40; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=alc.x-alc.w/2+(gx+0.5)*alc.w/6; probePts[k*2+1]=alc.y-alc.h/2+(gy+0.5)*alc.h/4; k++; } }
+    else if(HASH.test){ let k=40; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=player.x-9+(gx+0.5)*3; probePts[k*2+1]=player.y-6+(gy+0.5)*3; k++; } }   // test: a grid round the body for its total load
     const [pb,pb2,red]=SIM.collect();
+    if(alc&&player.alc===alc){ let sum=0; for(let k=40;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const inside=sum*(alc.w*alc.h)/24; const dep=inside*0.04*steps; alc.repair=(alc.repair||0)+dep; player.depositing=dep>0.02*MK;
+      if(player.depositing&&SIM.frame%20===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*4,0.012,0,0.4,'sine');
+      if(alc.repair>=REPAIR_NEED) repairAlcove(alc); } else player.depositing=false;
+    player.alc=alc; bd.alcove=alc?[alc.x-alc.w/2,alc.y-alc.h/2,alc.x+alc.w/2,alc.y+alc.h/2]:[0,0,0,0];
     const ux=pb[0]*PARAMS.adv*3, uy=pb[1]*PARAMS.adv*3, heat=pb[2];
     // --- intent -> body parameters ---
     const alive=!player.dead;
@@ -244,7 +256,7 @@
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
-    SIM.probe(probePts,n);
+    SIM.probe(probePts,(alc||HASH.test)?64:n);
     updateSelves(red);
     player.mass=red.mass; player.burning=red.burning;
     if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
@@ -255,7 +267,7 @@
       if(player.respawnT>0) player.respawnT--;
       else if(selves[0].mass<22*MK&&(player.lowT||0)>=45){ player.dead=true; player.deadT=240; player.deaths++; AUDIO.tone(220,60,2.5,'sine',0.05); }
       { player.coldT=player.coldT||0; if(heat<-0.08){ player.coldT++; } else player.coldT=Math.max(0,player.coldT-2);
-        if(player.coldT>90){ const ci=world.checkpoints.findIndex(c=>Math.abs(c.x-player.x)<c.w/2+6&&Math.abs(c.y-player.y)<c.h/2+6); if(ci>=0&&(player.checkpoint.x!==world.checkpoints[ci].x)){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=Math.max(player.cpIndex,ci+1); AUDIO.tone(520,780,0.5,'sine',0.06); setTimeout(()=>AUDIO.tone(780,1040,0.6,'sine',0.05),300); } }
+        if(player.coldT>90){ const ci=world.checkpoints.findIndex(c=>!c.dead&&Math.abs(c.x-player.x)<c.w/2+6&&Math.abs(c.y-player.y)<c.h/2+6); if(ci>=0&&(player.checkpoint.x!==world.checkpoints[ci].x)){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=Math.max(player.cpIndex,ci+1); AUDIO.tone(520,780,0.5,'sine',0.06); setTimeout(()=>AUDIO.tone(780,1040,0.6,'sine',0.05),300); } }
         if(heat<-0.08){ bd.grow*=2.5; bd.coh*=1.3; bd.tint=[0.6,0.85,1.0,Math.max(bd.tint?bd.tint[3]:0,0.45)]; } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
@@ -318,6 +330,7 @@
     // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
     { const bars=[]; if(!player.dead&&player.stamina!==undefined){ const st=player.dissoc>0?0:player.stamina; if(st<0.97||player.dissoc>0) bars.push({v:st,col:player.dissoc>0?'rgba(160,160,170,0.8)':st<0.3?'rgba(255,150,120,0.85)':'rgba(220,235,255,0.7)'}); }
       if(SCHEME.name==='attention'&&SCHEME.st&&SCHEME.st.fat>0.03) bars.push({v:1-SCHEME.st.fat,col:'rgba(200,230,255,0.7)'});
+      if(player.alc) bars.push({v:(player.alc.repair||0)/REPAIR_NEED,col:'rgba(255,205,110,0.9)'});
       let by=sh-(14+(window.safeBottom||0))*s; const bw=Math.round(sw*0.28), bx=(sw-bw)/2;
       for(const b of bars){ c.fillStyle='rgba(255,255,255,0.10)'; c.fillRect(bx,by,bw,2*s); c.fillStyle=b.col; c.fillRect(bx,by,bw*Math.max(0,Math.min(1,b.v)),2*s); by-=5*s; } }
     // scheme menu (bottom-right pill; Tab or ` on a keyboard)
@@ -373,7 +386,7 @@
       BOT.i=bi;
       let wp=P[bi]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;   // the farthest visible path point ahead; the nearest visible one if none
       let d=_unit(wp[0]-px,wp[1]-py); BOT.wp=wp;
-      { const le=BOT.legEnds[player.cpIndex]; if(le!==undefined&&player.cpIndex<world.checkpoints.length&&bi>=le-6&&(BOT.wait||0)<600){ BOT.wait=(BOT.wait||0)+1; d=[0,0]; } else if(le!==undefined&&bi<le-6) BOT.wait=0; }   // arrived at a cold room: stay until it registers
+      { const le=BOT.legEnds[player.cpIndex]; if(le!==undefined&&player.cpIndex<world.checkpoints.length&&!world.checkpoints[player.cpIndex].dead&&bi>=le-6&&(BOT.wait||0)<600){ BOT.wait=(BOT.wait||0)+1; d=[0,0]; } else if(le!==undefined&&bi<le-6) BOT.wait=0; }   // arrived at a cold room: stay until it registers
       cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
       if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
   }
@@ -404,7 +417,7 @@
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
-    SIM.probe(probePts,1); const [pb]=SIM.collect();
-    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} vB ${AUDIO.vB?AUDIO.vB.o.frequency.value.toFixed(0)+'Hz/'+AUDIO.vB.g.gain.value.toFixed(4):'-'} elong ${(SIM.red.elong||0).toFixed(1)} panics ${AUDIO.panics||0} music ${AUDIO.near?AUDIO.near.length+'/'+AUDIO.deg+'/'+(AUDIO.root|0):'-'} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
+    SIM.probe(probePts,64); const [pb]=SIM.collect();
+    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} paytot ${(()=>{ let t=0; for(let k=40;k<64;k++) t+=SIM.probeBuf2[k*4+1]; return (t*9).toFixed(1); })()} cellmap ${HASH.cell?(()=>{ const [cx,cy]=HASH.cell.split(',').map(Number); const rows=[]; for(let y=cy-5;y<=cy+5;y++){ let r=''; for(let x=cx-16;x<=cx+16;x++){ const t=world.type[y*W+x]; const m=SIM.maskData[(y*W+x)*4]; r+= (x===cx&&y===cy)?'@': t===12?'O': t===13?'X': t===1?'#': t===6?'C': t===2?'V': t===3?'D': t===0?(m===0?'.':'?'):String(t); } rows.push(r); } return rows.join('/'); })():'-'} pay ${SIM.probeBuf2[1].toFixed(2)} alc ${player.alc?(player.alc.repair||0).toFixed(1)+'/'+REPAIR_NEED.toFixed(0)+(player.alc.dead?'':' repaired'):'-'} repaired ${world.checkpoints.filter(c=>c.repairedAt).length} vB ${AUDIO.vB?AUDIO.vB.o.frequency.value.toFixed(0)+'Hz/'+AUDIO.vB.g.gain.value.toFixed(4):'-'} elong ${(SIM.red.elong||0).toFixed(1)} panics ${AUDIO.panics||0} music ${AUDIO.near?AUDIO.near.length+'/'+AUDIO.deg+'/'+(AUDIO.root|0):'-'} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();
