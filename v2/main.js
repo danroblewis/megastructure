@@ -79,7 +79,7 @@
   // second finger tap = spark; holding one finger still = contract
   const target={x:null,y:null,set:0};
   const DEAD=10;
-  const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>6&&Math.hypot(selves[i].x-wx,selves[i].y-wy)<16){ adopt(i); return; } } target.x=wx; target.y=wy; target.set=performance.now(); };
+  const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; target.x=wx; target.y=wy; target.set=performance.now(); };
   canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
     if(menuHit(e.clientX,e.clientY)){ e.preventDefault(); return; }
     { const ev={t:performance.now(),x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom,sx:e.clientX,sy:e.clientY,id:e.pointerId,up:0,dur:0}; touchLog.push(ev); if(touchLog.length>400) touchLog.shift(); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev); }
@@ -101,7 +101,7 @@
     return {tx,ty,spark:sparkQ,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
-  const BODY={massMax:170, rnear:12, rfar:30, swim:0.16, push:0.0, coh:2.4, spawnR:8};
+  const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='target';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
@@ -120,9 +120,11 @@
   function updateSelves(red){
     const cl=red.clusters; if(!cl||cl.length<3) return;
     let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
-    for(const s of live){ if(s!==selves[0] && s.mass<6){ s.live=false; } }
-    if(selves[0].mass<6){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>22&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
-      if(best){ const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; dirS[0]=best.hx; dirS[1]=best.hy; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); } }
+    for(const s of live){ if(s!==selves[0] && s.mass<6*MK){ s.live=false; } }
+    // you stay you. only when you have been below the living threshold for most of a second, and a part left behind is clearly alive, does it take over; then it locks for four seconds so the view never flips back and forth
+    player.lowT=selves[0].mass<22*MK?(player.lowT||0)+1:0; player.switchLock=Math.max(0,(player.switchLock||0)-1);
+    if(player.lowT>=45&&player.switchLock===0&&!player.dead){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>30*MK&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
+      if(best){ player.switchLock=240; player.lowT=0; const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; dirS[0]=best.hx; dirS[1]=best.hy; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); } }
     if(red.far && red.far.d>BODY.rfar*0.9){ const f=red.far; let farFromAll=true; for(const s of selves){ if(s.live && Math.hypot(s.x-f.x,s.y-f.y)<BODY.rfar*0.9) farFromAll=false; }
       if(farFromAll){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; slot.hx=dirS[0]; slot.hy=dirS[1]; } } }
     for(let i=1;i<3;i++){ if(selves[i].live){ selves[i].hx*=0.9995; selves[i].hy*=0.9995; } }   // habits fade slowly
@@ -219,7 +221,7 @@
     if(red.burning>2&&SIM.frame%12===0) AUDIO.tone(200,90,0.15,'sawtooth',0.05);
     if(alive){
       if(player.respawnT>0) player.respawnT--;
-      else if(selves[0].mass<22){ player.dead=true; player.deadT=240; player.deaths++; AUDIO.tone(220,60,2.5,'sine',0.05); }
+      else if(selves[0].mass<22*MK&&(player.lowT||0)>=45){ player.dead=true; player.deadT=240; player.deaths++; AUDIO.tone(220,60,2.5,'sine',0.05); }
       { player.coldT=player.coldT||0; if(heat<-0.08){ player.coldT++; } else player.coldT=Math.max(0,player.coldT-2);
         if(player.coldT>90){ const ci=world.checkpoints.findIndex(c=>Math.abs(c.x-player.x)<c.w/2+6&&Math.abs(c.y-player.y)<c.h/2+6); if(ci>=0&&(player.checkpoint.x!==world.checkpoints[ci].x)){ const cp=world.checkpoints[ci]; player.checkpoint={x:cp.x,y:cp.y}; player.cpIndex=Math.max(player.cpIndex,ci+1); AUDIO.tone(520,780,0.5,'sine',0.06); setTimeout(()=>AUDIO.tone(780,1040,0.6,'sine',0.05),300); } }
         if(heat<-0.08){ bd.grow*=2.5; bd.coh*=1.3; bd.tint=[0.6,0.85,1.0,Math.max(bd.tint?bd.tint[3]:0,0.45)]; } }
@@ -227,9 +229,9 @@
       if(player.won) player.winT++;
       AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat);
     } else if(--player.deadT<=0){ player.dead=false; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
-    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass,red.spread||0,red.elong||1,pan,player.dead);
+    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead);
       if(SIM.frame%2===0){ const r=world.rooms.find(r=>player.x>=r.x0&&player.x<=r.x1&&player.y>=r.y0&&player.y<=r.y1); const pb=SIM.probeBuf;
-        AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); if(r) player.roomI=r.i; } }
+        AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); if(r) player.roomI=r.i; } }
     shake*=0.85;
   }
 
@@ -273,7 +275,7 @@
         for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
     // ghosts: a faint slow pulse around each other self; tap it to become it
-    for(let i=1;i<3;i++){ const g=selves[i]; if(!g.live||g.mass<6||player.dead) continue; const px=(g.x-camX)*zoom, py=(g.y-camY)*zoom; const ph=(performance.now()/1600+i*0.5)%1;
+    for(let i=1;i<3;i++){ const g=selves[i]; if(!g.live||g.mass<6*MK||player.dead) continue; const px=(g.x-camX)*zoom, py=(g.y-camY)*zoom; const ph=(performance.now()/1600+i*0.5)%1;
       c.strokeStyle=`rgba(150,190,255,${0.35*(1-ph)})`; c.lineWidth=1.5*s; c.beginPath(); c.arc(px,py,(10+14*ph)*s,0,6.283); c.stroke(); }
     // target point: a soft animated marker where you asked the body to go
     if(target.x!==null&&!player.dead){ const px=(target.x-camX)*zoom, py=(target.y-camY)*zoom; const ph=(performance.now()/700)%1;
@@ -299,10 +301,7 @@
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
   const BOT=HASH.bot? {on:true,path:null,i:0,arrivals:[],lastCp:-1,t0:0} : {on:false};
   if(BOT.on){
-    const res=CHECK.pathfind(world,COARSE>1?1:3); const W_=world.W;
-    const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
-    BOT.legs=[];
-    for(const t of targets){ const j=CHECK.nearestReachable(res,W_,world.H,t.x,t.y,t.rad); if(j<0){ BOT.legs.push(null); continue; } BOT.legs.push(CHECK.pathTo(res,W_,j)); }
+    BOT.legs=CHECK.route(world,COARSE>1?1:3);
     BOT.full=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); }
     SCHEME.useTarget=false;
     const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base.call(SCHEME,cx);
