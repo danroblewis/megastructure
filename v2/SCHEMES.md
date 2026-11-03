@@ -1,6 +1,6 @@
 # Interaction schemes (psychology experiments)
 
-Branch `psych` carries all eight schemes in `v2/schemes.js`. Pick one with the address hash, e.g. `http://localhost:8000/v2/#scheme=breath`. Each `psych-N-<name>` branch is the same code with that scheme as the default, so `git checkout psych-3-breath` and a plain reload gives you that one. `#scheme=target` is the `main` branch behaviour for comparison. Add `&hud=1` to see a scheme's internal numbers.
+Branch `psych` carries all eight schemes in `v2/schemes.js`; **attention** is the default. Pick one with the address hash, e.g. `http://localhost:8000/v2/#scheme=breath`. Each `psych-N-<name>` branch is the same code with that scheme as the default, so `git checkout psych-3-breath` and a plain reload gives you that one. `#scheme=target` is the `main` branch behaviour for comparison. Add `&hud=1` to see a scheme's internal numbers.
 
 In every scheme the current is now the stronger partner: the body's own push is weaker and its grip on the gas stronger than on `main`. None of these reads a touch as an instruction. Each reads the pattern of what you do and lets it into the body's rules. Space stands in for "hold" on a keyboard.
 
