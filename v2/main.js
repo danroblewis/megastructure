@@ -11,7 +11,7 @@
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
   let zoom=2.5, sw=0,sh=0,dpr=1;
-  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); const vw=window.innerWidth, vh=window.innerHeight; sw=Math.floor(vw*dpr); sh=Math.floor(vh*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; for(const el of [canvas,hud]){ el.style.width=vw+'px'; el.style.height=vh+'px'; } zoom=(small?1.5:1.25)*COARSE*dpr; }   // CSS px per full-resolution cell: 1.25 desktop, 1.5 phone, whatever the pixel density or world resolution
+  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); const vw=window.innerWidth, vh=window.innerHeight; sw=Math.floor(vw*dpr); sh=Math.floor(vh*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; for(const el of [canvas,hud]){ el.style.width=vw+'px'; el.style.height=vh+'px'; } zoom=(small?1.5:Math.max(1.25,Math.min(3,Math.min(vw/1100,vh/650))))*COARSE*dpr; }   // CSS px per full-resolution cell: phones 1.5; desktops sized so the view is about 1100 cells wide or 650 tall, whatever the pixel density
   window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>setTimeout(resize,300)); if(window.visualViewport) window.visualViewport.addEventListener('resize',resize); resize();
 
   // ---------- audio ----------
