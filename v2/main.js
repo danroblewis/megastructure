@@ -374,7 +374,9 @@
   // local breadth-first detour when nothing is visible. st keeps i, full, pathSet, detour, wp.
   function followPath(st,px,py){ const P=st.full; if(!P||!P.length) return null; const W_=world.W, ty=world.type;
     const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4||(t>=5&&t<=8)||t===12||t===13; };
-    const los=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
+    // line of sight for a body, not a ray: the centre line and two parallels half a body radius to each side must all be clear,
+    // so a passage the body cannot fit through does not count as visible (it drove into a block corner above a five-cell slot)
+    const rr=BODY.rnear*0.5; const los=(x,y)=>{ const dx=x-px, dy=y-py; const L=Math.hypot(dx,dy)||1; const ox=-dy/L*rr, oy=dx/L*rr; const n=Math.ceil(L); for(const [sx,sy] of [[0,0],[ox,oy],[-ox,-oy]]){ for(let k=0;k<=n;k++){ if(solidC(px+sx+dx*k/n,py+sy+dy*k/n)) return false; } } return true; };
     let bi=-1, bd2=1e9; for(let k=Math.max(0,st.i-40);k<Math.min(P.length,st.i+300);k++){ const d=(P[k][0]-px)**2+(P[k][1]-py)**2; if(d<bd2&&los(P[k][0],P[k][1])){ bd2=d; bi=k; } }
     if(bi<0){ if(!st.pathSet){ st.pathSet=new Map(); P.forEach((q,k)=>{ if(!st.pathSet.has(q[1]*W_+q[0])) st.pathSet.set(q[1]*W_+q[0],k); }); }
       const start=(py|0)*W_+(px|0); const prev=new Map([[start,-1]]); const q=[start]; let found=-1, qh=0;
