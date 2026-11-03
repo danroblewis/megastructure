@@ -22,7 +22,10 @@
       // two voices of the self: together they hum in the middle; as you spread they drift apart and detune
       const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); return {o,g,p}; };
       this.vA=voice(); this.vB=voice(); this.musicInit(); }catch(e){} },
-    ps(p,v,t,tc){ const l=p._v; if(l!==undefined&&Math.abs(v-l)<=0.015*Math.max(Math.abs(l),Math.abs(v))+1e-5) return; p._v=v; p.setTargetAtTime(v,t,tc); },
+    ps(p,v,t,tc){ if(!isFinite(v)) return; const l=p._v; if(l!==undefined&&Math.abs(v-l)<=0.015*Math.max(Math.abs(l),Math.abs(v))+1e-5) return; p._v=v; p.setTargetAtTime(v,t,tc); },
+    panic(e){ if(!this.ctx) return; const t=this.ctx.currentTime; const all=[this.wind,this.roar,this.hiss,this.vA,this.vB,...(this.pipes||[])]; for(const v of all){ if(v&&v.g){ v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0,t,0.05); v.g.gain._v=0; } } if(!this.panicked){ this.panicked=true; console.warn('audio panic',e); } },
+    // start or resume the context inside a user gesture; iOS also wants a silent buffer played once
+    unlock(){ this.init(); const c=this.ctx; if(!c) return; if(c.state!=='running'){ c.resume().catch(()=>{}); } if(!this.unlocked){ try{ const b=c.createBuffer(1,1,c.sampleRate); const s=c.createBufferSource(); s.buffer=b; s.connect(c.destination); s.start(0); this.unlocked=true; }catch(e){} } },
     setMusic(on){ this.music=on; try{ localStorage.setItem('v2music',on?'1':'0'); }catch(e){} if(this.mbus) this.ps(this.mbus.gain,on?1:0,this.ctx.currentTime,0.1); },
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
@@ -33,8 +36,8 @@
       this.ps(this.vA.o.frequency,base,t,0.3); this.ps(this.vB.o.frequency,base*Math.pow(2,semi/12)+Math.max(0,elong-1.3)*1.5,t,0.3);
       this.ps(this.vA.g.gain,vol*(1-stretch*0.3),t,0.3); this.ps(this.vB.g.gain,vol*(0.6+stretch*0.4),t,0.3);
       this.ps(this.vA.p.pan,pa,t,0.3); this.ps(this.vB.p.pan,pb,t,0.3); },
-    tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.out||this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
-    noise(dur,vol,freq){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.out||this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
+    tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted||!(isFinite(f0)&&isFinite(f1)&&isFinite(dur)&&isFinite(vol)&&dur>0&&vol>0)) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.out||this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
+    noise(dur,vol,freq){ if(!this.ctx||this.muted||!(isFinite(dur)&&isFinite(vol)&&isFinite(freq)&&dur>0&&vol>0)) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.out||this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
     // ---- music: everything is played by the simulation ----
     // key: each chamber has a root a fifth from the last, so moving through the structure modulates.
     // pipes: vents near you sing a scale degree, panned where they are, breathing slowly; drains hum an octave down; coolers ring like bells.
@@ -42,7 +45,7 @@
     //        the walk climbs in a rising current and falls in a sinking one; the register comes from your mass; stamina thins it.
     musicInit(){ const C=this.ctx; this.pipes=[]; for(let i=0;i<8;i++){ const o=C.createOscillator(); o.type=i<6?'triangle':'sine'; const f=C.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; const g=C.createGain(); g.gain.value=0; const p=C.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); this.pipes.push({o,f,g,p,src:null}); }
       this.pulsePhase=0; this.deg=4; this.lastMass=0; this.root=110; this.srcT=0; this.near=[]; },
-    pluck(freq,vol,pan,dur,type){ const C=this.ctx,t=C.currentTime; const o=C.createOscillator(); o.type=type||'sine'; o.frequency.value=freq; const g=C.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); const p=C.createStereoPanner(); p.pan.value=pan; o.connect(g); g.connect(p); p.connect(this.mbus); o.start(t); o.stop(t+dur+0.02); },
+    pluck(freq,vol,pan,dur,type){ if(!(isFinite(freq)&&isFinite(vol)&&isFinite(pan)&&isFinite(dur)&&dur>0&&vol>0&&freq>0)) return; const C=this.ctx,t=C.currentTime; const o=C.createOscillator(); o.type=type||'sine'; o.frequency.value=freq; const g=C.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); const p=C.createStereoPanner(); p.pan.value=pan; o.connect(g); g.connect(p); p.connect(this.mbus); o.start(t); o.stop(t+dur+0.02); },
     music(m){ if(!this.ctx||this.muted||!this.music||!this.pipes) return; const t=this.ctx.currentTime, C=this.ctx;
       const PENT=[0,2,4,7,9,12,14,16,19,21]; const root=55*Math.pow(2,((m.room*7)%12)/12)*2; // chamber key, A..G# by fifths, around 110 Hz
       this.root=root;
@@ -73,6 +76,9 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
+  // audio unlock: the first gesture of any kind starts the context; coming back to the tab resumes it
+  for(const ev of ['touchstart','touchend','pointerdown','mousedown','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&AUDIO.ctx&&AUDIO.ctx.state!=='running') AUDIO.ctx.resume().catch(()=>{}); });
   window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
@@ -228,11 +234,11 @@
         if(heat<-0.08){ bd.grow*=2.5; bd.coh*=1.3; bd.tint=[0.6,0.85,1.0,Math.max(bd.tint?bd.tint[3]:0,0.45)]; } }
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
-      AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat);
+      try{ AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat); }catch(e){ AUDIO.panic(e); }
     } else if(--player.deadT<=0){ player.dead=false; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
-    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead);
+    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); try{ AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead); }catch(e){ AUDIO.panic(e); }
       if(SIM.frame%2===0){ const r=world.rooms.find(r=>player.x>=r.x0&&player.x<=r.x1&&player.y>=r.y0&&player.y<=r.y1); const pb=SIM.probeBuf;
-        AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); if(r) player.roomI=r.i; } }
+        try{ AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); }catch(e){ AUDIO.panic(e); } if(r) player.roomI=r.i; } }
     shake*=0.85;
   }
 
@@ -244,6 +250,7 @@
   const SUBRATE=small?120:180, MAXSTEPS=small?2:3; let acc=0;
   let lastNow=0, dtAvg=16.7;
   function frame(now){
+    requestAnimationFrame(frame);
     const t0=performance.now();
     if(lastNow){ const dt=Math.min(100,now-lastNow); dtAvg+=(dt-dtAvg)*0.05; acc=Math.min(MAXSTEPS,acc+dt*SUBRATE/1000); } else acc=MAXSTEPS;
     lastNow=now;
@@ -260,7 +267,6 @@
     SIM.tint=bd.tint; SIM.splitSideR=bd.splitSideR||0;
     SIM.render([camX+sx,camY+sy],zoom,sw,sh,debug,[player.x,player.y,player.dead?0:BODY.rnear,player.facing],ents,n,player.hurt,player.hp);
     drawHud(now-t0);
-    requestAnimationFrame(frame);
   }
   function drawHud(ms){
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
