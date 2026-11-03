@@ -15,24 +15,53 @@
   window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>setTimeout(resize,300)); if(window.visualViewport) window.visualViewport.addEventListener('resize',resize); resize();
 
   // ---------- audio ----------
-  const AUDIO={ctx:null,muted:false,init(){ if(this.ctx) return; try{ const C=window.AudioContext||window.webkitAudioContext; this.ctx=new C(); const sr=this.ctx.sampleRate; const buf=this.ctx.createBuffer(1,sr*2,sr); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; this.nb=buf;
-      this.master=this.ctx.createGain(); this.master.gain.value=0.35; this.master.connect(this.ctx.destination); this.out=this.master;
+  const AUDIO={ctx:null,muted:false,music:(localStorage.getItem('v2music')||'1')!=='0',init(){ if(this.ctx) return; try{ const C=window.AudioContext||window.webkitAudioContext; this.ctx=new C(); const sr=this.ctx.sampleRate; const buf=this.ctx.createBuffer(1,sr*2,sr); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; this.nb=buf;
+      this.master=this.ctx.createGain(); this.master.gain.value=0.35; this.master.connect(this.ctx.destination); this.out=this.master; this.mbus=this.ctx.createGain(); this.mbus.gain.value=this.music?1:0; this.mbus.connect(this.master);
       const mk=(f,q,type)=>{ const s=this.ctx.createBufferSource(); s.buffer=buf; s.loop=true; const fl=this.ctx.createBiquadFilter(); fl.type=type||'bandpass'; fl.frequency.value=f; fl.Q.value=q; const g=this.ctx.createGain(); g.gain.value=0; s.connect(fl); fl.connect(g); g.connect(this.out); s.start(); return {g,fl}; };
       this.wind=mk(320,0.7,'lowpass'); this.roar=mk(120,0.8); this.hiss=mk(3000,0.6);
       // two voices of the self: together they hum in the middle; as you spread they drift apart and detune
-      const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.out); o.start(); return {o,g,p}; };
-      this.vA=voice(); this.vB=voice(); }catch(e){} },
+      const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); return {o,g,p}; };
+      this.vA=voice(); this.vB=voice(); this.musicInit(); }catch(e){} },
+    setMusic(on){ this.music=on; try{ localStorage.setItem('v2music',on?'1':'0'); }catch(e){} if(this.mbus) this.mbus.gain.setTargetAtTime(on?1:0,this.ctx.currentTime,0.1); },
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
       const stretch=Math.max(0,Math.min(1,(spread/r0-1.0)/1.4));       // 0 round .. 1 torn apart
       const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022);
       const w=stretch*0.9; const pa=Math.max(-1,Math.min(1,pan-w)), pb=Math.max(-1,Math.min(1,pan+w));
-      const base=96+Math.min(1,mass/170)*28; const det=stretch*stretch*18+Math.max(0,elong-1.3)*3;
-      this.vA.o.frequency.setTargetAtTime(base,t,0.3); this.vB.o.frequency.setTargetAtTime(base+det,t,0.3);
+      const base=(this.root||110)*(mass>90?0.5:1); const semi=stretch<0.25?7:stretch<0.5?5:stretch<0.75?6:1; // fifth .. fourth .. tritone .. minor second as you tear
+      this.vA.o.frequency.setTargetAtTime(base,t,0.3); this.vB.o.frequency.setTargetAtTime(base*Math.pow(2,semi/12)+Math.max(0,elong-1.3)*1.5,t,0.3);
       this.vA.g.gain.setTargetAtTime(vol*(1-stretch*0.3),t,0.3); this.vB.g.gain.setTargetAtTime(vol*(0.6+stretch*0.4),t,0.3);
       this.vA.p.pan.setTargetAtTime(pa,t,0.3); this.vB.p.pan.setTargetAtTime(pb,t,0.3); },
     tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.out||this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
     noise(dur,vol,freq){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.out||this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
+    // ---- music: everything is played by the simulation ----
+    // key: each chamber has a root a fifth from the last, so moving through the structure modulates.
+    // pipes: vents near you sing a scale degree, panned where they are, breathing slowly; drains hum an octave down; coolers ring like bells.
+    // pulse: a plucked walk on the chamber's pentatonic, clocked by the gas speed at your body: still means silence, a jet means a run;
+    //        the walk climbs in a rising current and falls in a sinking one; the register comes from your mass; stamina thins it.
+    musicInit(){ const C=this.ctx; this.pipes=[]; for(let i=0;i<8;i++){ const o=C.createOscillator(); o.type=i<6?'triangle':'sine'; const f=C.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; const g=C.createGain(); g.gain.value=0; const p=C.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); this.pipes.push({o,f,g,p,src:null}); }
+      this.pulsePhase=0; this.deg=4; this.lastMass=0; this.root=110; this.srcT=0; this.near=[]; },
+    pluck(freq,vol,pan,dur,type){ const C=this.ctx,t=C.currentTime; const o=C.createOscillator(); o.type=type||'sine'; o.frequency.value=freq; const g=C.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); const p=C.createStereoPanner(); p.pan.value=pan; o.connect(g); g.connect(p); p.connect(this.mbus); o.start(t); o.stop(t+dur+0.02); },
+    music(m){ if(!this.ctx||this.muted||!this.music||!this.pipes) return; const t=this.ctx.currentTime, C=this.ctx;
+      const PENT=[0,2,4,7,9,12,14,16,19,21]; const root=55*Math.pow(2,((m.room*7)%12)/12)*2; // chamber key, A..G# by fifths, around 110 Hz
+      this.root=root;
+      // world sources within earshot (recomputed every half second)
+      if(m.frame-this.srcT>30||!this.near.length){ this.srcT=m.frame; const near=[]; for(const q of m.srcs){ const dx=q.x-m.x, dy=q.y-m.y; const d=Math.hypot(dx,dy); if(d<260) near.push({q,d,dx}); } near.sort((a,b)=>a.d-b.d); this.near=near.slice(0,8); }
+      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ v.g.gain.setTargetAtTime(0,t,0.3); continue; } const q=n.q; const prox=1/(1+(n.d/70)*(n.d/70));
+        let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.016*prox*(0.7+0.3*Math.sin(m.frame*0.021+q.h)); cut=700; }            // vent: a pipe breathing
+        else if(q.k===3){ f=root*0.5; vol=0.012*prox*(0.6+0.4*Math.sin(m.frame*0.013+q.h)); cut=260; }                                              // drain: pulls the key down an octave
+        else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.006*prox*Math.max(0,Math.sin(m.frame*0.03+q.h*1.7)); cut=6000; }             // cooler: a high bell that comes and goes
+        else { f=root*0.75; vol=0.008*prox*(0.5+0.5*Math.sin(m.frame*0.19+q.h)); cut=180; }                                                       // burner: a hot shudder below the key
+        if(v.src!==q){ v.src=q; v.o.frequency.setTargetAtTime(f,t,0.05); } v.g.gain.setTargetAtTime(vol,t,0.15); v.f.frequency.setTargetAtTime(cut,t,0.2); v.p.pan.setTargetAtTime(Math.max(-1,Math.min(1,n.dx/160)),t,0.2); }
+      // pulse: tempo from the gas speed at the body
+      const x=Math.max(0,Math.min(1,(m.speed-0.02)/0.18)); const rate=x<0.02?0:(0.6+x*x*7.0)/60;   // plucks per tick: ~0.6/s drifting, ~7.6/s in a full jet
+      this.pulsePhase+=rate; if(this.pulsePhase>=1&&!m.dead){ this.pulsePhase-=1;
+        const up=m.vy<-0.03, dn=m.vy>0.03; if(up) this.deg++; else if(dn) this.deg--; else this.deg+=Math.random()<0.5?0:(Math.random()<0.5?1:-1); if(Math.random()<0.15) this.deg+=this.deg>5?-1:1;
+        this.deg=Math.max(0,Math.min(9,this.deg)); const oct=m.mass>110?1:2; const f=root*Math.pow(2,PENT[this.deg]/12)*oct;
+        const vol=(0.012+0.03*x)*(0.4+0.6*Math.min(1,m.mass/150))*(0.5+0.5*m.stamina); this.pluck(f,vol,m.pan,0.35+0.4*(1-x),m.cold?'sine':'triangle'); }
+      // tearing: a falling pair when a chunk goes; cold regrowth: a rising pair
+      const dm=m.mass-this.lastMass; this.lastMass=m.mass; if(dm<-6&&!m.dead){ this.pluck(root*2,0.03,m.pan,0.5); setTimeout(()=>this.pluck(root*Math.pow(2,1/12),0.03,m.pan,0.8),120); }
+      else if(dm>1.2&&m.cold&&m.frame%20===0){ this.pluck(root*4,0.012,m.pan,0.6); setTimeout(()=>this.pluck(root*4*Math.pow(2,7/12),0.012,m.pan,0.8),140); } },
     ambience(speed,heat){ if(!this.ctx||this.muted||!this.wind) return; const t=this.ctx.currentTime;
       // speed is the gas speed at your centroid in lattice units (vent jets are about 0.18, the cap is 0.3).
       // normalised to a hard maximum, then mapped on a dB-linear curve: silent in drift and your own wake, loud only in a real gust.
@@ -43,7 +72,7 @@
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -79,7 +108,7 @@
   const MENU={open:false,rows:[],pill:null,names:Object.keys(SCHEMES)};
   function menuHit(cx,cy){ // css px; returns true if the tap was consumed by the menu
     const p=MENU.pill; if(p&&cx>=p.x&&cx<=p.x+p.w&&cy>=p.y&&cy<=p.y+p.h){ MENU.open=!MENU.open; return true; }
-    if(MENU.open){ for(const r of MENU.rows){ if(cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ location.href=location.pathname+'?scheme='+r.name+(HASH.hud?'&hud=1':''); return true; } } MENU.open=false; return true; }
+    if(MENU.open){ for(const r of MENU.rows){ if(r.act&&cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ r.act(); return true; } if(cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ location.href=location.pathname+'?scheme='+r.name+(HASH.hud?'&hud=1':''); return true; } } MENU.open=false; return true; }
     return false; }
   const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
@@ -119,6 +148,9 @@
     return dmg; }
   function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
+  // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
+  const SRCS=(()=>{ const B=24, bw=Math.ceil(world.W/B), acc=new Map(); const ty=world.type; for(let y=0;y<world.H;y+=2) for(let x=0;x<world.W;x+=2){ const k=ty[y*world.W+x]; if(k!==2&&k!==3&&k!==5&&k!==6) continue; const key=k*1e6+((y/B)|0)*bw+((x/B)|0); let a=acc.get(key); if(!a){ a={k,n:0,x:0,y:0}; acc.set(key,a); } a.n++; a.x+=x; a.y+=y; }
+    const out=[]; let h=0; for(const a of acc.values()){ if(a.n<3) continue; out.push({k:a.k,x:a.x/a.n,y:a.y/a.n,n:a.n,h:(h++*7919)%1000}); } return out; })();
   let inject=null, shake=0, steps=small?2:3;
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   function tick(){
@@ -195,7 +227,9 @@
       if(player.won) player.winT++;
       AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat);
     } else if(--player.deadT<=0){ player.dead=false; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
-    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass,red.spread||0,red.elong||1,pan,player.dead); }
+    { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2)); AUDIO.self(player.mass,red.spread||0,red.elong||1,pan,player.dead);
+      if(SIM.frame%2===0){ const r=world.rooms.find(r=>player.x>=r.x0&&player.x<=r.x1&&player.y>=r.y0&&player.y<=r.y1); const pb=SIM.probeBuf;
+        AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); if(r) player.roomI=r.i; } }
     shake*=0.85;
   }
 
@@ -234,7 +268,8 @@
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.45)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
       if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
-        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*MENU.names.length+12*s,10*s); c.fill();
+        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*(MENU.names.length+2)+12*s,10*s); c.fill();
+        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         for(const n of MENU.names){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
     // ghosts: a faint slow pulse around each other self; tap it to become it
@@ -294,17 +329,17 @@
   if(HASH.test){
     if(HASH.zoom) zoom=+HASH.zoom*dpr;
     let ig=null; if(HASH.ignite){ for(let i=0;i<W*H;i++){ if(world.type[i]===7){ ig={x:i%W,y:(i/W|0)+6}; break; } } if(ig){ HASH.cx=ig.x; HASH.cy=ig.y; } }
-    const N=+HASH.n||120; const t0=performance.now(); const trace=[];
+    const N=+HASH.n||120; const t0=performance.now(); const trace=[]; if(HASH.audio){ AUDIO.init(); if(!AUDIO.ctx) throw new Error('no audio ctx'); }
     const fakeTouch=(wx,wy,hold)=>{ player.ft=(player.ft||0)+1; const sx=(wx-camX)*zoom/dpr, sy=(wy-camY)*zoom/dpr; const ev={t:performance.now(),x:wx,y:wy,sx,sy,id:99,up:0,dur:0}; touchLog.push(ev); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev);
       if(hold){ touches.set(99,{x0:sx,y0:sy,x:sx,y:sy,t:performance.now(),moved:false,primary:true}); } else { ev.up=performance.now()+50; ev.dur=50; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); }
       if(SCHEME.useTarget!==false){ target.x=wx; target.y=wy; target.set=performance.now(); } };
     let bestX=0, stuck=0;
     for(let i=0;i<N;i++){ if(HASH.touch&&i===5){ const [tx,ty]=HASH.touch.split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,HASH.touchHold!=='0'); } if(HASH.tapEvery&&i%+HASH.tapEvery===0){ const [tx,ty]=(HASH.touch||'60,0').split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,false); } if(i===6) player.tgt6=target.x; if(i===20) player.tgt20=target.x;
-      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`); }
+      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}`:'')); }
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
     SIM.probe(probePts,1); const [pb]=SIM.collect();
-    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
+    document.title=`test ${BOT.on?'BOT arrivals '+JSON.stringify(BOT.arrivals)+' deaths '+player.deaths+' won '+player.won+' at '+(player.x|0)+','+(player.y|0)+' pathIdx '+BOT.i+'/'+BOT.full.length+' legs '+BOT.legs.map(l=>l?l.length:'x').slice(0,4).join(',')+' mass '+(player.mass|0)+' | ':''}DBG ft=${player.ft} tgt6=${player.tgt6} tgt20=${player.tgt20} dirS=${dirS.map(v=>v.toFixed(2))} bddir=${bd.dir.map(v=>v.toFixed(2))} simdirs=${Array.from(SIM.dirs.slice(0,2)).map(v=>v.toFixed(2))} swim=${bd.swim} st=${player.stamina} diss=${player.dissoc} tgt=${target.x} nC=${SIM.nC} centres=${Array.from(SIM.centres.slice(0,2)).map(v=>v|0)} | ${N} ticks ${ms.toFixed(0)}ms player ${player.x.toFixed(0)},${player.y.toFixed(0)} mass ${player.mass.toFixed(0)} selves ${selves.filter(s=>s.live).map(s=>s.mass.toFixed(0)).join('/')} spread ${(SIM.red.spread||0).toFixed(1)} elong ${(SIM.red.elong||0).toFixed(2)} deaths ${player.deaths} cores ${player.cores} kills ${player.kills||0} hp ${player.hp.toFixed(2)} u ${pb[0].toFixed(3)},${pb[1].toFixed(3)} heat ${pb[2].toFixed(2)} glerr ${SIM.gl.getError()} music ${AUDIO.near?AUDIO.near.length+'/'+AUDIO.deg+'/'+(AUDIO.root|0):'-'} rooms ${world.rooms.length} trace ${trace.join(' ')}`;
   } else requestAnimationFrame(frame);
 })();
