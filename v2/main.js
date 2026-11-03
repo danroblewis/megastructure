@@ -171,6 +171,7 @@
   function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
+  window.__eval=(js)=>eval(js);   // remote debugging: a direct eval inside this closure sees player, selves, bd, world, AUDIO, SIM ...
   window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
     audio:AUDIO.ctx?{state:AUDIO.ctx.state,t:+AUDIO.ctx.currentTime.toFixed(1),vA:AUDIO.vA&&[+AUDIO.vA.o.frequency.value.toFixed(1),+AUDIO.vA.g.gain.value.toFixed(4)],vB:AUDIO.vB&&[+AUDIO.vB.o.frequency.value.toFixed(1),+AUDIO.vB.g.gain.value.toFixed(4)],pipes:AUDIO.pipes&&AUDIO.pipes.map(v=>[+v.o.frequency.value.toFixed(0),+v.g.gain.value.toFixed(4)]),wind:AUDIO.wind&&+AUDIO.wind.g.gain.value.toFixed(4),live:AUDIO.live&&AUDIO.live.size,created:AUDIO.created,ended:AUDIO.ended,peak:AUDIO.lastPeak,act:+(AUDIO.act||0).toFixed(2),panics:AUDIO.panics||0,music:AUDIO.music,muted:AUDIO.muted}:null,
     glerr:SIM.gl.getError()});

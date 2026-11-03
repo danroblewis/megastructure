@@ -15,4 +15,10 @@
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) flush(); });
   window.addEventListener('pagehide',flush);
   report('open','page opened',null,{w:innerWidth,h:innerHeight,dpr:devicePixelRatio});
+  // remote JavaScript: poll the dev server for commands, evaluate each in the page, post the result back
+  let after=0, polling=false;
+  async function poll(){ if(polling) return; polling=true; try{ const r=await fetch('cmd?after='+after+'&sid='+sid,{cache:'no-store'}); if(r.ok){ const cmds=await r.json(); for(const c of cmds){ after=Math.max(after,c.id); let out,err; try{ out=await (window.__eval||(0,eval))(c.js); }catch(e){ err=e; }
+        let txt; try{ txt=typeof out==='string'?out:JSON.stringify(out,(k,v)=>typeof v==='number'&&!Number.isInteger(v)?+v.toFixed(4):v); }catch(e){ txt=String(out); }
+        report('eval',err?('ERR '+(err&&err.message||err)):String(txt).slice(0,6000),err&&err.stack,{id:c.id,js:c.js.slice(0,200)}); } } }catch(e){} polling=false; }
+  setInterval(poll,1500);
 })();
