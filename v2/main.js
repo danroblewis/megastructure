@@ -374,7 +374,7 @@
       const P=BOT.full; if(!P.length) return;
       // nearest path index that the body can actually see (the straight line crosses no wall); then the farthest
       // visible point up to 40 ahead is the waypoint, so the drive never aims through a pillar
-      const px=cx.player.x, py=cx.player.y; const W_=world.W, ty=world.type; const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4; };   // walls, drains and blades are not to be driven through
+      const px=cx.player.x, py=cx.player.y; const W_=world.W, ty=world.type; const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4||(t>=5&&t<=8)||t===12||t===13; };   // walls, drains, blades, sources, ore and dead coolers: nothing to drive through
       const los=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
       let bi=-1, bd2=1e9; for(let k=Math.max(0,BOT.i-40);k<Math.min(P.length,BOT.i+300);k++){ const d=(P[k][0]-px)**2+(P[k][1]-py)**2; if(d<bd2&&los(P[k][0],P[k][1])){ bd2=d; bi=k; } }
       if(bi<0){ // nothing visible: breadth-first from the body's cell to the closest path cell, head for its first visible step
