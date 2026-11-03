@@ -269,6 +269,13 @@
   // so a throttled device slows down evenly instead of swinging between fast and slow.
   const SUBRATE=small?120:180, MAXSTEPS=small?2:3; let acc=0;
   let lastNow=0, dtAvg=16.7; const cam={};
+  // off the frame loop, so it keeps running when frames stop: no frames for a second means no sound (the voices
+  // would otherwise hold their last level while the page is hidden or the loop is stalled); the stuck-tone
+  // detector runs every half second; a heartbeat with the full state goes out every 5 s
+  let hbN=0, hbFrame=0, quietFor=false;
+  setInterval(()=>{ try{ const now=performance.now(); const stalled=!AUDIO.lastFrame||now-AUDIO.lastFrame>1000;
+      if(AUDIO.ctx){ if(stalled){ if(!quietFor){ quietFor=true; AUDIO.panic('no frames'); } } else { quietFor=false; AUDIO.watch(); } }
+      if(++hbN%10===0&&window.REPORT){ REPORT('heartbeat',`frames ${SIM.frame-hbFrame} in 5 s`,null,{hidden:document.hidden,stalled,sinceFrame:AUDIO.lastFrame?Math.round(now-AUDIO.lastFrame):null}); hbFrame=SIM.frame; } }catch(e){} },500);
   function frame(now){
     requestAnimationFrame(frame);
     const t0=performance.now();
@@ -277,7 +284,7 @@
     steps=Math.floor(acc); acc-=steps;
     try{ tick(); }catch(e){ if((frame.errs=(frame.errs||0)+1)<=5) console.error('tick',e); AUDIO.panic(e); }
     if(AUDIO.ctx&&AUDIO.beat&&performance.now()-AUDIO.beat>1500&&!AUDIO.muted){ AUDIO.beat=performance.now(); AUDIO.panic('stale voices'); }
-    if(AUDIO.ctx&&SIM.frame%30===0){ try{ AUDIO.watch(); }catch(e){} } if(window.REPORT&&SIM.frame%600===0&&SIM.frame>0) REPORT('heartbeat','ok');
+    AUDIO.lastFrame=performance.now();
     const vw=sw/zoom, vh=sh/zoom;
     { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
       if(jd>20&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0]});
