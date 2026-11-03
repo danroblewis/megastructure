@@ -10,8 +10,8 @@
   const W=world.W, H=world.H;
   try{ SIM.init(canvas,W,H,world.mask,world.src); }catch(e){ document.body.innerHTML='<p style="color:#fff;font:16px sans-serif;padding:20px">This needs WebGL2 with float textures: '+e.message+'</p>'; throw e; }
   const PARAMS={tau:0.58,buoy:0.0022,ign:0.45,burnP:0.012,adv:1.4,burnRate:0.06,cool:0.004,lifeF:0.9,lifeK:0.06,diff:0.08};
-  let zoom=small?2.0:2.5, sw=0,sh=0,dpr=1;
-  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); const vw=window.innerWidth, vh=window.innerHeight; sw=Math.floor(vw*dpr); sh=Math.floor(vh*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; for(const el of [canvas,hud]){ el.style.width=vw+'px'; el.style.height=vh+'px'; } zoom=(small?2.0:2.5)*dpr; }
+  let zoom=2.5, sw=0,sh=0,dpr=1;
+  function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); const vw=window.innerWidth, vh=window.innerHeight; sw=Math.floor(vw*dpr); sh=Math.floor(vh*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; for(const el of [canvas,hud]){ el.style.width=vw+'px'; el.style.height=vh+'px'; } zoom=(small?1.5:1.25)*COARSE*dpr; }   // CSS px per full-resolution cell: 1.25 desktop, 1.5 phone, whatever the pixel density or world resolution
   window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>setTimeout(resize,300)); if(window.visualViewport) window.visualViewport.addEventListener('resize',resize); resize();
 
   // ---------- audio ----------
@@ -22,16 +22,17 @@
       // two voices of the self: together they hum in the middle; as you spread they drift apart and detune
       const voice=()=>{ const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.value=110; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420; const g=this.ctx.createGain(); g.gain.value=0; const p=this.ctx.createStereoPanner(); o.connect(f); f.connect(g); g.connect(p); p.connect(this.mbus); o.start(); return {o,g,p}; };
       this.vA=voice(); this.vB=voice(); this.musicInit(); }catch(e){} },
-    setMusic(on){ this.music=on; try{ localStorage.setItem('v2music',on?'1':'0'); }catch(e){} if(this.mbus) this.mbus.gain.setTargetAtTime(on?1:0,this.ctx.currentTime,0.1); },
+    ps(p,v,t,tc){ const l=p._v; if(l!==undefined&&Math.abs(v-l)<=0.015*Math.max(Math.abs(l),Math.abs(v))+1e-5) return; p._v=v; p.setTargetAtTime(v,t,tc); },
+    setMusic(on){ this.music=on; try{ localStorage.setItem('v2music',on?'1':'0'); }catch(e){} if(this.mbus) this.ps(this.mbus.gain,on?1:0,this.ctx.currentTime,0.1); },
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
       const stretch=Math.max(0,Math.min(1,(spread/r0-1.0)/1.4));       // 0 round .. 1 torn apart
       const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022);
       const w=stretch*0.9; const pa=Math.max(-1,Math.min(1,pan-w)), pb=Math.max(-1,Math.min(1,pan+w));
       const base=(this.root||110)*(mass>90?0.5:1); const semi=stretch<0.25?7:stretch<0.5?5:stretch<0.75?6:1; // fifth .. fourth .. tritone .. minor second as you tear
-      this.vA.o.frequency.setTargetAtTime(base,t,0.3); this.vB.o.frequency.setTargetAtTime(base*Math.pow(2,semi/12)+Math.max(0,elong-1.3)*1.5,t,0.3);
-      this.vA.g.gain.setTargetAtTime(vol*(1-stretch*0.3),t,0.3); this.vB.g.gain.setTargetAtTime(vol*(0.6+stretch*0.4),t,0.3);
-      this.vA.p.pan.setTargetAtTime(pa,t,0.3); this.vB.p.pan.setTargetAtTime(pb,t,0.3); },
+      this.ps(this.vA.o.frequency,base,t,0.3); this.ps(this.vB.o.frequency,base*Math.pow(2,semi/12)+Math.max(0,elong-1.3)*1.5,t,0.3);
+      this.ps(this.vA.g.gain,vol*(1-stretch*0.3),t,0.3); this.ps(this.vB.g.gain,vol*(0.6+stretch*0.4),t,0.3);
+      this.ps(this.vA.p.pan,pa,t,0.3); this.ps(this.vB.p.pan,pb,t,0.3); },
     tone(f0,f1,dur,type,vol){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); o.connect(g); g.connect(this.out||this.ctx.destination); o.start(t); o.stop(t+dur+0.02); },
     noise(dur,vol,freq){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime; const s=this.ctx.createBufferSource(); s.buffer=this.nb; const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(freq,t); f.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.2),t+dur); const g=this.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dur); s.connect(f); f.connect(g); g.connect(this.out||this.ctx.destination); s.start(t); s.stop(t+dur+0.02); },
     // ---- music: everything is played by the simulation ----
@@ -47,12 +48,12 @@
       this.root=root;
       // world sources within earshot (recomputed every half second)
       if(m.frame-this.srcT>30||!this.near.length){ this.srcT=m.frame; const near=[]; for(const q of m.srcs){ const dx=q.x-m.x, dy=q.y-m.y; const d=Math.hypot(dx,dy); if(d<260) near.push({q,d,dx}); } near.sort((a,b)=>a.d-b.d); this.near=near.slice(0,8); }
-      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ v.g.gain.setTargetAtTime(0,t,0.3); continue; } const q=n.q; const prox=1/(1+(n.d/70)*(n.d/70));
+      for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ this.ps(v.g.gain,0,t,0.3); continue; } const q=n.q; const prox=1/(1+(n.d/70)*(n.d/70));
         let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.016*prox*(0.7+0.3*Math.sin(m.frame*0.021+q.h)); cut=700; }            // vent: a pipe breathing
         else if(q.k===3){ f=root*0.5; vol=0.012*prox*(0.6+0.4*Math.sin(m.frame*0.013+q.h)); cut=260; }                                              // drain: pulls the key down an octave
         else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.006*prox*Math.max(0,Math.sin(m.frame*0.03+q.h*1.7)); cut=6000; }             // cooler: a high bell that comes and goes
         else { f=root*0.75; vol=0.008*prox*(0.5+0.5*Math.sin(m.frame*0.19+q.h)); cut=180; }                                                       // burner: a hot shudder below the key
-        if(v.src!==q){ v.src=q; v.o.frequency.setTargetAtTime(f,t,0.05); } v.g.gain.setTargetAtTime(vol,t,0.15); v.f.frequency.setTargetAtTime(cut,t,0.2); v.p.pan.setTargetAtTime(Math.max(-1,Math.min(1,n.dx/160)),t,0.2); }
+        if(v.src!==q){ v.src=q; this.ps(v.o.frequency,f,t,0.05); } this.ps(v.g.gain,vol,t,0.15); this.ps(v.f.frequency,cut,t,0.2); this.ps(v.p.pan,Math.max(-1,Math.min(1,n.dx/160)),t,0.2); }
       // pulse: tempo from the gas speed at the body
       const x=Math.max(0,Math.min(1,(m.speed-0.02)/0.18)); const rate=x<0.02?0:(0.6+x*x*7.0)/60;   // plucks per tick: ~0.6/s drifting, ~7.6/s in a full jet
       this.pulsePhase+=rate; if(this.pulsePhase>=1&&!m.dead){ this.pulsePhase-=1;
@@ -67,8 +68,8 @@
       // normalised to a hard maximum, then mapped on a dB-linear curve: silent in drift and your own wake, loud only in a real gust.
       const x=Math.max(0,Math.min(1,(speed-0.03)/0.20));
       const WIND_MAX=0.10; const g=WIND_MAX*(Math.pow(10,2.2*x)-1)/(Math.pow(10,2.2)-1);
-      this.wind.g.gain.setTargetAtTime(g,t,0.25); this.wind.fl.frequency.setTargetAtTime(220+x*520,t,0.25);
-      this.roar.g.gain.setTargetAtTime(Math.min(0.05,Math.max(0,heat-0.2)*0.15),t,0.4); this.hiss.g.gain.setTargetAtTime(Math.min(0.02,Math.max(0,heat-0.5)*0.1),t,0.4); } };
+      this.ps(this.wind.g.gain,g,t,0.25); this.ps(this.wind.fl.frequency,220+x*520,t,0.25);
+      this.ps(this.roar.g.gain,Math.min(0.05,Math.max(0,heat-0.2)*0.15),t,0.4); this.ps(this.hiss.g.gain,Math.min(0.02,Math.max(0,heat-0.5)*0.1),t,0.4); } };
 
   // ---------- input ----------
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
@@ -237,12 +238,16 @@
 
   // ---------- camera / render ----------
   let camX=0,camY=0; const ents=new Float32Array(48*4);
+  // the simulation runs at a fixed rate in real time: SUBRATE substeps per second, at most MAXSTEPS per frame.
+  // a 120 Hz phone takes one substep a frame, a 60 Hz screen two or three; a slow frame never buys extra substeps,
+  // so a throttled device slows down evenly instead of swinging between fast and slow.
+  const SUBRATE=small?120:180, MAXSTEPS=small?2:3; let acc=0;
   let lastNow=0, dtAvg=16.7;
   function frame(now){
     const t0=performance.now();
-    if(lastNow){ const dt=Math.min(100,now-lastNow); dtAvg+=(dt-dtAvg)*0.05; }
+    if(lastNow){ const dt=Math.min(100,now-lastNow); dtAvg+=(dt-dtAvg)*0.05; acc=Math.min(MAXSTEPS,acc+dt*SUBRATE/1000); } else acc=MAXSTEPS;
     lastNow=now;
-    if(SIM.frame%120===0){ if(dtAvg>30&&steps>1) steps--; else if(dtAvg<21&&steps<3) steps++; }
+    steps=Math.floor(acc); acc-=steps;
     tick();
     const vw=sw/zoom, vh=sh/zoom;
     const tx=player.x-vw/2, ty=player.y-vh/2;
