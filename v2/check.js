@@ -2,11 +2,11 @@
 // usage: node v2/check.js [seed] [W] [H] [radius]
 'use strict';
 const GEN_=typeof require!=='undefined'?require('./gen.js').GEN:GEN;
-function erode(world,r){
-  const {W,H,type}=world; const solid=(t)=>t===1||(t>=5&&t<=8);
-  // erode: a cell is passable only if no solid within radius r (chebyshev) — the body is roughly 2r wide
+function erode(world,r,drainsPass){
+  const {W,H,type}=world; const solid=(t)=>t===1||(t===3&&!drainsPass)||(t>=5&&t<=8);   // drains (3) count as solid unless asked otherwise: they erase body cells
+  // erode: a cell is passable only if no solid within radius r (euclidean disc) — the body is roughly 2r wide
   const pass=new Uint8Array(W*H);
-  for(let y=0;y<H;y++) for(let x=0;x<W;x++){ let ok=!solid(type[y*W+x]); for(let dy=-r;ok&&dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H||solid(type[ny*W+nx])){ ok=false; break; } } pass[y*W+x]=ok?1:0; }
+  const r2=r*r; for(let y=0;y<H;y++) for(let x=0;x<W;x++){ let ok=!solid(type[y*W+x]); for(let dy=-r;ok&&dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H||solid(type[ny*W+nx])){ ok=false; break; } } pass[y*W+x]=ok?1:0; }   // round body: a disc of radius r must be clear
   return pass;
 }
 // breadth-first search over the eroded map from a start cell (nudged to the nearest passable cell)
@@ -20,11 +20,11 @@ function search(world,pass,sx,sy){
 }
 function pathfind(world,r,start){ const pass=erode(world,r); const s0=start||world.spawn; return search(world,pass,s0.x,s0.y); }
 // one search from the spawn; the path to every cold room and the exit (their union is the required route)
-function spawnPaths(world,r){ const {W,H}=world; const pass=erode(world,r); const res=search(world,pass,world.spawn.x,world.spawn.y);
+function spawnPaths(world,r,drainsPass){ const {W,H}=world; const pass=erode(world,r,drainsPass); const res=search(world,pass,world.spawn.x,world.spawn.y);
   const targets=[...world.checkpoints.map(c=>({x:c.x,y:c.y,rad:Math.ceil(Math.max(c.w||10,c.h||10))})),{x:world.exit.x,y:world.exit.y,rad:12}];
   return targets.map(t=>{ const j=nearestReachable(res,W,H,t.x,t.y,t.rad); return j<0?null:pathTo(res,W,j); }); }
 // the game's world: built, then its required route widened to fit the body (radius 8 at full resolution)
-function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); w.widened=GEN_.widenRoute(w,spawnPaths(w,1),8); return w; }
+function buildWorld(W,H,seed){ const w=GEN_.build(W,H,seed); w.widened=GEN_.widenRoute(w,spawnPaths(w,1,true),8); return w; }   // route found with drains passable, then walls and drains near it are cleared
 // the route a body would take: spawn -> cold room 1 -> cold room 2 -> ... -> exit, each leg searched from the end of the last
 function route(world,r){
   const {W,H}=world; const pass=erode(world,r); let at=world.spawn; const legs=[];

@@ -353,13 +353,13 @@
   const BOT=HASH.bot? {on:true,path:null,i:0,arrivals:[],lastCp:-1,t0:0} : {on:false};
   if(BOT.on){
     BOT.legs=CHECK.route(world,COARSE>1?1:3);
-    BOT.full=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); }
+    BOT.full=[]; BOT.legEnds=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); BOT.legEnds.push(BOT.full.length-1); }
     SCHEME.useTarget=false;
     const base=SCHEME.tick; SCHEME.tick=(cx)=>{ if(base&&SCHEME.name!=='target') base.call(SCHEME,cx);
       const P=BOT.full; if(!P.length) return;
       // nearest path index that the body can actually see (the straight line crosses no wall); then the farthest
       // visible point up to 40 ahead is the waypoint, so the drive never aims through a pillar
-      const px=cx.player.x, py=cx.player.y; const W_=world.W, ty=world.type; const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===4; };
+      const px=cx.player.x, py=cx.player.y; const W_=world.W, ty=world.type; const solidC=(x,y)=>{ if(x<0||y<0||x>=W_||y>=world.H) return true; const t=ty[(y|0)*W_+(x|0)]; return t===1||t===3||t===4; };   // walls, drains and blades are not to be driven through
       const los=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
       let bi=-1, bd2=1e9; for(let k=Math.max(0,BOT.i-40);k<Math.min(P.length,BOT.i+300);k++){ const d=(P[k][0]-px)**2+(P[k][1]-py)**2; if(d<bd2&&los(P[k][0],P[k][1])){ bd2=d; bi=k; } }
       if(bi<0){ // nothing visible: breadth-first from the body's cell to the closest path cell, head for its first visible step
@@ -370,7 +370,8 @@
       } else BOT.detour=null;
       BOT.i=bi;
       let wp=P[bi]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;   // the farthest visible path point ahead; the nearest visible one if none
-      const d=_unit(wp[0]-px,wp[1]-py);
+      let d=_unit(wp[0]-px,wp[1]-py);
+      { const le=BOT.legEnds[player.cpIndex]; if(le!==undefined&&player.cpIndex<world.checkpoints.length&&bi>=le-6&&(BOT.wait||0)<600){ BOT.wait=(BOT.wait||0)+1; d=[0,0]; } else if(le!==undefined&&bi<le-6) BOT.wait=0; }   // arrived at a cold room: stay until it registers
       cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
       if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
   }
