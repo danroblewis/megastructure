@@ -74,7 +74,6 @@ SCHEMES.attention={name:'attention',blurb:'hold a spot to attend to it · the se
     const distinct=_recent(s.spots,ctx.now,60000).length; const focus=1/(1+distinct*0.25); s.focus+=(focus-s.focus)*0.02;
     bd.coh*=0.6+1.4*s.focus; bd.grow*=0.4+1.2*s.focus; bd.dense=0.6+0.7*s.focus; bd.tint=[0.3,0.35,0.5,0.6*s.fat]; },
   hud(ctx,c){ const s=this.st, d=ctx.dpr; const sp=s.spots[s.spots.length-1]; const held=ctx.touches.size>0&&sp;
-    if(held&&sp.rel&&Math.hypot(sp.rel[0],sp.rel[1])>2){ const px=(sp.x-ctx.camX)*ctx.zoom, py=(sp.y-ctx.camY)*ctx.zoom; c.fillStyle='rgba(200,230,255,0.55)'; c.beginPath(); c.arc(px,py,2.5*d,0,6.283); c.fill(); }   // a small dot where attention is, since the finger is elsewhere
   }};
 
 // 6. MEMORY — three layers of retention. Each touch is remembered as a direction in a short, a medium and a long trace; the self moves by their sum. Burning wipes the medium trace.
