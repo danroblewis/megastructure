@@ -42,9 +42,9 @@
     self(mass,spread,elong,pan,dead){ if(!this.ctx||this.muted||!this.vA) return; const t=this.ctx.currentTime;
       const r0=Math.sqrt(Math.max(1,mass)/Math.PI/0.9)*0.72;          // rms radius of a compact blob of this mass
       const stretch=Math.max(0,Math.min(1,(spread/r0-1.0)/1.4));       // 0 round .. 1 torn apart
-      const act=0.1+0.9*(this.act||0); const breath=0.85+0.15*Math.sin(t/4.5); const vol=dead?0:Math.min(0.03,0.006+mass/170*0.022)*act*breath;   // idle self fades to a tenth and breathes slowly
+      const act=0.1+0.9*(this.act||0); const breath=0.85+0.15*Math.sin(t/4.5); const vol=dead?0:Math.min(0.02,0.004+mass/170*0.015)*act*breath;   // idle self fades to a tenth and breathes slowly
       const w=stretch*0.9; const pa=Math.max(-1,Math.min(1,pan-w)), pb=Math.max(-1,Math.min(1,pan+w));
-      const base=(this.root||110)*(mass>90?0.5:1); const semi=stretch<0.25?7:stretch<0.5?5:stretch<0.75?6:1; // fifth .. fourth .. tritone .. minor second as you tear
+      const base=(this.root||110)*(mass>90?0.5:1); const semi=stretch<0.3?7:stretch<0.6?5:stretch<0.9?6:1; // fifth .. fourth .. tritone .. minor second as you tear
       this.psf(this.vA.o.frequency,base,t,0.3); this.psf(this.vB.o.frequency,base*Math.pow(2,semi/12)+Math.min(2,Math.max(0,elong-1.3))*1.5,t,0.3); this.beat=performance.now();
       this.psg(this.vA.g.gain,vol*(1-stretch*0.3),t,0.3); this.psg(this.vB.g.gain,vol*(0.6+stretch*0.4),t,0.3);
       this.psp(this.vA.p.pan,pa,t,0.3); this.psp(this.vB.p.pan,pb,t,0.3); },
@@ -64,10 +64,10 @@
       // world sources within earshot (recomputed every half second)
       if(m.frame-this.srcT>30||!this.near.length){ this.srcT=m.frame; const near=[]; for(const q of m.srcs){ const dx=q.x-m.x, dy=q.y-m.y; const d=Math.hypot(dx,dy); if(d<260) near.push({q,d,dx}); } near.sort((a,b)=>a.d-b.d); this.near=near.slice(0,8); }
       for(let i=0;i<8;i++){ const v=this.pipes[i], n=this.near[i]; if(!n){ this.psg(v.g.gain,0,t,0.3); continue; } const q=n.q; const prox=(0.3+0.7*(this.act||0))/(1+(n.d/70)*(n.d/70));
-        let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.016*prox*(0.7+0.3*Math.sin(m.frame*0.021+q.h)); cut=700; }            // vent: a pipe breathing
-        else if(q.k===3){ f=root*0.5; vol=0.012*prox*(0.6+0.4*Math.sin(m.frame*0.013+q.h)); cut=260; }                                              // drain: pulls the key down an octave
-        else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.006*prox*Math.max(0,Math.sin(m.frame*0.03+q.h*1.7)); cut=6000; }             // cooler: a high bell that comes and goes
-        else { f=root*0.75; vol=0.008*prox*(0.5+0.5*Math.sin(m.frame*0.19+q.h)); cut=180; }                                                       // burner: a hot shudder below the key
+        const sw=(w,pw)=>Math.pow(Math.max(0,Math.sin(m.frame*w+q.h)),pw); let f,vol,cut; if(q.k===2){ f=root*Math.pow(2,PENT[q.h%5]/12)*2; vol=0.012*prox*sw(0.011+0.004*(q.h%3),3); cut=700; }            // vent: a pipe that breathes every 8-12 s, silent between
+        else if(q.k===3){ f=root*0.5; vol=0.010*prox*sw(0.008+0.003*(q.h%3),2); cut=260; }                                              // drain: a slow pull, an octave down
+        else if(q.k===6){ f=root*Math.pow(2,PENT[5+q.h%5]/12)*4; vol=0.005*prox*sw(0.03+0.01*(q.h%3),4); cut=6000; }             // cooler: a high bell that rings now and then
+        else { f=root*0.75; vol=0.007*prox*sw(0.19,1)*sw(0.009,2); cut=180; }                                                       // burner: a hot shudder that comes in waves
         if(v.src!==q){ v.src=q; this.psf(v.o.frequency,f,t,0.05); } this.psg(v.g.gain,vol,t,0.15); this.psf(v.f.frequency,cut,t,0.2); this.psp(v.p.pan,Math.max(-1,Math.min(1,n.dx/160)),t,0.2); }
       // pulse: tempo from the gas speed at the body
       const x=Math.max(0,Math.min(1,(m.speed-0.02)/0.18)); const rate=x<0.02?0:(0.6+x*x*7.0)/60;   // plucks per tick: ~0.6/s drifting, ~7.6/s in a full jet
@@ -90,7 +90,7 @@
   const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
   window.addEventListener('error',e=>{ AUDIO.panic(e.error||e.message); }); window.addEventListener('unhandledrejection',e=>{ AUDIO.panic(e.reason); });
   // audio unlock: the first gesture of any kind starts the context; coming back to the tab resumes it
-  for(const ev of ['touchstart','touchend','pointerdown','mousedown','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
+  for(const ev of ['touchstart','touchend','pointerdown','pointerup','mousedown','mouseup','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&AUDIO.ctx&&AUDIO.ctx.state!=='running') AUDIO.ctx.resume().catch(()=>{}); });
   window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&(player.dead||player.won)) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
@@ -153,7 +153,7 @@
     pushCentres();
   }
   function adopt(i){ if(i<=0||!selves[i].live) return; const tmp=selves[0]; tmp.hx=dirS[0]; tmp.hy=dirS[1]; selves[0]=selves[i]; selves[i]=tmp; dirS[0]=selves[0].hx; dirS[1]=selves[0].hy; pushCentres(); target.x=null; AUDIO.tone(500,700,0.15,'sine',0.06); }
-  function restart(){ player.stamina=1; player.dissoc=0; player.x=world.spawn.x; player.y=world.spawn.y; player.px=player.x; player.py=player.y; player.mass=0; player.hp=1; player.dead=false; player.won=false; player.cores=0; player.deaths=0; player.kills=0; player.checkpoint={x:world.spawn.x,y:world.spawn.y}; player.cpIndex=0;
+  function restart(){ player.camSnap=true; player.stamina=1; player.dissoc=0; player.x=world.spawn.x; player.y=world.spawn.y; player.px=player.x; player.py=player.y; player.mass=0; player.hp=1; player.dead=false; player.won=false; player.cores=0; player.deaths=0; player.kills=0; player.checkpoint={x:world.spawn.x,y:world.spawn.y}; player.cpIndex=0;
     cores=[]; drones=[]; SIM.frame=0;
     pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30;
     selves[0].x=player.x; selves[0].y=player.y; selves[0].mass=0; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
@@ -254,7 +254,7 @@
       if(Math.hypot(player.x-world.exit.x,player.y-world.exit.y)<14&&!player.won){ player.won=true; player.winT=0; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>AUDIO.tone(f,f,0.3,'square',0.08),i*120)); }
       if(player.won) player.winT++;
       try{ AUDIO.ambience(Math.hypot(pb[0],pb[1]),heat); }catch(e){ AUDIO.panic(e); }
-    } else if(--player.deadT<=0){ player.dead=false; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
+    } else if(--player.deadT<=0){ player.dead=false; player.camSnap=true; player.stamina=1; player.dissoc=0; player.x=player.checkpoint.x; player.y=player.checkpoint.y; player.px=player.x; player.py=player.y; pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=40; selves[0].x=player.x; selves[0].y=player.y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
     { const vw=sw/zoom; const pan=Math.max(-1,Math.min(1,((player.x-camX)/vw-0.5)*2));
       { const pb=SIM.probeBuf; const dm=Math.abs(player.mass-(player.pmass||player.mass)); player.pmass=player.mass;
         const want=Math.min(1,Math.hypot(player.vx,player.vy)/0.6+Math.hypot(pb[0],pb[1])/0.12+dm/(3*MK)+(touches.size>0||Object.values(keys).some(v=>v)?0.6:0));
@@ -290,8 +290,8 @@
     AUDIO.lastFrame=performance.now();
     const vw=sw/zoom, vh=sh/zoom;
     { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
-      if(jd>20&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0],tr:cam.rep<=3?TR.slice():undefined});
-      const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead){ cam.fx=player.x; cam.fy=player.y; } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
+      if(jd>20&&!player.camSnap&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0],tr:cam.rep<=3?TR.slice():undefined});
+      const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead||player.camSnap){ cam.fx=player.x; cam.fy=player.y; if(player.camSnap){ player.camSnap=false; camX=player.x-vw/2; camY=player.y-vh/2; } } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
     const tx=cam.fx-vw/2, ty=cam.fy-vh/2;
     camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;
     camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
@@ -307,6 +307,8 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
+    // until iOS lets the sound start (it needs a touch release), say so
+    if(!AUDIO.muted&&(touchLog.length>0||Object.keys(keys).length>0)&&(!AUDIO.ctx||AUDIO.ctx.state!=='running')){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='center'; c.textBaseline='bottom'; c.fillStyle='rgba(255,255,255,0.45)'; c.fillText('tap once for sound',sw/2,sh-(26+(window.safeBottom||0))*s); c.textAlign='left'; c.textBaseline='top'; }
     // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
     { const bars=[]; if(!player.dead&&player.stamina!==undefined){ const st=player.dissoc>0?0:player.stamina; if(st<0.97||player.dissoc>0) bars.push({v:st,col:player.dissoc>0?'rgba(160,160,170,0.8)':st<0.3?'rgba(255,150,120,0.85)':'rgba(220,235,255,0.7)'}); }
       if(SCHEME.name==='attention'&&SCHEME.st&&SCHEME.st.fat>0.03) bars.push({v:1-SCHEME.st.fat,col:'rgba(200,230,255,0.7)'});
