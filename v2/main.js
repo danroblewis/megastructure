@@ -103,6 +103,7 @@
   // second finger tap = spark; holding one finger still = contract
   const target={x:null,y:null,set:0};
   const DEAD=10;
+  const PAD=(isTouch||!!HASH.pad)&&!HASH.nopad;   // touch screens: the finger is a relative pad (see SCHEMES.attention), the body rides high
   const setTarget=(cx,cy)=>{ const wx=camX+cx*dpr/zoom, wy=camY+cy*dpr/zoom; target.x=wx; target.y=wy; target.set=performance.now(); };
   canvas.addEventListener('pointerdown',e=>{ AUDIO.init(); if(AUDIO.ctx&&AUDIO.ctx.state==='suspended') AUDIO.ctx.resume();
     if(menuHit(e.clientX,e.clientY)){ e.preventDefault(); return; }
@@ -179,7 +180,7 @@
       else if(m.kind==='door'){ const open=(Math.sin(m.phase+t*2*Math.PI/m.period)>0.2); if(!open && Math.abs(e.x-m.x)<m.h/2+r && Math.abs(e.y-m.y)<m.w/2+r){ e.x+=(e.x<m.x?-1:1)*1.2; e.vx*=-0.3; } }
       else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5)*m.len; const dirY=m.y<=H/2?1:-1; const y0=Math.min(m.y,m.y+dirY*ph), y1=Math.max(m.y,m.y+dirY*ph); if(e.x>m.x-m.w/2-r&&e.x<m.x+m.w/2+r&&e.y>y0-r&&e.y<y1+r){ dmg+=0.012; e.vy+=dirY*0.5; e.x+= (e.x<m.x?-1:1)*0.8; } } }
     return dmg; }
-  function ctxNow(){ return {bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
+  function ctxNow(){ return {pad:PAD,bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
   window.__eval=(js)=>eval(js);   // remote debugging: a direct eval inside this closure sees player, selves, bd, world, AUDIO, SIM ...
@@ -315,7 +316,7 @@
     { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
       if(jd>20&&!player.camSnap&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0],tr:cam.rep<=3?TR.slice():undefined});
       const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead||player.camSnap){ cam.fx=player.x; cam.fy=player.y; if(player.camSnap){ player.camSnap=false; camX=player.x-vw/2; camY=player.y-vh/2; } } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
-    const tx=cam.fx-vw/2, ty=cam.fy-vh/2;
+    const tx=cam.fx-vw/2, ty=cam.fy-vh*(PAD?0.40:0.5);   // on a touch screen the body rides high so the thumb has the lower part
     camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;
     camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
@@ -427,7 +428,7 @@
     if(HASH.zoom) zoom=+HASH.zoom*dpr;
     let ig=null; if(HASH.ignite){ for(let i=0;i<W*H;i++){ if(world.type[i]===7){ ig={x:i%W,y:(i/W|0)+6}; break; } } if(ig){ HASH.cx=ig.x; HASH.cy=ig.y; } }
     const N=+HASH.n||120; const t0=performance.now(); const trace=[]; if(HASH.audio){ AUDIO.init(); if(!AUDIO.ctx) throw new Error('no audio ctx'); }
-    const fakeTouch=(wx,wy,hold)=>{ player.ft=(player.ft||0)+1; const sx=(wx-camX)*zoom/dpr, sy=(wy-camY)*zoom/dpr; const ev={t:performance.now(),x:wx,y:wy,sx,sy,id:99,up:0,dur:0}; touchLog.push(ev); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev);
+    const fakeTouch=(wx,wy,hold)=>{ player.ft=(player.ft||0)+1; const sx=(wx-camX)*zoom/dpr, sy=(wy-camY)*zoom/dpr; const ev={t:performance.now(),x:wx,y:wy,sx,sy,id:99,up:0,dur:0}; touchLog.push(ev); const ev0={t:ev.t,x:player.x,y:player.y,sx:(player.x-camX)*zoom/dpr,sy:(player.y-camY)*zoom/dpr,id:99,up:0,dur:0}; if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev0); if(SCHEME.onMove) SCHEME.onMove(ctxNow(),ev);   // a fake touch starts on the body and moves to the offset, so pad and pointer modes both see it
       if(hold){ touches.set(99,{x0:sx,y0:sy,x:sx,y:sy,t:performance.now(),moved:false,primary:true}); } else { ev.up=performance.now()+50; ev.dur=50; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); }
       if(SCHEME.useTarget!==false){ target.x=wx; target.y=wy; target.set=performance.now(); } };
     let bestX=0, stuck=0;

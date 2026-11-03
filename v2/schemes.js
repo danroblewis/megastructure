@@ -61,15 +61,20 @@ SCHEMES.integrate={name:'integrate / differentiate',blurb:'two fingers (or D) to
 // 5. ATTENTION — hold a spot to attend to it; the self drifts toward what is attended; attention tires when held too long and recovers when released.
 SCHEMES.attention={name:'attention',blurb:'hold a spot to attend to it · the self drifts toward what you attend · attention tires if held too long',useTarget:false,
   st:{fat:0,spots:[],focus:1},
-  onDown(ctx,ev){ this.st.spots.push({t:ev.t,x:ev.x,y:ev.y}); if(this.st.spots.length>40) this.st.spots.shift(); },
-  onMove(ctx,ev){ const sp=this.st.spots[this.st.spots.length-1]; if(sp){ sp.x=ev.x; sp.y=ev.y; } },
+  // on a touch screen the finger is a pad, not a pointer: where you first touch is an origin, and the attended spot is the body
+  // plus your finger's displacement from it (scaled), so your thumb can rest low on the screen while the spot sits near the body
+  onDown(ctx,ev){ this.st.spots.push({t:ev.t,x:ev.x,y:ev.y,sx0:ev.sx,sy0:ev.sy,ax:ctx.player.x,ay:ctx.player.y,rel:ctx.pad?[0,0]:null}); if(this.st.spots.length>40) this.st.spots.shift(); },
+  onMove(ctx,ev){ const sp=this.st.spots[this.st.spots.length-1]; if(!sp) return; if(sp.rel){ const g=2.2*ctx.dpr/ctx.zoom; sp.rel=[(ev.sx-sp.sx0)*g,(ev.sy-sp.sy0)*g]; sp.x=sp.ax+sp.rel[0]; sp.y=sp.ay+sp.rel[1]; } else { sp.x=ev.x; sp.y=ev.y; } },   // the point is anchored where the body was when you touched down, so it stays put if the body splits
   tick(ctx){ const s=this.st, bd=ctx.bd; const held=ctx.touches.size>0; const sp=s.spots[s.spots.length-1];
-    if(held&&sp){ s.fat=Math.min(1,s.fat+1/600); const str=1-0.5*s.fat; const d=_unit(sp.x-ctx.player.x,sp.y-ctx.player.y); ctx.dirS[0]+=(d[0]*str-ctx.dirS[0])*0.15; ctx.dirS[1]+=(d[1]*str-ctx.dirS[1])*0.15; }
-    else { s.fat=Math.max(0,s.fat-1/150); ctx.dirS[0]*=0.992; ctx.dirS[1]*=0.992; }   // the heading you gave persists for a few seconds after you let go
+    const active=held&&sp&&(!sp.rel||Math.hypot(sp.rel[0],sp.rel[1])>2);
+    if(active){ s.fat=Math.min(1,s.fat+1/600); const str=1-0.5*s.fat; const d=_unit(sp.x-ctx.player.x,sp.y-ctx.player.y); ctx.dirS[0]+=(d[0]*str-ctx.dirS[0])*0.15; ctx.dirS[1]+=(d[1]*str-ctx.dirS[1])*0.15; s.linger=1; s.lx=sp.x; s.ly=sp.y; s.lstr=str; }
+    else { s.fat=Math.max(0,s.fat-1/150); ctx.dirS[0]*=0.992; ctx.dirS[1]*=0.992; s.linger=(s.linger||0)*0.992; }   // the point you attended lingers for a few seconds after you let go
+    if(s.linger>0.05) bd.spot=[s.lx,s.ly,s.lstr*s.linger,1]; else bd.spot=[0,0,0,0];   // every cell steers to the point on its own (see SH.bodyVel uSpot)
     bd.dir[0]=ctx.dirS[0]; bd.dir[1]=ctx.dirS[1]; bd.swim*=1.4;
     const distinct=_recent(s.spots,ctx.now,60000).length; const focus=1/(1+distinct*0.25); s.focus+=(focus-s.focus)*0.02;
     bd.coh*=0.6+1.4*s.focus; bd.grow*=0.4+1.2*s.focus; bd.dense=0.6+0.7*s.focus; bd.tint=[0.3,0.35,0.5,0.6*s.fat]; },
   hud(ctx,c){ const s=this.st, d=ctx.dpr; const sp=s.spots[s.spots.length-1]; const held=ctx.touches.size>0&&sp;
+    if(held&&sp.rel&&Math.hypot(sp.rel[0],sp.rel[1])>2){ const px=(sp.x-ctx.camX)*ctx.zoom, py=(sp.y-ctx.camY)*ctx.zoom; c.fillStyle='rgba(200,230,255,0.55)'; c.beginPath(); c.arc(px,py,2.5*d,0,6.283); c.fill(); }   // a small dot where attention is, since the finger is elsewhere
   }};
 
 // 6. MEMORY — three layers of retention. Each touch is remembered as a direction in a short, a medium and a long trace; the self moves by their sum. Burning wipes the medium trace.

@@ -167,6 +167,7 @@ uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
 uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
+uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
 uniform float uDense;                                 // preferred density of the self
 uniform vec3 uApp;                                    // appetites: drift up (+) or down (-) the gradients of heat, fuel, cold
 uniform float uJet;                                   // how much harder fast gas grips matter
@@ -198,6 +199,7 @@ void main(){
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
   vec2 drive=uDirs[ki];
+  if(ki==0 && uSpot.w>0.0){ vec2 to=uSpot.xy-(vec2(p)+0.5); float dl=length(to); drive= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // every cell its own angle; cells that arrive settle
   if(ki>0 && ki!=uNpcK){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }

@@ -75,7 +75,7 @@ const SIM={
     gl.uniform4f(pr.u.uInject,inject?inject.x:-999,inject?inject.y:-999,inject?inject.r:0,0); gl.uniform4f(pr.u.uInjectAmt,inject?inject.fuel:0,inject?inject.heat:0,inject?inject.smoke:0,inject?inject.life:0);
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
     // body
-    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs);
+    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform4fv(pr.u.uSpot,bd.spot||[0,0,0,0]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs);
     gl.uniform1f(pr.u.uGrip,bd.grip===undefined?1:bd.grip); gl.uniform1f(pr.u.uInertia,bd.inertia||0); gl.uniform2f(pr.u.uIVel,bd.ivx||0,bd.ivy||0); gl.uniform1f(pr.u.uDense,bd.dense||0.9);
     const ap=bd.app||[0,0,0]; gl.uniform3f(pr.u.uApp,ap[0],ap[1],ap[2]); gl.uniform1f(pr.u.uJet,bd.jet===undefined?1.8:bd.jet); const sa=bd.splitAxis||[1,0]; gl.uniform2f(pr.u.uSplitAxis,sa[0],sa[1]); gl.uniform1f(pr.u.uSplitStr,bd.splitStr||0); gl.uniform1f(pr.u.uSplitApp,bd.splitApp||0);
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uSwim,bd.swim); gl.uniform1f(pr.u.uCoh,bd.coh); gl.uniform1f(pr.u.uRnear,bd.rnear);
