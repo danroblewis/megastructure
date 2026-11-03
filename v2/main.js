@@ -134,13 +134,13 @@
   function updateSelves(red){
     const cl=red.clusters; if(!cl||cl.length<3) return;
     let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
-    for(const s of live){ if(s!==selves[0] && s.mass<6*MK){ s.live=false; } }
+    for(const s of live){ if(s===selves[0]) continue; s.age=(s.age||0)+1; if(s.mass<6*MK&&s.age>30){ s.lowN=(s.lowN||0)+1; if(s.lowN>30){ s.live=false; s.lowN=0; } } else s.lowN=0; }
     // you stay you. only when you have been below the living threshold for most of a second, and a part left behind is clearly alive, does it take over; then it locks for four seconds so the view never flips back and forth
     player.lowT=selves[0].mass<22*MK?(player.lowT||0)+1:0; player.switchLock=Math.max(0,(player.switchLock||0)-1);
     if(player.lowT>=45&&player.switchLock===0&&!player.dead){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>30*MK&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
       if(best){ player.switchLock=240; player.lowT=0; const i=selves.indexOf(best); const tmp=selves[0]; selves[0]=best; selves[i]=tmp; dirS[0]=best.hx; dirS[1]=best.hy; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); } }
     if(red.far && red.far.d>BODY.rfar*0.9){ const f=red.far; let farFromAll=true; for(const s of selves){ if(s.live && Math.hypot(s.x-f.x,s.y-f.y)<BODY.rfar*0.9) farFromAll=false; }
-      if(farFromAll){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; slot.hx=dirS[0]; slot.hy=dirS[1]; } } }
+      player.farN=farFromAll?(player.farN||0)+1:0; if(farFromAll&&player.farN>20){ const slot=selves.find(s=>!s.live); if(slot){ slot.live=true; slot.x=f.x; slot.y=f.y; slot.mass=0; slot.age=0; slot.lowN=0; slot.hx=dirS[0]; slot.hy=dirS[1]; player.farN=0; } } } else player.farN=0;
     for(let i=1;i<3;i++){ if(selves[i].live){ selves[i].hx*=0.9995; selves[i].hy*=0.9995; } }   // habits fade slowly
     pushCentres();
   }
@@ -262,7 +262,7 @@
   // a 120 Hz phone takes one substep a frame, a 60 Hz screen two or three; a slow frame never buys extra substeps,
   // so a throttled device slows down evenly instead of swinging between fast and slow.
   const SUBRATE=small?120:180, MAXSTEPS=small?2:3; let acc=0;
-  let lastNow=0, dtAvg=16.7;
+  let lastNow=0, dtAvg=16.7; const cam={};
   function frame(now){
     requestAnimationFrame(frame);
     const t0=performance.now();
@@ -272,7 +272,10 @@
     try{ tick(); }catch(e){ if((frame.errs=(frame.errs||0)+1)<=5) console.error('tick',e); AUDIO.panic(e); }
     if(AUDIO.ctx&&AUDIO.beat&&performance.now()-AUDIO.beat>1500&&!AUDIO.muted){ AUDIO.beat=performance.now(); AUDIO.panic('stale voices'); }
     const vw=sw/zoom, vh=sh/zoom;
-    const tx=player.x-vw/2, ty=player.y-vh/2;
+    { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
+      if(jd>20&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0]});
+      const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead){ cam.fx=player.x; cam.fy=player.y; } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
+    const tx=cam.fx-vw/2, ty=cam.fy-vh/2;
     camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;
     camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
