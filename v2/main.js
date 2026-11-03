@@ -162,6 +162,7 @@
     pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; player.respawnT=30;
     selves[0].x=player.x; selves[0].y=player.y; selves[0].mass=0; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
   restart();
+  if(HASH.spawn){ const [sx,sy]=HASH.spawn.split(',').map(Number); player.x=sx; player.y=sy; player.px=sx; player.py=sy; player.checkpoint={x:sx,y:sy}; pendingInjectB=[sx,sy,BODY.spawnR,1.0]; selves[0].x=sx; selves[0].y=sy; pushCentres(); }   // test hook: start the body somewhere else
   const solidAt=(x,y)=>{ const xi=x|0, yi=y|0; if(xi<0||yi<0||xi>=W||yi>=H) return true; const t=world.type[yi*W+xi]; return t===1||t>=5&&t<=8; };
   function collide(e,r){
     let hit=false;
@@ -350,7 +351,7 @@
   }
   // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
-  const BOT=HASH.bot? {on:true,path:null,i:0,arrivals:[],lastCp:-1,t0:0} : {on:false};
+  const BOT=HASH.bot? {on:true,path:null,i:+HASH.boti||0,arrivals:[],lastCp:-1,t0:0} : {on:false};
   if(BOT.on){
     BOT.legs=CHECK.route(world,COARSE>1?1:3);
     BOT.full=[]; BOT.legEnds=[]; for(const leg of BOT.legs){ if(leg) BOT.full=BOT.full.concat(leg); BOT.legEnds.push(BOT.full.length-1); }
@@ -370,7 +371,7 @@
       } else BOT.detour=null;
       BOT.i=bi;
       let wp=P[bi]; if(!BOT.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=BOT.detour;   // the farthest visible path point ahead; the nearest visible one if none
-      let d=_unit(wp[0]-px,wp[1]-py);
+      let d=_unit(wp[0]-px,wp[1]-py); BOT.wp=wp;
       { const le=BOT.legEnds[player.cpIndex]; if(le!==undefined&&player.cpIndex<world.checkpoints.length&&bi>=le-6&&(BOT.wait||0)<600){ BOT.wait=(BOT.wait||0)+1; d=[0,0]; } else if(le!==undefined&&bi<le-6) BOT.wait=0; }   // arrived at a cold room: stay until it registers
       cx.dirS[0]+=(d[0]-cx.dirS[0])*0.2; cx.dirS[1]+=(d[1]-cx.dirS[1])*0.2; cx.bd.dir[0]=cx.dirS[0]; cx.bd.dir[1]=cx.dirS[1]; cx.bd.swim*=1.3;
       if(player.cpIndex>BOT.lastCp){ BOT.lastCp=player.cpIndex; BOT.arrivals.push([player.cpIndex,SIM.frame]); } };
@@ -398,7 +399,7 @@
       if(SCHEME.useTarget!==false){ target.x=wx; target.y=wy; target.set=performance.now(); } };
     let bestX=0, stuck=0;
     for(let i=0;i<N;i++){ if(HASH.touch&&i===5){ const [tx,ty]=HASH.touch.split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,HASH.touchHold!=='0'); } if(HASH.tapEvery&&i%+HASH.tapEvery===0){ const [tx,ty]=(HASH.touch||'60,0').split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,false); } if(i===6) player.tgt6=target.x; if(i===20) player.tgt20=target.x;
-      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}`:'')); }
+      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}u${SIM.probeBuf[0].toFixed(2)},${SIM.probeBuf[1].toFixed(2)}w${BOT.wp?BOT.wp[0]|0:'-'},${BOT.wp?BOT.wp[1]|0:'-'}st${(player.stamina||0).toFixed(2)}e${(SIM.red.elong||0).toFixed(1)}`:'')); }
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
