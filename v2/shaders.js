@@ -29,7 +29,21 @@ uniform int uIdent;        // which identity model is running (0 = centroid, the
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
+uniform int uRoom;         // survival model (uIdent 10): the chamber the player's centre is in, stamped into q.x of cells born this substep
+vec4 identAux=vec4(0.0);   // set by the body pass just before identUpdate: x the cell's self before this substep, y its payload (ore + / charge -)
+vec3 identHsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
+  if(uIdent==10){
+    // survival: no new physics, q is provenance. x the chamber the matter was born in (+1, so 0 is unset), y what it has been exposed to,
+    // z how many times it nearly died, w a weight (1 once stamped) so the carried mix of two cells stays a proper average of their pasts.
+    if(self<=0.0) return vec4(0.0);
+    if(q.w<0.25){ q=vec4(float(uRoom)+1.0+((kk>0&&kk==uNpcK)?32.0:0.0),0.0,0.0,1.0); }   // self rose from nothing here with no past carried in: born in this chamber (+32: born of the other wisp, a part another self made)
+    else { q.xyz/=q.w; q.w=1.0; }                              // carried in (or half-mixed with an empty cell): keep the past it brought
+    float heat=max(sp.y,0.0), cold=max(-sp.y,0.0), pay=identAux.y, spd=length(vel);
+    float e=heat*1.0+cold*2.0+max(pay,0.0)*0.6+max(-pay,0.0)*0.85+min(1.0,spd*8.0)*0.5;   // each weighted, so a life in the cold reads differently from a life in currents or fire
+    q.y=mix(q.y,e,0.003);
+    if(identAux.x>=0.05 && self<0.05) q.z=min(q.z+1.0,16.0);  // dropped below 0.05 this substep; if it survives, this stays with it
+    return q; }
   q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
   return q; }
@@ -40,7 +54,12 @@ vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
 vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
 // how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent==10 && q.w>0.02){   // survival: hue by chamber of origin (the home chamber keeps the familiar blue), washed out by near-deaths
+    vec3 qq=q.xyz/q.w; bool other=qq.x>=32.5; float ch=other?qq.x-32.0:qq.x; float hue=fract(0.58+(ch-1.0)*0.13); float sat=0.8*(1.0-0.75*min(1.0,qq.z/6.0));
+    float lum=max(bc.r,max(bc.g,bc.b)); vec3 pc=identHsv(hue,sat,1.0); if(other) pc=mix(pc,vec3(0.55,1.0,0.45),0.55);   // a part born of the other wisp keeps its chamber hue under a green cast
+    return mix(bc,pc*lum,0.6); }
+  return bc; }
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
@@ -312,7 +331,7 @@ void main(){
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
   // identity state: carried with the matter like exposure, then updated by the identity model
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
-  q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
+  identAux=vec4(s0,pay,0.0,0.0); q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
@@ -427,6 +446,9 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
+SH.probe3 = SH.head + `
+uniform vec2 uPts[64]; out vec4 o;
+void main(){ int i=int(gl_FragCoord.x); ivec2 p=wrapP(ivec2(floor(uPts[i]))); vec4 q=texelFetch(uQ,p,0); o= q.w>0.02? vec4(q.xyz/q.w,q.w) : vec4(0.0); }`;   // identity state at the point, normalised by its weight (survival: origin chamber+1, exposure, near-deaths, weight)
 
 // ---------------- render ----------------
 SH.render = SH.head + `

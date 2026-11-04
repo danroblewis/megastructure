@@ -168,3 +168,60 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+## Identity experiment 10: survival — 2026-11-03 (branch `ident-10-survival`)
+
+No new physics for membership: `identWeight` is the baseline nearest-centre rule, and the enmesh rows for `#ident=survival`
+and `#ident=centroid` are identical to the integer in every column (main, other, otherDist, cx cy, parts, stamina). What the
+branch adds is provenance per cell and a ledger. `q.x` is the chamber the matter was born in (+32 when it was born nearest
+the other wisp: a part another self made), stamped from `uRoom` when self rises from nothing with no past carried in;
+`q.y` a slow running mix of what it has lived through (heat 1.0, cold 2.0, ore 0.6, charge 0.85, current speed 0.5, each
+weighted); `q.z` how many times its self dropped below 0.05 and it lived; `q.w` a weight so the carried mix of two cells
+stays an average of their pasts. The tint is hue by chamber of origin (the home chamber keeps the familiar blue, each
+later chamber a step round the wheel, other-wisp-born cells under a green cast), washed out by near-deaths. The ledger
+(hud, while in any cold room and for ten seconds after one registers; always with `#hud=1` or the bot) is an origins
+histogram from the 6x4 probe grid round the body, scaled to the body's mass, and against the previous cold room: what
+was lost (and which origin lost most), what was gained, what you carry that was born of the other wisp, net.
+
+**Enmesh** (`#lab=enmesh&npc=170,60&warm=300&n=900`; `q` = a 6x4 grid round each centre: self-weighted mean `q.y`, and the
+mass in that grid born of the other wisp):
+
+| t | main | other | dist | main q.y | other q.y | abs diff | other-born in main | player-born in other |
+|---|---|---|---|---|---|---|---|---|
+| 30 (before contact) | 163 | 160 | 38 | 0.090 | 0.060 | 0.030 | 0 | 0 |
+| 90 (pressing in) | 128 | 193 | 12 | 0.180 | 0.182 | 0.002 | 109 | 24 |
+| 120 (inside) | 159 | 155 | 11 | 0.187 | 0.193 | 0.006 | 136 | 7 |
+| 150 (parting) | 164 | 155 | 24 | 0.112 | 0.219 | 0.107 | 30 | 21 |
+| 180 | 163 | 158 | 41 | 0.120 | 0.247 | 0.127 | 0 | 0 |
+| 240 (apart) | 161 | 160 | 74 | 0.125 | 0.221 | 0.096 | 0 | 0 |
+| 660 (second pass, dist 22) | 160 | 159 | 22 | 0.107 | 0.354 | 0.247 | 0 | 0 |
+| 840 | 160 | 161 | 133 | 0.105 | 0.358 | 0.253 | 0 | 0 |
+| 900 | 68 | 160 | 145 | 0.239 | 0.361 | 0.122 | 0 | 0 |
+
+Against the four-part boundary: (1) overlap during contact is there and is what the big "other-born in main" numbers at
+t=90..120 are: the two grids cover both bodies and nearest-centre assignment hands 35 of the player's mass to the other
+centre at t=90 and back at t=120. (2) No taking: 163/160 before, 161/160 at t=240 after parting, 160/161 at t=840; the
+drop to 68 at t=870..900 is the baseline body pressed into the left wall of the box (identical in the centroid run).
+(3) Loss, not transfer: at parting (t=150) 30 of the player's mass was other-born and 21 of the other's was player-born;
+thirty ticks later both are 0 while the masses did not move (163/158), so the exchanged interface cells faded on both sides
+or were regrown over by the host's own cells; the ledger reports that as mass that faded, and what is still carried
+after a passage as "taken". (4) Learning together is only half there: the histories converge in contact (abs diff 0.03
+before, 0.002..0.006 inside) but diverge again after parting (0.10 at t=240, 0.25 at t=840), because a body that moves
+turns its cells over, every newborn starts its history at zero, and the resting wisp keeps accumulating; shared history
+does not survive separation under the carried-mix scheme. `ledge`, `commit` and `hold` were not rerun: no hook on this branch touches drive, cohesion or membership, and the
+enmesh run being bit-identical to the baseline is the evidence that holds for them too.
+
+**Game** (`#test=1&bot=1&small=1&n=1200&trace=400&scheme=attention&nonpc=1`): the smoke run (`#test=1&n=60&w=1024&h=512`)
+gives the first ledger entry: `spawn` at frame 156, mass 163, all 153 sampled units born in chamber 1, near-deaths 0,
+exposure 0.1. The 1200-tick bot run across to the second cold room was still running (alone, SwiftShader) when this
+section was written; its ledger is read from the `ident {...}` field at the end of the test title and is to be added
+here: the origins histogram after the second chamber, and the `lost since spawn` / `gained` lines of the `cold room 1`
+entry. A first attempt at that run (n=2500, with ~20 other headless runs on the machine) was killed after five hours of
+wall time; the probe pass added here is one 64x1 draw and readback per tick, so the slowness is not expected to be
+this branch's, but that has not been shown.
+
+Judgement so far: provenance is legible in the lab (the +32 origin makes "a part the other wisp made" a separate row,
+and the tint gives it a green cast), and the ledger's fade-versus-taken distinction is real because it is measured, not
+inferred. Whether it reads as "baggage you can live with" needs the chambers: in the enmesh box nothing survives a
+passage as baggage, the exchanged cells fade within a second of parting, so the honest reading of the lab is "you take
+nothing and keep nothing"; the histogram across chambers is where the baggage would show, and that number is pending.
