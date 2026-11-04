@@ -33,6 +33,9 @@ const LAB={
     // enmesh (run with #npc=170,60&warm=300): press into another wisp for 4 s, hold inside it for 5 s, then pull away for 6 s.
     // what does each keep, how much is exchanged, how steerable are you while entangled, what is left at the interface when you part?
     enmesh:  {spawn:[120,60],  script:[{t0:0,t1:240,dir:[1,0]},{t0:240,t1:540,dir:[0,0]},{t0:540,t1:900,dir:[-1,0]}]},
+    // enmesh2: the same with a gentler press (the 4 s push carried the player straight through and out the far side) and a
+    // shorter pull so it does not end crushed against the box wall: press 2.5 s, hold inside 5 s, pull away 4 s.
+    enmesh2: {spawn:[128,60],  script:[{t0:0,t1:150,dir:[0.7,0]},{t0:150,t1:450,dir:[0,0]},{t0:450,t1:690,dir:[-0.7,0]},{t0:690,t1:900,dir:[0,0]}]},
   },
   run(name,ctx,tick){
     const sc=this.scenarios[name]; const rows=[]; const N=ctx.N; ctx.jet=ctx.world.jet;

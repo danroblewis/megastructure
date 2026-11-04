@@ -26,7 +26,7 @@ player is the wisp's free will; everything else is simulated.
   `tick(ctx)` and `hud(ctx,c)` on the CPU. `#ident=<name>` picks one. A branch may simply override the hook bodies and
   register its name with `id:1`; `uIdent` lets a branch keep the baseline reachable for comparison.
 - Existing per-cell state you may use: body texture `uB` = (self, lost, exposure = heat history, payload = ore + / charge −).
-- **Lab**: `index.html#lab=enmesh&npc=170,60&warm=300&n=900` runs a scripted enmeshment in the lab box: the player presses
+- **Lab**: `index.html#lab=enmesh2&npc=170,60&warm=300&n=900` (press 2.5 s at 0.7, hold inside 5 s, pull away 4 s at 0.7, then rest; the older `enmesh` pushed the player straight through the other wisp and into the box wall) runs a scripted enmeshment in the lab box: the player presses
   into the other wisp for 4 s, holds inside it for 5 s, pulls away for 6 s. Rows every 30 ticks carry `main` (your mass),
   `other` (its mass), `otherDist`, `cx cy`, `stamina`, `effort`. Also run `#lab=ledge&warm=900`, `#lab=commit` and
   `#lab=hold` to make sure tearing, commitment and holding still behave (outcomes table in `v2/ROADMAP.md`). Headless:
