@@ -203,3 +203,86 @@ with the same problem. So the friend needs a problem of its own that it can over
 story as it happens, and a way for the player to help that is not doing it for them. Never a lesson that leaving a bad
 entanglement kills the other: the friend now regrows and returns. Experiments 3 (commitment, rejected as prescriptive)
 and 11 (statuses: diffusion, moratorium, achievement, negative identity as emergent stability) are the Marcia side.
+
+---
+
+## Identity experiment 9: parts — 2026-11-04, branch ident-9-parts
+
+**The model** (`#ident=parts`, `uIdent==9`; hooks in `v2/shaders.js`, CPU half in `v2/ident.js`). `q.xyz` is a role grown
+from what the cell lived through, never assigned: **protector** `q.x` grows while the cell's exposure (`uB.z`, the heat it
+has lived through) is high (~2 s of real burning makes one, it fades over a minute); **manager** `q.y` grows while the cell
+is calm (its own velocity below swimming speed, no heat, inside its body: ~3 s to form, undone by agitation over ~10 s);
+**exile** `q.z` grows while the cell is being lost (withering far out, burning, eaten: `uB.y/uB.x`, metabolism does not
+count) and stays if the cell survives. Parts act: protectors take 60% less heat damage and swim toward heat that is near
+(stopping short of the flame); managers cohere 1.6x and swim 30% slower; exiles are reinforced 1.6x inside the body and
+fade at 0.6%/substep when their neighbourhood is thin. The baseline `q.w` allegiance channel is **kept**, with one change:
+its relaxation rate is scaled by `1-0.98*smoothstep(0.15,0.5,max(q.xyz))`, so roleless matter changes hands as in the
+baseline (a third of a second) and a part hardly does (~15 s). A part of the other wisp inside you therefore keeps its
+allegiance, follows their drive and not your attention, and the CPU counts it as a burden (cells in the 6x5 grid round
+your centre whose allegiance is not yours) that drains stamina at 0.0001/cell/tick. `identTint` shows protector ember,
+manager indigo, exile rose, muted on the other wisp's cells. `identWeight` stays hard (no soft membership). New plumbing:
+`uBq`/`uSq`/`uRfarQ` in `SH.head` for the hooks, a `probe3` q grid round each body (`SIM.probeBuf3`), `measureQ` rows in
+the lab (`q.d` mean |Δq.xyz| between bodies, `e0/en` core vs edge, `othIn/mineIn`, `role0/rolen` fractions by dominant role
+> 0.3, `burden`).
+
+**enmesh2** (`#lab=enmesh2&npc=170,60&warm=300&n=900`): t, main / other / otherDist, baseline (`#ident=centroid`) vs parts.
+
+| t | baseline main/other/dist | parts main/other/dist | parts: burden, stamina | parts: other's manager fraction | mean Δq.xyz between bodies |
+|---|---|---|---|---|---|
+| 30 | 155/156/30 | 155/156/30 | 0, 1.00 | 0.00 | 0.11 |
+| 90 | 71/197/8 | 66/215/8 | 162, 0.96 | 0.17 | 0.20 |
+| 150 | 133/139/24 | 129/153/21 | 61, 0.90 | 0.81 | 0.37 |
+| 210 | 141/140/28 | 139/147/24 | 16, 1.00 | 0.39 | 0.09 |
+| 330 | 143/138/22 | 143/141/19 | 6, 1.00 | 0.86 | 0.23 |
+| 450 | 140/131/20 | 140/133/21 | 0, 1.00 | 0.99 | 0.38 |
+| 510 | 138/128/43 | 139/133/50 | 0, 1.00 | 0.90 | 0.52 |
+| 630 | 132/130/128 | 132/134/135 | 0, 1.00 | 0.59 | 0.47 |
+| 690 | 59/137/145 | 59/142/145 | 0, 1.00 | 0.84 | — |
+| 900 | 134/140/135 | 133/143/138 | 0, 1.00 | 0.93 | 0.40 |
+
+(The drop to 59 at t=690 is the pull-away carrying the player into the box wall at x=21 in both runs, not the interface.)
+Centroid displacement per 30 ticks under the scripted drive: press 14/9/12/15 (parts) vs 14/10/14/15 (baseline); pull-away
+−19…−24 in both. Mean manager role of the player's cells peaked at 0.20 during the hold (the pair drifts left with the
+return flow at 3–5 cells per 30 ticks, so its cells are never calm by the model's measure) against 0.58 for the other wisp,
+which swims against the drift to hold its place and so becomes a manager body (0.99 of its cells by t=450).
+
+**The four criteria.**
+1. Overlap is normal — **produced**: the bodies interpenetrate to 8 cells apart at t=90 in both runs; nothing repels.
+2. No taking — **produced, but by the baseline**: after parting 133/143 (parts) vs 134/140 (baseline), both within noise
+   of the 155/156 start. While entangled the other's cells did not answer the player's attention (steerability 14/9/12/15 vs
+   14/10/14/15 per 30 ticks, the same as alone-and-pressing in the baseline); what the model adds is that the other's
+   manager parts kept their allegiance ~4 s longer (other = 153 at t=150 vs 139 baseline, 147 vs 140 at t=210), and the
+   player paid for carrying them: stamina 1.00 → 0.90 by t=150 (baseline stays at 1.00), back to 1.00 by t=210.
+3. Loss allowed — **produced (none at the interface)**: `fades` 0 in both runs; the 155 → 66 at t=90 is allegiance of
+   roleless matter flipping to the nearest centre, as in the baseline (71), and it reverses by t=150.
+4. Learning together — **not produced**: mean |Δq.xyz| between the bodies 0.11 at t=30 and 0.40 at t=900, against a
+   core-vs-edge difference of 0.00–0.13 in the player and 0.02–0.32 in the other. Roles are made by how a body lives (one
+   held its place and became managers, the other drifted and swam), so contact drives them apart, not together.
+
+**Roles in a normal run.** `#lab=ledge&warm=900` (parts): 109 → 78 cells by t=60 (31 torn into the jet and faded), held at
+78–85 against the ledge for 450 ticks, regrew to 130 by t=600. Role fractions (dominant role > 0.3) of the player's cells:
+t=90 manager 0.68 / none 0.32; t=120–450 manager 1.00 (pressed against the ledge the cells do not move, so the whole body
+becomes managers); t=480–540, after the drive stops and the body regrows, none 1.00 (the managers dissolve as the body
+moves and regrown matter has no history); t=600 manager 0.82 / none 0.18. Protector 0 and exile 0 throughout: there is no
+heat at the ledge, and torn matter dies rather than returning, so no cell survives being lost.
+`#lab=commit` (parts): the whole self is carried 83 → 384 cells in x at 137–141 mass through t=270 and 128 at t=480;
+a piece torn at t=120 (88 + a part) rejoined by t=150 and its survivors showed as the run's only exiles (0.55 of the cells
+in the grid at t=120, diluted below the 0.3 threshold after rejoining); a second part split at t=510–600 (120 → 71 → 96).
+`#lab=hold` (parts): effort 0.98 → 0.2 as the jet carries the body out of the band (x 196 → 273, inJet 113 → 0 by t=60),
+stamina 1.00 → 0.71 by t=90, back to 1.00 by t=180, 0.69 at t=540; mass 153 → 140–145 throughout, no scatter; the baseline run of the same scenario (`#ident=centroid`) gives 153 → 140–143 and stamina
+0.87/0.76/0.71/0.76/0.90 at t=30–150 and 0.68 at t=540, the same within 1–2 cells and 0.01 at every row. Tearing,
+commitment and holding are unchanged, which is expected: a body that is swimming grows no parts in these scenarios (role
+fractions none 1.00 through nearly all of commit and hold; manager 0.30 at one row of hold and 0.25–0.39 once the drive
+stops).
+`#lab=burn&warm=900` (new scenario, parts only: spawn on the burner, leave, come back): the fire makes roles and kills the
+body in the same second. Survivors at t=30 (39 cells) had mean protector 0.16 and exile 0.60 (0.94 of cells exile-dominant:
+burning registers as being lost), at t=60 (2 cells) protector 0.32 and exile 0.82; by t=90 nothing was left, and the body
+that respawned at t=330 had no history (none 1.00). An earlier spawn 30 cells above the burner never saw heat (mass
+153 → 135, exposure 0). The lab box has no survivable heat, so protectors leading toward fire and resisting it is
+implemented but unverified by numbers.
+
+**What the model does not produce.** A boundary during the press: the bodies pass into each other exactly as in the
+baseline (dist 8 at t=90, masses within 5 cells of the baseline at every row), because a body that is swimming has no
+parts yet and roleless matter mixes like fluid; the parts only hold what calm, fire or survival have already made. Nor
+learning together. Protectors and exiles do not appear in the four standard scenarios (no heat, no survivors of loss), so
+the only part the lab exercises is the manager; the stamina burden is real but small (0.10 over 2 s of full enmeshment).

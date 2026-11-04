@@ -27,6 +27,7 @@ uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform vec2 uC[3]; uniform int uCN;   // the centres: 0 you, then past lives or the other wisp
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
 uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
@@ -34,20 +35,47 @@ uniform int uIdent;        // which identity model is running (0 = centroid, the
 int nearestOther(vec2 pp){ int k=0; float bd=1e9; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; k=j; } } } return k; }
 // the centre a cell belongs to: yours while q.w says so, else the nearest other. ownership has memory (see identUpdate)
 int ownerK(vec4 q, vec2 pp){ return q.w>0.5 ? 0 : nearestOther(pp); }
+// ---- 9. parts (IFS, uIdent==9): q.xyz is a role grown from what the cell lived through, q.w the baseline allegiance.
+//   x protector: made by a sustained burn (exposure uB.z); resists heat and leads toward heat that is near.
+//   y manager:   made by long calm inside its body; coheres more and moves slower.
+//   z exile:     made by surviving being lost (withering far out, burning, eaten); clings to the centre, fades when alone.
+// a part (a cell with a strong role) changes allegiance fifty times slower than roleless matter: a part made under the other
+// wisp's centre that ends up in you stays theirs, follows their drive not your attention, and is a burden (ident.js drains stamina).
+uniform sampler2D uBq, uSq;   // the body (self, lost, exposure, payload) and species textures as the hooks see them (bound by sim.js where hooks run)
+uniform float uRfarQ;         // the far radius, for the hooks
+float partStr(vec4 q){ return max(q.x,max(q.y,q.z)); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
+  if(uIdent==9){
+    vec4 b=texelFetch(uBq,p,0); float heat=max(sp.y,0.0); float sv=length(vel);
+    float burn=smoothstep(0.1,0.5,b.z);                                                   // exposure: the heat this matter has lived through
+    q.x+=burn*0.003*(1.0-q.x)-q.x*0.0001;                                                 // protector: ~2 s of real burning makes one; it fades over a minute
+    float calm=(1.0-smoothstep(0.06,0.16,sv))*(1.0-smoothstep(0.05,0.2,heat))*(1.0-smoothstep(0.6,1.0,dc/max(uRfarQ,1.0)))*smoothstep(0.1,0.3,self);
+    q.y+=calm*0.0018*(1.0-q.y)-(1.0-calm)*0.0005*q.y;                                     // manager: ~3 s of calm inside the body (cohesion jitter counts as calm, swimming does not); agitation undoes it over ~10 s
+    float losing=smoothstep(0.002,0.012,b.y/max(b.x,0.02));                               // being lost: withering, burning, eaten (metabolism alone does not count)
+    q.z+=losing*0.012*(1.0-q.z)-q.z*0.0001;                                               // exile: survive being lost and the wound stays as a role
+    float part=smoothstep(0.15,0.5,partStr(q));
+    q.w=mix(q.w, kk==0?1.0:0.0, 0.02*(1.0-0.98*part));                                     // roleless matter changes hands as in the baseline; a part hardly does
+    return clamp(q,0.0,1.0); }
   q.xy=mix(q.xy,vel*8.0,0.03);                     // a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // time lived
   q.w=mix(q.w, kk==0?1.0:0.0, 0.02);               // allegiance moves toward whoever is nearest over a third of a second (slower let a long embrace swallow you whole)
   return q; }
-// how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
+// how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard. parts keep it: soft membership that can merge centres is codependence
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==ownerK(q,pp)?1.0:0.0; }
 // the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent==9){ ivec2 p=ivec2(gl_FragCoord.xy); vec2 d=drive*(1.0-0.3*q.y);          // managers are slow
+    if(q.x>0.05){ float hl=texelFetch(uSq,wrapP(p-ivec2(4,0)),0).y, hr=texelFetch(uSq,wrapP(p+ivec2(4,0)),0).y, hu=texelFetch(uSq,wrapP(p-ivec2(0,4)),0).y, hd=texelFetch(uSq,wrapP(p+ivec2(0,4)),0).y;
+      vec2 gh=vec2(hr-hl,hd-hu); float gl=length(gh); float here=max(texelFetch(uSq,p,0).y,0.0);
+      if(gl>0.003) d+=gh/gl*0.25*q.x*smoothstep(0.003,0.03,gl)*(1.0-smoothstep(0.2,0.35,here)); }   // protectors lead toward heat that is near, stopping short of the flame
+    return d; }
+  return drive; }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
-// how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
-ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
+vec2 identCohere(vec4 q, vec2 coh, float self){ if(uIdent==9) return coh*(1.0+0.6*q.y+0.5*q.z); return coh; }   // managers cohere; exiles cling to the centre
+// how a cell is tinted for display, given the colour it would have: protector ember, manager indigo, exile rose (muted on the other wisp's cells)
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent==9){ float sum=q.x+q.y+q.z; if(sum>0.001){ vec3 pc=(vec3(1.0,0.55,0.2)*q.x+vec3(0.45,0.5,1.0)*q.y+vec3(1.0,0.4,0.75)*q.z)/sum; bc=mix(bc,pc,(0.4+0.4*clamp(q.w,0.0,1.0))*smoothstep(0.05,0.6,partStr(q))); } }
+  return bc; }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
 uniform sampler2D uWf;     // walls field: solidity, soot, residue, kind (0 metal, 0.5 frost, 1 tissue)
@@ -299,9 +327,10 @@ void main(){
   else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
     if(ghost){ if(calm<0.4) self*=0.986; }                                            // a past life fades unless it rests in a cold still pocket
     else if(npc) self+=uNpcGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                   // another wisp keeps itself together much as you do
-    else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
+    else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self)*(uIdent==9?1.0+0.6*q0.z:1.0); }   // close cells reinforce; cold still pockets condense you; (parts) exiles are strong in the centre
   self*=0.9995;
-  if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
+  if(uIdent==9){ float alone=1.0-smoothstep(0.1,0.35,avg); self*=1.0-0.006*q0.z*alone; }   // (parts) an exile alone fades
+  if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18)*(uIdent==9?1.0-0.6*q0.x:1.0);          // (parts) protectors resist heat
   self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
   if(sp.y>0.35 && sp.w>0.05 && dc<uRfar) self+=sp.w*(sp.y-0.35)*0.35;   // organism burning near you becomes you
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
@@ -437,6 +466,10 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
+SH.probe3 = SH.head + `
+uniform sampler2D uB; uniform vec2 uPts[64]; layout(location=0) out vec4 oQ; layout(location=1) out vec4 oS;
+void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 b=texelFetch(uB,p,0); vec4 q=texelFetch(uQ,p,0);
+  oQ=q; oS=vec4(b.x,b.w,float(ownerK(q,pt)),b.z); }`;   // identity state at the point; self, payload, the centre the identity model gives it, exposure
 
 // ---------------- render ----------------
 SH.render = SH.head + `

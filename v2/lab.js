@@ -35,6 +35,8 @@ const LAB={
     enmesh:  {spawn:[120,60],  script:[{t0:0,t1:240,dir:[1,0]},{t0:240,t1:540,dir:[0,0]},{t0:540,t1:900,dir:[-1,0]}]},
     // enmesh2: the same with a gentler press (the 4 s push carried the player straight through and out the far side) and a
     // shorter pull so it does not end crushed against the box wall: press 2.5 s, hold inside 5 s, pull away 4 s.
+    // burn (parts): press down onto the burner for 2.5 s, leave for 5 s, then go back toward the heat: do burned cells become protectors and lead?
+    burn:    {spawn:[452,224],  script:[{t0:0,t1:150,dir:[0,0.5]},{t0:150,t1:450,dir:[-1,-0.3]},{t0:450,t1:900,dir:[1,0.3]}]},
     enmesh2: {spawn:[128,60],  script:[{t0:0,t1:150,dir:[0.7,0]},{t0:150,t1:450,dir:[0,0]},{t0:450,t1:690,dir:[-0.7,0]},{t0:690,t1:900,dir:[0,0]}]},
   },
   run(name,ctx,tick){
@@ -48,7 +50,7 @@ const LAB={
       tick();
       const ghosts=ctx.selves.filter((s,k)=>k>0&&s.live&&s.mass>6);
       if(ghosts.length<prevGhosts) fades+=prevGhosts-ghosts.length; prevGhosts=ghosts.length;
-      if(i%30===29){ const m=ctx.measure(); const o=ctx.selves[2]; rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),other:o&&o.live?+o.mass.toFixed(0):null,otherDist:o&&o.live?Math.round(Math.hypot(o.x-ctx.player.x,o.y-ctx.player.y)):null,inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
+      if(i%30===29){ const m=ctx.measure(); const o=ctx.selves[2]; rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),other:o&&o.live?+o.mass.toFixed(0):null,otherDist:o&&o.live?Math.round(Math.hypot(o.x-ctx.player.x,o.y-ctx.player.y)):null,inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof,q:ctx.measureQ?ctx.measureQ():undefined}); }
     }
     return rows;
   },

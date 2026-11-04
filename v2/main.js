@@ -186,7 +186,7 @@
       else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5)*m.len; const dirY=m.y<=H/2?1:-1; const y0=Math.min(m.y,m.y+dirY*ph), y1=Math.max(m.y,m.y+dirY*ph); if(e.x>m.x-m.w/2-r&&e.x<m.x+m.w/2+r&&e.y>y0-r&&e.y<y1+r){ dmg+=0.012; e.vy+=dirY*0.5; e.x+= (e.x<m.x?-1:1)*0.8; } } }
     return dmg; }
   function ctxNow(){ return {pad:PAD,bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
-  const probePts=new Float32Array(128), droneArr=new Float32Array(32);
+  const probePts=new Float32Array(128), droneArr=new Float32Array(32), qPts=new Float32Array(128);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
   window.__eval=(js)=>eval(js);   // remote debugging: a direct eval inside this closure sees player, selves, bd, world, AUDIO, SIM ...
   window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
@@ -251,6 +251,7 @@
       else { player.stamina=Math.max(0,player.stamina-effort*0.0045); if(effort<0.1) player.stamina=Math.min(1,player.stamina+0.005*(heat<0?2:1)); if(player.stamina<=0.02){ player.dissoc=150; AUDIO.tone(180,60,1.2,'sine',0.05); } }
       const st=player.stamina; bd.swim*=0.35+0.65*st; bd.push*=0.35+0.65*st; bd.coh*=0.6+0.4*st;
       if(st<0.6){ const g=1-st/0.6; bd.tint=[0.55,0.55,0.6,Math.max(bd.tint?bd.tint[3]:0,0.5*g)]; } }
+    if(IDENT.tick) IDENT.tick(ctxNow());   // the identity model's CPU half (parts: the burden of carrying another wisp's parts), after stamina so it is not refilled the same tick
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
     if(alive){
@@ -277,6 +278,7 @@
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
+    { let k=0; const put=(cx,cy)=>{ for(let gy=0;gy<5;gy++) for(let gx=0;gx<6;gx++){ qPts[k*2]=cx+(gx-2.5)*5; qPts[k*2+1]=cy+(gy-2)*5; k++; } }; put(player.x,player.y); const o=selves.find(s=>s.live&&s.npc); put(o?o.x:-999,o?o.y:-999); SIM.qpts=qPts; }   // identity probe: a 6x5 grid, 5 cells apart, round you (slots 0..29) and round the other wisp (30..59)
     SIM.probe(probePts,64);
     updateSelves(red);
     player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
@@ -347,6 +349,7 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
+    if(IDENT.hud) IDENT.hud(ctxNow(),c);
     // until iOS lets the sound start (it needs a touch release), say so
     if(!AUDIO.muted&&(touchLog.length>0||Object.keys(keys).length>0)&&(!AUDIO.ctx||AUDIO.ctx.state!=='running')){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='center'; c.textBaseline='bottom'; c.fillStyle='rgba(255,255,255,0.45)'; c.fillText('tap once for sound',sw/2,sh-(26+(window.safeBottom||0))*s); c.textAlign='left'; c.textBaseline='top'; }
     // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
@@ -454,7 +457,14 @@
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
-        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
+        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; },
+      measureQ:()=>{ // identity state of each body from the 6x5 q grid round it (call after measure(), which refreshes the probe): self-weighted mean q.xyz over the cells the model gives that body, its core (r<6) against its edge (self<0.4), the mass in each grid the model gives the other wisp, and the fraction of each body's cells whose strongest role is protector / manager / exile (>0.3) or none
+        const q=SIM.probeBuf3, s=SIM.probeBuf3s; const r3=v=>+v.toFixed(3);
+        const body=(g,mine)=>{ const m=[0,0,0],core=[0,0,0],edge=[0,0,0],role=[0,0,0,0]; let mw=0,cw=0,ew=0,oth=0; for(let i=g*30;i<g*30+30;i++){ const sv=s[i*4]; if(sv<=0.01) continue; const own=Math.round(s[i*4+2]); if(own!==mine){ oth+=sv; continue; } const r=Math.hypot(i%6-2.5,((i/6)|0)%5-2)*5; mw+=sv; for(let c=0;c<3;c++) m[c]+=sv*q[i*4+c]; if(r<6){ cw+=sv; for(let c=0;c<3;c++) core[c]+=sv*q[i*4+c]; } if(sv<0.4){ ew+=sv; for(let c=0;c<3;c++) edge[c]+=sv*q[i*4+c]; }
+            let best=3,bv=0.3; for(let c=0;c<3;c++){ if(q[i*4+c]>bv){ bv=q[i*4+c]; best=c; } } role[best]+=sv; }
+          const mean=(a,w)=>w>0?a.map(v=>v/w):null; return {m:mean(m,mw),core:mean(core,cw),edge:mean(edge,ew),oth:+(oth*25).toFixed(0),w:+(mw*25).toFixed(0),role:mw>0?role.map(v=>r3(v/mw)):null}; };
+        const dist=(a,b)=>a&&b?r3(Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])):null; const A=body(0,0), B=body(1,SIM.npcK);
+        return {d:dist(A.m,B.m),q0:A.m&&A.m.map(r3),qn:B.m&&B.m.map(r3),e0:dist(A.core,A.edge),en:dist(B.core,B.edge),othIn:A.oth,mineIn:B.oth,w0:A.w,wn:B.w,role0:A.role,rolen:B.role,burden:player.burden}; } };
     const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
     document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
   } else
