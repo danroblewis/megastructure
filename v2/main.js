@@ -204,15 +204,17 @@
     // dead alcoves: when you are in one, its interior is probed for the ore your cells carry; what they deposit repairs it
     const alc=world.checkpoints.find(c=>c.dead&&Math.abs(c.x-player.x)<c.w/2+10&&Math.abs(c.y-player.y)<c.h/2+10)||null;
     if(alc){ let k=40; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=alc.x-alc.w/2+(gx+0.5)*alc.w/6; probePts[k*2+1]=alc.y-alc.h/2+(gy+0.5)*alc.h/4; k++; } }
-    else if(HASH.test){ let k=40; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=player.x-9+(gx+0.5)*3; probePts[k*2+1]=player.y-6+(gy+0.5)*3; k++; } }   // test: a grid round the body for its total load
+    else { let k=40; const sp=BODY.rnear*0.5; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=player.x-3*sp+(gx+0.5)*sp; probePts[k*2+1]=player.y-2*sp+(gy+0.5)*sp; k++; } }   // a grid round the body for its total load (carried ore)
     const [pb,pb2,red]=SIM.collect();
+    if(!alc){ let sum=0; for(let k=40;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const sp=BODY.rnear*0.5; player.carried=sum*sp*sp; }   // ore carried, from the grid round the body
     if(alc&&player.alc===alc){ let sum=0; for(let k=40;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const inside=sum*(alc.w*alc.h)/24; const dep=inside*0.04*steps; alc.repair=(alc.repair||0)+dep; player.depositing=dep>0.02*MK;
       if(player.depositing&&SIM.frame%20===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*4,0.012,0,0.4,'sine');
       if(alc.repair>=REPAIR_NEED) repairAlcove(alc); } else player.depositing=false;
     player.alc=alc; bd.alcove=alc?[alc.x-alc.w/2,alc.y-alc.h/2,alc.x+alc.w/2,alc.y+alc.h/2]:[0,0,0,0];
     // a few words the first time something new happens
     if(player.hintT>0) player.hintT--;
-    if(!player.hintedOre&&pb2[1]>0.12){ player.hintedOre=true; player.hint='gold ore · carry it to a dark alcove'; player.hintT=420; }
+    if(!player.hintedOre&&(player.carried||0)>2*MK){ player.hintedOre=true; player.hint='gold ore · carry it to the dark alcove'; player.hintT=420; }
+    { const c=player.carried||0; if(c>(player.carriedPrev||0)+0.4*MK&&SIM.frame%12===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*6,0.012,0,0.25,'sine'); player.carriedPrev=c; }
     if(alc&&player.depositing&&!player.hintedDep){ player.hintedDep=true; player.hint='repairing'; player.hintT=240; }
     if(alc&&!alc.dead&&alc.repairedAt&&SIM.frame-alc.repairedAt<2&&!player.hintedRep){ player.hintedRep=true; player.hint='the alcove is cold again · it remembers you now'; player.hintT=420; }
     if(player.charged===1&&!player.hintedOrb){ player.hintedOrb=true; player.hint='charged · these cells swim hard for a while'; player.hintT=360; }
@@ -269,7 +271,7 @@
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
-    SIM.probe(probePts,(alc||HASH.test)?64:n);
+    SIM.probe(probePts,64);
     updateSelves(red);
     player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
     if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
@@ -320,9 +322,10 @@
     if(AUDIO.ctx&&AUDIO.beat&&performance.now()-AUDIO.beat>1500&&!AUDIO.muted){ AUDIO.beat=performance.now(); AUDIO.panic('stale voices'); }
     AUDIO.lastFrame=performance.now();
     const vw=sw/zoom, vh=sh/zoom;
-    { const jx=player.x-(cam.fx===undefined?player.x:cam.fx), jy=player.y-(cam.fy===undefined?player.y:cam.fy); const jd=Math.hypot(jx,jy);
+    let fx=player.x, fy=player.y; if(NPC&&selves[2].live&&selves[2].npc&&NPC.dist<BODY.rnear*2){ const m0=Math.max(1,player.mass), m2=Math.max(1,selves[2].mass); fx=(player.x*m0+selves[2].x*m2)/(m0+m2); fy=(player.y*m0+selves[2].y*m2)/(m0+m2); }
+    { const jx=fx-(cam.fx===undefined?fx:cam.fx), jy=fy-(cam.fy===undefined?fy:cam.fy); const jd=Math.hypot(jx,jy);
       if(jd>20&&!player.camSnap&&window.REPORT&&(cam.rep=(cam.rep||0)+1)<=12) REPORT('camjump',`centroid jumped ${jd.toFixed(0)} cells`,null,{from:[cam.fx|0,cam.fy|0],to:[player.x|0,player.y|0],selves:selves.map(s=>({live:s.live,m:+s.mass.toFixed(1),x:s.x|0,y:s.y|0,age:s.age,lowN:s.lowN})),lowT:player.lowT,lock:player.switchLock,dead:player.dead,far:SIM.red.far&&[SIM.red.far.d|0,SIM.red.far.x|0,SIM.red.far.y|0],tr:cam.rep<=3?TR.slice():undefined});
-      const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead||player.camSnap){ cam.fx=player.x; cam.fy=player.y; if(player.camSnap){ player.camSnap=false; camX=player.x-vw/2; camY=player.y-vh/2; } } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
+      const maxStep=2.5*Math.max(1,steps); if(cam.fx===undefined||jd<=maxStep||player.dead||player.camSnap){ cam.fx=fx; cam.fy=fy; if(player.camSnap){ player.camSnap=false; camX=player.x-vw/2; camY=player.y-vh/2; } } else { cam.fx+=jx/jd*maxStep; cam.fy+=jy/jd*maxStep; } }
     const tx=cam.fx-vw/2, ty=cam.fy-vh*(PAD?0.40:0.5);   // on a touch screen the body rides high so the thumb has the lower part
     camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;
     camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
@@ -344,6 +347,7 @@
     { const bars=[]; if(!player.dead&&player.stamina!==undefined){ const st=player.dissoc>0?0:player.stamina; if(st<0.97||player.dissoc>0) bars.push({v:st,col:player.dissoc>0?'rgba(160,160,170,0.8)':st<0.3?'rgba(255,150,120,0.85)':'rgba(220,235,255,0.7)'}); }
       if(SCHEME.name==='attention'&&SCHEME.st&&SCHEME.st.fat>0.03) bars.push({v:1-SCHEME.st.fat,col:'rgba(200,230,255,0.7)'});
       if(player.alc) bars.push({v:(player.alc.repair||0)/REPAIR_NEED,col:'rgba(255,205,110,0.9)'});
+      else if((player.carried||0)>1*MK) bars.push({v:(player.carried||0)/REPAIR_NEED,col:'rgba(255,215,120,0.8)'});   // ore you carry, against what a repair needs
       let by=sh-(14+(window.safeBottom||0))*s; const bw=Math.round(sw*0.28), bx=(sw-bw)/2;
       for(const b of bars){ c.fillStyle='rgba(255,255,255,0.10)'; c.fillRect(bx,by,bw,2*s); c.fillStyle=b.col; c.fillRect(bx,by,bw*Math.max(0,Math.min(1,b.v)),2*s); by-=5*s; } }
     // scheme menu (bottom-right pill; Tab or ` on a keyboard)
@@ -412,7 +416,7 @@
     if(NPC.state==='waiting'){ if(NPC.alc.repairedAt){ NPC.state='going'; NPC.i=0; AUDIO.tone(440,660,0.4,'sine',0.05); } else { const dx=NPC.ax-px, dy=NPC.ay-py; const dd=Math.hypot(dx,dy); if(dd>5) d=[dx/dd*0.6,dy/dd*0.6]; } }
     if(NPC.state==='going'){ const r=followPath(NPC,px,py); if(r){ d=r.d; const le=NPC.legEnds.find(e=>e[0]>=NPC.i-6&&!NPC.rested.has(e[1])); if(le&&NPC.i>=le[0]-6){ if(NPC.restT<300){ NPC.restT++; d=[0,0]; } else { NPC.rested.add(le[1]); NPC.restT=0; } }
         if(NPC.i>=NPC.full.length-8){ NPC.state='gone'; s.npc=false; pushCentres(); } } }
-    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=0.05*Math.max(0,1-s.mass/BODY.massMax); }
+    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=0.05*Math.max(0,1-s.mass/BODY.massMax); bd.friend=NPC.state==='friend'?1:0; }
   // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
   const BOT=HASH.bot? {on:true,path:null,i:+HASH.boti||0,arrivals:[],lastCp:-1,t0:0} : {on:false};

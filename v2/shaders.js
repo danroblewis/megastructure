@@ -168,6 +168,7 @@ uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
 uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
+uniform float uFriend;                                // 1 when the other wisp is your friend: its cells follow your attention too
 uniform float uDense;                                 // preferred density of the self
 uniform vec3 uApp;                                    // appetites: drift up (+) or down (-) the gradients of heat, fuel, cold
 uniform float uJet;                                   // how much harder fast gas grips matter
@@ -199,7 +200,7 @@ void main(){
   home*=max(0.0,1.0-here);
   int ki=nearestI(vec2(p)+0.5);
   vec2 drive=uDirs[ki];
-  if(ki==0 && uSpot.w>0.0){ vec2 to=uSpot.xy-(vec2(p)+0.5); float dl=length(to); drive= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // every cell its own angle; cells that arrive settle
+  if((ki==0 || (uFriend>0.5 && ki==uNpcK)) && uSpot.w>0.0){ vec2 to=uSpot.xy-(vec2(p)+0.5); float dl=length(to); drive= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // every cell its own angle; cells that arrive settle
   if(ki>0 && ki!=uNpcK){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
@@ -263,7 +264,7 @@ void main(){
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
     float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
   }
-  for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE) ore=true; }
+  for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE||mtype(maskAt(p+E4[k]*2))==M_ORE) ore=true; }
   float st=max(self,0.0);
   vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; int kk=int(nd.y+0.5); bool npc=(kk>0 && kk==uNpcK); bool ghost=kk>0 && !npc;
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
@@ -283,7 +284,7 @@ void main(){
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; }
   if(self<0.003){ lost+=self; self=0.0; }
   if(self<st*0.9 && st>0.0) pay*=self/st;                              // a cell that loses a real part of itself loses that part of its load; ordinary metabolism keeps it
-  if(ore && pay>=0.0) pay=min(self,pay+0.04);                          // touching ore: the cell fills up
+  if(ore && pay>=0.0) pay=min(self,pay+0.07);                          // near ore: the cell fills up
   if(uAlcove.z>uAlcove.x && pay>0.0 && float(p.x)>=uAlcove.x && float(p.x)<=uAlcove.z && float(p.y)>=uAlcove.y && float(p.y)<=uAlcove.w) pay*=0.96;   // inside a dead alcove: deposited
   if(uPick.z>0.0 && distance(vec2(p)+0.5,uPick.xy)<uPick.z) pay=-self*uPick.w;   // a power pickup charges the cells that touch it
   if(pay<0.0) pay*=0.9985;                                            // a charge fades in about ten seconds
