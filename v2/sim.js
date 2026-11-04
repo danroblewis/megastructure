@@ -27,11 +27,12 @@ const SIM={
     this.maskData=maskData; this.Mstatic=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,maskData); this.Mdyn=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE); this.Mfbo=fbo([this.Mdyn]);
     this.probeTex=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo=fbo([this.probeTex]);
     this.probeTex2=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo2=fbo([this.probeTex2]);
+    this.probeTexQ=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFboQ=fbo([this.probeTexQ]); this.probeBufQ=new Float32Array(64*4);
     this.cur=0; this.scur=0;
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),probeQ:prog(SH.probeQ),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -101,6 +102,12 @@ const SIM={
     for(let i=1;i<this.levels.length;i++){ pr=this.P.reduceN; const L=this.levels[i-1]; this.use(pr,{uMask:this.Mdyn,uL0:L.ts[0],uL1:L.ts[1],uL2:L.ts[2],uL3:L.ts[3]}); gl.uniform2i(pr.u.uLRes,L.w,L.h); this.draw(this.levels[i].f,this.levels[i].w,this.levels[i].h); }
   },
   // sample fields at up to 64 points and reduce the body; results are read back asynchronously
+  // identity state (q.xyz) and self at up to 64 points, read back now: a stall, for the lab's measurements only
+  probeQ(points,n){
+    const gl=this.gl; for(let i=0;i<64;i++){ this.pts[i*2]=i<n?points[i*2]:0; this.pts[i*2+1]=i<n?points[i*2+1]:0; }
+    const pr=this.P.probeQ; this.use(pr,{uMask:this.Mdyn,uQ:this.Q[this.bcur],uB:this.B[this.bcur]}); gl.uniform2fv(pr.u.uPts,this.pts); this.draw(this.probeFboQ,64,1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,this.probeFboQ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null); gl.readPixels(0,0,64,1,gl.RGBA,gl.FLOAT,this.probeBufQ); gl.bindFramebuffer(gl.FRAMEBUFFER,null); return this.probeBufQ;
+  },
   // (collect() returns last frame's values, so the GPU never stalls)
   probe(points,n){
     const gl=this.gl; for(let i=0;i<64;i++){ this.pts[i*2]=i<n?points[i*2]:0; this.pts[i*2+1]=i<n?points[i*2+1]:0; }
@@ -143,7 +150,7 @@ const SIM={
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uT,0); gl.uniform2f(pr.u.uDir,1,0); this.draw(this.bloomF[1],bw,bh);
     gl.bindTexture(gl.TEXTURE_2D,this.bloomT[1]); gl.uniform2f(pr.u.uDir,0,1); this.draw(this.bloomF[0],bw,bh);
     pr=this.P.render;
-    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uLight:this.L[this.lcur]});
+    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uQ:this.Q[this.bcur],uLight:this.L[this.lcur]}); gl.uniform1i(pr.u.uIdent,this.ident);
     gl.activeTexture(gl.TEXTURE0+9); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uBloom,9);
     gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); gl.uniform1i(pr.u.uDebug,debug);
     gl.uniform4f(pr.u.uPlayer,player[0],player[1],player[2],player[3]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK);

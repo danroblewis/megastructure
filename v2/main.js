@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='familiarity';   // branch ident-2-familiarity: experiment 2 by default; #ident=centroid is the baseline
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -451,7 +451,16 @@
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
-        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
+        SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; },
+      // identity state of a body: a 7x7 grid (spacing rnear/3) round each live centre, cells with self>0.15, self-weighted means of q
+      // over the whole body, its centre (within rnear/2) and its edge (beyond). for the familiarity model the state is q.z (familiarity) and
+      // q.y (the neighbourhood's change rate); ab is the familiarity difference between the two bodies, ceA/ceB between a body's centre and its edge
+      measureQ:()=>{ const one=(s)=>{ if(!s||!s.live) return null; const sp=BODY.rnear/3; let n=0; for(let gy=-3;gy<=3;gy++) for(let gx=-3;gx<=3;gx++){ probePts[n*2]=s.x+gx*sp; probePts[n*2+1]=s.y+gy*sp; n++; }
+          const q=SIM.probeQ(probePts,n); const acc=(set)=>{ let fz=0, ry=0, w=0; for(const k of set){ const sv=q[k*4+3]; fz+=q[k*4+2]*sv; ry+=q[k*4+1]*sv; w+=sv; } return w>0?{fam:fz/w,rate:ry/w,w}:null; };
+          const all=[],cen=[],edg=[]; for(let k=0;k<n;k++){ if(q[k*4+3]<=0.15) continue; const gx=(k%7)-3, gy=((k/7)|0)-3; const d=Math.hypot(gx,gy)*sp; all.push(k); (d<=BODY.rnear/2?cen:edg).push(k); }
+          return {all:acc(all),cen:acc(cen),edg:acc(edg),n:all.length}; };
+        const A=one(selves[0]), B=one(selves[2]&&selves[2].npc?selves[2]:null); const dist=(a,b)=>a&&b?+Math.abs(a.fam-b.fam).toFixed(2):null; const fam=(a)=>a&&a.all?+a.all.fam.toFixed(2):null; const rate=(a)=>a&&a.all?+a.all.rate.toFixed(4):null;
+        return {ab:A&&B?dist(A.all,B.all):null,ceA:A?dist(A.cen,A.edg):null,ceB:B?dist(B.cen,B.edg):null,famA:fam(A),famB:fam(B),famCA:A&&A.cen?+A.cen.fam.toFixed(2):null,famEA:A&&A.edg?+A.edg.fam.toFixed(2):null,rateA:rate(A),rateB:rate(B),nA:A?A.n:0,nB:B?B.n:0}; } };
     const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
     document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
   } else
