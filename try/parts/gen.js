@@ -1,0 +1,178 @@
+// v2/gen.js — procedural megastructure: chambers, ducts, shafts, machines, sources
+'use strict';
+const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13,ORB:14};
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const GEN={
+  build(W,H,seed){
+    const R=mulberry32(seed); const ri=(a,b)=>a+Math.floor(R()*(b-a+1));
+    const mask=new Uint8Array(W*H*4);
+    const type=new Uint8Array(W*H); type.fill(M.WALL);
+    const set=(x,y,t)=>{ if(x<0||y<0||x>=W||y>=H) return; type[y*W+x]=t; };
+    const rect=(x0,y0,x1,y1,t)=>{ x0=Math.round(x0);y0=Math.round(y0);x1=Math.round(x1);y1=Math.round(y1); for(let y=Math.max(0,Math.min(y0,y1));y<=Math.min(H-1,Math.max(y0,y1));y++) for(let x=Math.max(0,Math.min(x0,x1));x<=Math.min(W-1,Math.max(x0,x1));x++) type[y*W+x]=t; };
+    const disc=(cx,cy,r,t)=>{ for(let y=cy-r;y<=cy+r;y++) for(let x=cx-r;x<=cx+r;x++){ if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r) set(x,y,t); } };
+    const machines=[], cores=[], drones=[], checkpoints=[], rooms=[];
+    const dirs=new Int8Array(W*H*2);
+    const setDir=(x,y,dx,dy)=>{ if(x<0||y<0||x>=W||y>=H) return; dirs[(y*W+x)*2]=dx; dirs[(y*W+x)*2+1]=dy; };
+    // ---- slot grid, snake path ----
+    const cols=Math.max(3,Math.round(W/250)), tiers=Math.max(1,Math.floor(H/330));
+    const sw=W/cols, shh=H/tiers;
+    let idx=0;
+    for(let tier=0;tier<tiers;tier++){
+      for(let k=0;k<cols;k++){
+        const col=(tier%2===0)?k:cols-1-k;
+        const big=R()<0.25;
+        const w=Math.round(sw*(big?0.9:0.55+R()*0.3)), h=Math.round(shh*(big?0.88:0.45+R()*0.4));
+        const sx0=col*sw+12, sx1=(col+1)*sw-12, sy0=tier*shh+14, sy1=(tier+1)*shh-14;
+        const x0=Math.round(sx0+R()*(sx1-sx0-w)), y0=Math.round(sy0+R()*(sy1-sy0-h));
+        rooms.push({x0,x1:x0+w,y0,y1:y0+h,cx:x0+w/2,cy:y0+h/2,big,i:idx++,tier,col});
+      }
+    }
+    for(const r of rooms) rect(r.x0,r.y0,r.x1,r.y1,M.FLUID);
+    // organic reshaping: the walls of each chamber bulge outward and pinch inward with low-frequency noise
+    const noiseTbl=new Float32Array(4096); for(let i=0;i<4096;i++) noiseTbl[i]=R();
+    const vnoise=(x,y)=>{ const xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi; const h=(i,j)=>noiseTbl[((i*73+j*151)&4095+4096)&4095]; const sx=fx*fx*(3-2*fx), sy=fy*fy*(3-2*fy);
+      return (h(xi,yi)*(1-sx)+h(xi+1,yi)*sx)*(1-sy)+(h(xi,yi+1)*(1-sx)+h(xi+1,yi+1)*sx)*sy; };
+    const AMP=14;
+    for(const r of rooms){
+      for(let y=r.y0-AMP-1;y<=r.y1+AMP+1;y++) for(let x=r.x0-AMP-1;x<=r.x1+AMP+1;x++){
+        if(x<4||y<4||x>=W-4||y>=H-4) continue;
+        const dx=Math.max(r.x0-x,0,x-r.x1), dy=Math.max(r.y0-y,0,y-r.y1);
+        const inside=(x>=r.x0&&x<=r.x1&&y>=r.y0&&y<=r.y1);
+        const d= inside? -Math.min(x-r.x0,r.x1-x,y-r.y0,r.y1-y) : Math.hypot(dx,dy);   // signed distance to the rectangle
+        const n=(vnoise(x/46+r.i*7.3,y/46+r.i*3.1)-0.5)*2*AMP + (vnoise(x/16+r.i,y/16)-0.5)*5 + (vnoise(x/5,y/5)-0.5)*1.5;
+        if(d<n){ if(type[y*W+x]===M.WALL) type[y*W+x]=M.FLUID; }
+        else if(inside && d>n+1){ type[y*W+x]=M.WALL; }
+      }
+    }
+    // ---- connections ----
+    const ductLoop=(a,b)=>{ // thin duct with a vent at one end and a drain at the other: permanent current
+      const dh=ri(10,16); const ya=ri(a.y0+8,a.y1-8), yb=ri(b.y0+8,b.y1-8); const left=a.x1<b.x0?a:b, right=left===a?b:a;
+      const yl=left===a?ya:yb, yr=left===a?yb:ya; const mid=Math.round((left.x1+right.x0)/2)+ri(-20,20);
+      rect(left.x1-AMP-4,yl-dh/2,mid+dh/2,yl+dh/2,M.FLUID); rect(mid-dh/2,Math.min(yl,yr)-dh/2,mid+dh/2,Math.max(yl,yr)+dh/2,M.FLUID); rect(mid-dh/2,yr-dh/2,right.x0+AMP+4,yr+dh/2,M.FLUID);
+      const dir=(a.i===0||b.i===0)? (left===a?1:-1) : (R()<0.5?1:-1); const vx=dir>0?left.x1+3:right.x0-3, vy=dir>0?yl:yr, dxx=dir>0?right.x0-3:left.x1+3, dyy=dir>0?yr:yl;
+      for(let k=-dh/2+1;k<dh/2;k++){ set(vx,Math.round(vy+k),M.VENT); setDir(vx,Math.round(vy+k),dir,0); set(dxx,Math.round(dyy+k),M.DRAIN); } };
+    const connectH=(a,b)=>{ // a left of b
+      const ch=ri(24,44); const ya=ri(a.y0+16,a.y1-16), yb=ri(b.y0+16,b.y1-16); const mid=Math.round((a.x1+b.x0)/2);
+      rect(a.x1-AMP-4,ya-ch/2,mid+ch/2,ya+ch/2,M.FLUID); rect(mid-ch/2,Math.min(ya,yb)-ch/2,mid+ch/2,Math.max(ya,yb)+ch/2,M.FLUID); rect(mid-ch/2,yb-ch/2,b.x0+AMP+4,yb+ch/2,M.FLUID);
+      { // the way forward is a current: vent at the earlier chamber's mouth, drain on the far wall of the later one
+        const fwd=a.i<b.i; const e=fwd?a:b, l=fwd?b:a; const my=fwd?ya:yb; const vx=fwd?a.x1+2:b.x0-2; const dir=fwd?1:-1;
+        for(let k=-ch/2+3;k<=ch/2-3;k++){ set(vx,Math.round(my+k),M.VENT); setDir(vx,Math.round(my+k),dir,0); }
+        const dx=fwd?l.x1:l.x0; for(let k=-6;k<=6;k++) set(dx,Math.round(l.cy+k*2),M.DRAIN); }
+      if(R()<0.65 && a.i>=6 && b.i>=6) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
+      if(R()<0.4 && a.i>=3 && b.i>=3) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
+      if(R()<0.7) ductLoop(a,b); };
+    const connectV=(a,b)=>{ // a above b (any x relation)
+      const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
+      rect(xa-ch/2,a.y1-AMP-4,xa+ch/2,mid+ch/2,M.FLUID); rect(Math.min(xa,xb)-ch/2,mid-ch/2,Math.max(xa,xb)+ch/2,mid+ch/2,M.FLUID); rect(xb-ch/2,mid-ch/2,xb+ch/2,b.y0+AMP+4,M.FLUID);
+      { const fwd=a.i<b.i; const l=fwd?b:a; const vy=fwd?a.y1+2:b.y0-2, mx=fwd?xa:xb, dir=fwd?1:-1;
+        for(let k=-ch/2+3;k<=ch/2-3;k++){ set(Math.round(mx+k),vy,M.VENT); setDir(Math.round(mx+k),vy,0,dir); }
+        const dy=fwd?l.y1:l.y0; for(let k=-6;k<=6;k++) set(Math.round(l.cx+k*2),dy,M.DRAIN); }
+      if(a.i>=6 && b.i>=6) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
+    for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
+    // cross-tier shortcut ducts (loops): vertically adjacent slots
+    for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1-AMP-4,x+dh/2,b.y0+AMP+4,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
+    // ---- room furniture ----
+    for(const r of rooms){
+      const w=r.x1-r.x0, h=r.y1-r.y0;
+      const nG=Math.round(w*h/7000);
+      for(let k=0;k<nG;k++){ const gx=ri(r.x0+10,r.x1-50), gy=ri(r.y0+15,r.y1-15), gl=ri(30,Math.min(130,r.x1-gx-5)); rect(gx,gy,gx+gl,gy+2,M.WALL); if(R()<0.35) rect(gx+gl/2-1,gy,gx+gl/2+1,Math.min(r.y1,gy+ri(12,30)),M.WALL); if(R()<0.2) rect(gx+gl/2-1,Math.max(r.y0,gy-ri(12,30)),gx+gl/2+1,gy,M.WALL); }
+      if(R()<0.5){ const px=ri(r.x0+30,r.x1-30); rect(px-4,r.y0,px+4,r.y1,M.WALL); rect(px-4,r.cy-22,px+4,r.cy+22,M.FLUID); rect(px-4,r.y1-34,px+4,r.y1-6,M.FLUID); if(R()<0.6) rect(px-4,r.y0+6,px+4,r.y0+30,M.FLUID); }
+      // side chambers with a core inside
+      const nSide=ri(0,2);
+      for(let k=0;k<nSide;k++){ const top=R()<0.5; const cw=ri(30,70), chh=ri(20,50); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0<4||y1>H-4) continue; rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+ri(6,cw-6); rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); cores.push({x:cx0+cw/2,y:(y0+y1)/2}); if(R()<0.5 && r.i>=3){ rect(cx0,top?y0-2:y1,cx0+cw,top?y0:y1+2,(R()<0.5||r.i<6)?M.FUEL:M.SPORE); } }
+      // cross vents + opposite drains
+      if(R()<0.8){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
+      if(R()<0.55){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
+      // sources, by progression: the first chambers teach heat and cold; fire comes next; the organism last
+      const role= r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();
+      if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
+      else if(role<0.6){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
+      else if(role<0.78 && r.i>=6){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
+      else { const c2=ri(r.x0+10,r.x1-40); rect(c2,r.y0-3,c2+ri(15,40),r.y0,M.COOLER); const bx=ri(r.x0+10,r.x1-40); rect(bx,r.y1,bx+ri(8,18),r.y1+3,M.BURNER); }
+      // machines inside
+      if(r.i<3){ }
+      else if(r.big && r.i>=6){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
+        for(let k=0;k<ri(1,3);k++) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(10,22),len:ri(30,90),speed:0.01+R()*0.02,phase:R()*6.28}); }
+      else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=6) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
+      const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
+      if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
+      { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-5,top?y1:r.y1-AMP-4,dx+5,top?r.y0+AMP+4:y0,M.FLUID); const dead=r.i>0&&checkpoints.length%3===1; const CT=dead?M.DEAD:M.COOLER; const rects=[[cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3],[cx0-3,y0,cx0,y1],[cx0+cw,y0,cx0+cw+3,y1]]; for(const q of rects) rect(q[0],q[1],q[2],q[3],CT); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh,dead,room:r.i,rects}); } }   // the cold room: where you condense, and where you are remembered. every third one is dead and must be repaired with ore
+    }
+    // ore: a deposit in the chamber of the cold room before each dead one, so the resource is found on the way
+    // two deposits for each dead alcove, one in the chamber before it and one in its own chamber, long enough to be seen
+    for(let k=1;k<checkpoints.length;k++){ if(!checkpoints[k].dead) continue; for(const pr of [rooms[checkpoints[k-1].room],rooms[checkpoints[k].room]]){ const len=ri(28,44); const ox=ri(pr.x0+15,Math.max(pr.x0+16,pr.x1-15-len)); rect(ox,pr.y0-3,ox+len,pr.y0,M.ORE);   /* ceilings only: burners live on floors and would cook the cells at the bar */ if(!checkpoints[k].ore) checkpoints[k].ore={x:ox+len/2,y:pr.cy}; } }
+    const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
+    const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(type[i]===M.FLUID && type[i-1]===M.WALL&&type[i+1]===M.WALL&&type[i-W]===M.WALL&&type[i+W]===M.WALL) type[i]=M.WALL; }
+    // bake source influence: which source blocks lie within ~3 cells of each fluid cell
+    const src=new Uint8Array(W*H*4);
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const t=type[y*W+x]; if(t<5||t>8) continue; const ch=t-5;
+      for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){ if(dx*dx+dy*dy>10) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; src[(ny*W+nx)*4+ch]=255; } }
+    // vents and drains buried by the organic reshaping are moved to the real wall face so they actually breathe
+    const openN=(x,y)=>{ for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const t=type[ny*W+nx]; if(t===M.FLUID||t===M.CHECK||t===M.EXIT||t===M.GRATE) return true; } return false; };
+    const moves=[];
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const t=type[y*W+x]; if((t!==M.VENT&&t!==M.DRAIN)||openN(x,y)) continue;
+      let dx=dirs[(y*W+x)*2], dy=dirs[(y*W+x)*2+1]; const cand=(dx||dy)?[[dx,dy]]:[[1,0],[-1,0],[0,1],[0,-1]];
+      let placed=null;
+      for(const [cx,cy] of cand){ for(let k=1;k<=30;k++){ const nx=x+cx*k, ny=y+cy*k; if(nx<1||ny<1||nx>=W-1||ny>=H-1) break; if(type[ny*W+nx]===M.FLUID){ placed=[nx-cx,ny-cy]; break; } } if(placed) break; }
+      moves.push([x,y,placed,t,dx,dy]); }
+    for(const [x,y,p,t,dx,dy] of moves){ type[y*W+x]=M.WALL; if(p){ type[p[1]*W+p[0]]=t; dirs[(p[1]*W+p[0])*2]=dx; dirs[(p[1]*W+p[0])*2+1]=dy; } }
+    for(let i=0;i<W*H;i++){ mask[i*4]=type[i]; mask[i*4+1]=Math.round((dirs[i*2]*0.5+0.5)*255); mask[i*4+2]=Math.round((dirs[i*2+1]*0.5+0.5)*255); mask[i*4+3]=255; }
+    return {W,H,mask,src,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
+  },
+  // the same world at 1/f resolution: structure, machines and markers all scaled; sources and vents survive the coarsening
+  downsample(w,f){
+    const W=Math.floor(w.W/f), H=Math.floor(w.H/f); const type=new Uint8Array(W*H), mask=new Uint8Array(W*H*4), src=new Uint8Array(W*H*4);
+    const pri=t=>t===2||t===3?6 : (t>=5&&t<=8)||t===12||t===13?5 : t===4?4 : t===1?3 : t===9||t===10||t===14?2 : 0;   // what wins when cells merge
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      let best=0,bp=-1,g=128,b=128,solid=0,n=0; const s4=[0,0,0,0];
+      for(let dy=0;dy<f;dy++) for(let dx=0;dx<f;dx++){ const sx=x*f+dx, sy=y*f+dy; const i=sy*w.W+sx; const t=w.type[i]; n++; if(t===1||(t>=5&&t<=8)||t===12||t===13) solid++; const p=pri(t); if(p>bp){ bp=p; best=t; g=w.mask[i*4+1]; b=w.mask[i*4+2]; } for(let c=0;c<4;c++) s4[c]=Math.max(s4[c],w.src[i*4+c]); }
+      if(best===1 && solid<n) best=0;   // a passage survives coarsening; only fully solid blocks stay wall
+      const j=y*W+x; type[j]=best; mask[j*4]=best; mask[j*4+1]=g; mask[j*4+2]=b; mask[j*4+3]=255; for(let c=0;c<4;c++) src[j*4+c]=s4[c]; }
+    const sc=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==='number'&&['x','y','r','w','h','len','x0','x1','y0','y1','cx','cy'].includes(k)?v/f:v]));
+    return {W,H,mask,src,type,machines:w.machines.map(sc),cores:[],drones:[],checkpoints:w.checkpoints.map(c=>Object.assign(sc(c),{rects:c.rects&&c.rects.map(q=>q.map(v=>Math.round(v/f))),ore:c.ore&&sc(c.ore)})),rooms:w.rooms.map(sc),spawn:sc(w.spawn),exit:sc(w.exit),jet:w.jet&&sc(w.jet)};
+  },
+  // machine quads for this frame: returns Float32Array of [x,y,vx,vy,type] per vertex (6 per quad)
+  machineQuads(machines,t,out,H){ H=H||1024;
+    let n=0; const push=(x,y,vx,vy,tp)=>{ out[n++]=x; out[n++]=y; out[n++]=vx; out[n++]=vy; out[n++]=tp; };
+    const quad=(cx,cy,ux,uy,hl,hw,vcx,vcy,om,tp)=>{ // oriented box: centre, unit axis, half length, half width; velocity = linear + omega x r
+      const px=-uy, py=ux; const c=[[cx+ux*hl+px*hw,cy+uy*hl+py*hw],[cx-ux*hl+px*hw,cy-uy*hl+py*hw],[cx-ux*hl-px*hw,cy-uy*hl-py*hw],[cx+ux*hl-px*hw,cy+uy*hl-py*hw]];
+      const v=c.map(([x,y])=>[vcx-om*(y-cy)*0.0+0, vcy+0]); // filled below
+      const vel=(x,y)=>[vcx+(-om*(y-cy)), vcy+(om*(x-cx))];
+      const idx=[0,1,2,0,2,3]; for(const k of idx){ const [x,y]=c[k]; const [vx,vy]=vel(x,y); push(x,y,vx,vy,tp); } };
+    for(const m of machines){
+      if(m.kind==='fan'){ const a=m.phase+t*m.omega; for(let b=0;b<m.blades;b++){ const ang=a+b*Math.PI*2/m.blades; quad(m.x,m.y,Math.cos(ang),Math.sin(ang),m.r,2.2,0,0,m.omega,M.MOVING); } quad(m.x,m.y,1,0,3,3,0,0,0,M.MOVING); }
+      else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5); const ext=ph*m.len; const dirY = m.y<=H/2? 1 : -1; // extends into room
+        const vy=Math.cos(m.phase+t*m.speed)*0.5*m.len*m.speed*dirY; const cy=m.y+dirY*ext/2; quad(m.x,cy,0,1,ext/2+1,m.w/2,0,vy,0,M.MOVING); }
+      else if(m.kind==='door'){ const open=(Math.sin(m.phase+t*2*Math.PI/m.period)>0.2); if(!open){ quad(m.x,m.y,0,1,m.h/2,m.w/2,0,0,0,M.MOVING); } }
+    }
+    return n/5;
+  },
+};
+  // the required route (spawn -> every cold room -> exit) is widened so the body fits: plain wall within r of any
+// route cell becomes fluid. the lattice elsewhere is untouched, so side passages may still be tight squeezes.
+GEN.widenRoute=function(w,paths,r){ const {W,H,type,mask}=w; const r2=r*r; let n=0; const seen=new Uint8Array(W*H);
+  for(const path of paths){ if(!path) continue; for(const [px,py] of path){ for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<1||yy>=H-1) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<1||xx>=W-1) continue; const i=yy*W+xx; if(seen[i]) continue; seen[i]=1; if(type[i]===M.WALL||type[i]===M.DRAIN){ type[i]=M.FLUID; mask[i*4]=0; mask[i*4+1]=128; mask[i*4+2]=128; n++; } /* drains erase the body, so none may sit on the required route */ } } } }
+  return n; };
+// vents near the required route blow along it, and so does any vent whose jet would land on the route (the ray along its
+// direction reaches a route cell within 60 cells before a wall): the way you must go is a downstream way. side ducts keep their winds.
+GEN.alignRoute=function(w,paths,r,ray){ ray=ray||60; const {W,H,type,mask}=w; const r2=r*r; let n=0; const tang=new Map();
+  for(const path of paths){ if(!path) continue; for(let k=0;k<path.length;k++){ const a=path[Math.max(0,k-6)], b=path[Math.min(path.length-1,k+6)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; const [px,py]=path[k]; const i=py*W+px; if(!tang.has(i)) tang.set(i,[tx/tl,ty/tl]); } }
+  const solid=t=>t===1||(t>=5&&t<=8)||t===12||t===13;
+  const setDir=(i,tx,ty)=>{ const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(ox*tx+oy*ty>=0.5) return; mask[i*4+1]=Math.round((tx*0.5+0.5)*255); mask[i*4+2]=Math.round((ty*0.5+0.5)*255); n++; };
+  // 1. vents within r of a route cell take that cell's tangent
+  const done=new Uint8Array(W*H);
+  for(const [i,t] of tang){ const px=i%W, py=(i/W)|0; for(let dy=-r;dy<=r;dy++){ const yy=py+dy; if(yy<0||yy>=H) continue; for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r2) continue; const xx=px+dx; if(xx<0||xx>=W) continue; const j=yy*W+xx; if(done[j]||type[j]!==M.VENT) continue; done[j]=1; setDir(j,t[0],t[1]); } } }
+  // 2. any other vent whose jet lands on the route takes the tangent where it lands
+  for(let i=0;i<W*H;i++){ if(type[i]!==M.VENT||done[i]) continue; const ox=(mask[i*4+1]/255-0.5)*2, oy=(mask[i*4+2]/255-0.5)*2; if(Math.hypot(ox,oy)<0.5) continue; const x0=i%W, y0=(i/W)|0;
+    for(let k=2;k<=ray;k++){ const qx=Math.round(x0+ox*k), qy=Math.round(y0+oy*k); if(qx<0||qy<0||qx>=W||qy>=H) break; const j=qy*W+qx; if(solid(type[j])) break;
+      let t=null; for(let dy=-2;dy<=2&&!t;dy++) for(let dx=-2;dx<=2&&!t;dx++){ const tt=tang.get((qy+dy)*W+qx+dx); if(tt) t=tt; } if(t){ done[i]=1; setDir(i,t[0],t[1]); break; } } }
+  return n; };
+// power pickups: discs of ORB cells in open spots along the chained route, one every `spacing` route cells.
+// cells that touch one are charged (negative payload): they swim harder and are carried less for about ten seconds.
+GEN.placeOrbs=function(w,legs,spacing,r){ const {W,H,type}=w; const orbs=[]; let full=[]; for(const l of legs){ if(l) full=full.concat(l); }
+  const solid=t=>t===1||t===3||(t>=5&&t<=8)||t===12||t===13; const clear=(x,y,rr)=>{ for(let dy=-rr;dy<=rr;dy++) for(let dx=-rr;dx<=rr;dx++){ const xx=x+dx, yy=y+dy; if(xx<1||yy<1||xx>=W-1||yy>=H-1||solid(type[yy*W+xx])) return false; } return true; };
+  let next=spacing*0.6; for(let k=0;k<full.length;k++){ if(k<next) continue; const [x,y]=full[k]; if(!clear(x,y,r+3)) continue; for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy<=r*r) type[(y+dy)*W+x+dx]=M.ORB; } orbs.push({x,y,r}); next=k+spacing; }
+  for(let i=0;i<W*H;i++){ if(type[i]===M.ORB){ w.mask[i*4]=M.ORB; } }
+  return orbs; };
+if(typeof module!=='undefined') module.exports={GEN,M};
