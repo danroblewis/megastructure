@@ -40,8 +40,10 @@ int ownerK(vec4 q, vec2 pp){ return q.w>0.5 ? 0 : nearestOther(pp); }
 // q.y  bond: what has come back is kept and strengthened. a return after an excursion raises it; it relaxes toward 0.5 at home over a minute.
 // q.z  patience: the window in seconds. learned from the cell's own returns (toward twice the excursion it waited through) and shared with its
 //      neighbours, so a body learns together how long to wait. drifts back to 2 s. below 0.5 means "never set" (a cell grown this substep).
-// q.w  home: 1 you, 0 another. set when a cell is grown (from the cells that grew it); changed only when a cell has given up on returning
-//      (away past its window, or home out of reach beyond uRfar) while sitting inside another body's home: it is adopted there, weak (bond 0.2).
+// q.w  home: 1 you, 0 another. a conserved label carried by the matter: the body pass moves it with the mass (upwind flux and diffusion,
+//      mass-weighted), so matter that flows into a cell brings its home with it. set when a cell is grown (from the cells that grew it); settles
+//      toward the body it sits in only where no other body's home overlaps; changed otherwise only when a cell has given up on returning (away
+//      past its window, or home out of reach beyond uRfar) while sitting inside another body's home: it is adopted there, weak (bond 0.2).
 //      a cell that gives up anywhere else fades (identKeep) even inside uRfar. nearness alone never changes q.w: the other wisp's cells that
 //      wander into you and leave again within their window were never yours.
 const float RET_DT=1.0/180.0;      // one substep in seconds (the fixed rate on desktop; a phone's 120 Hz makes every window 1.5x longer)
@@ -54,7 +56,9 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
     vec2 pp=vec2(p)+0.5; bool mine=q.w>0.5;
     if(dc<uRnear){                                              // home
       if(q.x>=0.15){ float a=q.x; q.y=min(1.0,q.y+0.3*clamp(a/q.z,0.2,1.0)); q.z=mix(q.z,clamp(2.0*a,1.0,6.0),0.3); }   // a return: kept and strengthened; the window learns how long returns take
-      q.x=0.0; q.y=mix(q.y,0.5,0.02*RET_DT); }
+      q.x=0.0; q.y=mix(q.y,0.5,0.02*RET_DT);
+      float dOth=1e9; for(int j=0;j<3;j++){ if(j<uCN && (j==0)!=mine) dOth=min(dOth,distance(pp,uC[j])); }
+      if(dOth>=uRnear) q.w=mix(q.w, mine?1.0:0.0, 0.02); }      // among your own (inside no other body's home) a mixed label settles; inside an overlap it is only carried
     else { q.x+=RET_DT*(dc>uRfar?4.0:1.0);
       bool other=(kk==0)!=mine; float dn=distance(pp,uC[kk]);
       if(other && dn<uRnear && (retLate(q)>=1.0 || dc>uRfar)){ q.w= kk==0?1.0:0.0; q.x=0.0; q.y=0.2; } }   // given up, and at another body's home: adopted there, a stranger
@@ -313,13 +317,15 @@ void main(){
   float pay=texelFetch(uB,p,0).w; float w0=pay; bool ore=false;
   vec2 v0=texelFetch(uBV,p,0).xy;
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
+  float mKeep=s0, mIn=0.0, wIn=0.0;                  // return model: mass kept, mass received, and the home label the received mass carries
   for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(!fluidAt(q)) continue;
     float sq=texelFetch(uB,q,0).x; vec2 vq=texelFetch(uBV,q,0).xy;
     float vf=dot(0.5*(v0+vq),vec2(E4[k]));          // velocity across the face, positive = leaving p
     float flux= vf>0.0? vf*s0 : vf*sq;                // upwind
     self-=flux;
-    self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
+    float dif=0.03*(sq-s0); self+=dif;                // symmetric exchange: conservative diffusion
     float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
+    if(uIdent==7){ float lq=texelFetch(uQ,q,0).w; if(flux>0.0) mKeep-=flux; else { mIn-=flux; wIn-=flux*lq; } if(dif>0.0){ mIn+=dif; wIn+=dif*lq; } else mKeep+=dif; }   // the label travels with the mass, not with the cell
   }
   // near ore: any ore cell within a 9x9 window (the attention point lets cells settle a few cells short of a bar, so reach must be generous)
   for(int dy=-4;dy<=4&&!ore;dy++) for(int dx=-4;dx<=4;dx++){ if(mtype(maskAt(p+ivec2(dx,dy)))==M_ORE){ ore=true; break; } }
@@ -353,6 +359,7 @@ void main(){
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
   // identity state: carried with the matter like exposure, then updated by the identity model
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
+  if(uIdent==7){ float mk=max(mKeep,0.0); q.w= mk+mIn>0.0? (mk*q0.w+wIn)/(mk+mIn) : q0.w; }   // return: home is a conserved label carried by the matter (mass-weighted), not carried by the cell
   q=identUpdate(q,self,v0b,dc,kkNear,sp,dr,p);
   if(s0<=0.003 && self>0.0){ // a new cell belongs to whoever grew it: the allegiance of the neighbours that fed it (not the nearest centre, which let one wisp's growth feed the other without limit)
     float ws=0.0, ss=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; ws+=texelFetch(uQ,qq,0).w*sn; ss+=sn; } q.w= ss>0.0? ws/ss : (kkNear==0?1.0:0.0); }

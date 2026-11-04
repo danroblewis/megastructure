@@ -203,3 +203,89 @@ with the same problem. So the friend needs a problem of its own that it can over
 story as it happens, and a way for the player to help that is not doing it for them. Never a lesson that leaving a bad
 entanglement kills the other: the friend now regrows and returns. Experiments 3 (commitment, rejected as prescriptive)
 and 11 (statuses: diffusion, moratorium, achievement, negative identity as emergent stability) are the Marcia side.
+
+---
+
+## Identity experiment 7: return — 2026-11-04, branch ident-7-return
+
+**The model** (`#ident=return`, uIdent 7; hooks in `v2/shaders.js`, registered in `v2/ident.js`). Identity is what comes back.
+`q.x` seconds a cell has been away from home (home = within rnear of its *own* centre; beyond rfar time runs 4x: there is no
+return from there). `q.y` bond: a cell that returns after an excursion is kept and strengthened (+0.3·min(1, away/window));
+it relaxes toward 0.5 at home over a minute; at home cohesion is ×(0.8+0.5·bond). `q.z` patience: the window (2 s to start),
+learned from the cell's own returns (toward twice the excursion it waited through) and averaged with its neighbours at 0.5/s,
+so a body learns together how long to wait; it drifts back to 2 s. `q.w` home: the baseline allegiance channel kept, but it no
+longer moves by nearness. It is a conserved label carried with the matter: the body pass moves it mass-weighted with the
+upwind flux and the 0.03 diffusion (a gated block in the flux loop), it settles toward the body a cell sits in only where no
+other body's home overlaps, and it changes otherwise only when a cell has given up on returning (away past 1.6× its window, or
+home beyond rfar) while sitting inside another body's home: adopted there, weak (bond 0.2). A cell that gives up anywhere else
+fades at 0.985/substep even inside rfar (new hook `identKeep`, 1.0 for the baseline, one line in the body pass), stops
+answering its drive (`identDrive`) and lets go (`identCohere`); an excursion starts at 0.6× cohesion and tightens to 1.2× as the
+window runs out. Membership (`identWeight`) stays hard by owner. Tint: an excursion darkens toward violet as its window runs
+out; what has come back glows gold. Hook signatures unchanged; `uRnear`/`uRfar` moved into `SH.head`. Lab: `SIM.readBQ()` and
+`ctx.qstat()` put per-body mean q, per-channel Δq, core-vs-edge Δq and the mass of each body inside the other on every row.
+
+**Why the label travels with the mass.** The first run (label fixed to the cell, nearness never touching it) swapped the two
+bodies wholesale: main 155→15 while the other rose to 269 by t=120, then 280 vs 23 by t=360, then dispersal into the jet. The
+body pass exchanges mass label-free (upwind flux plus 0.03 symmetric diffusion, ≈0.45 units/substep across a 30-cell interface,
+≈120 units in 1.5 s), and the baseline only hides that because nearness relabels the matter as it goes. With a sticky label the
+label must be a conserved quantity of the matter, so now it is.
+
+**enmesh2** (`#lab=enmesh2&npc=170,60&warm=300&n=900`): press 2.5 s at 0.7, hold 5 s, pull away 4 s at 0.7, rest.
+
+| t | baseline main/other/dist | return main/other/dist | return: mean (away s, bond, patience s) mine · other | mine in other / other in me |
+|---|---|---|---|---|
+| 30 | 155/156/30 | 155/156/30 | (0.00,0.40,2.00) · (0.00,0.40,2.00) | 0 / 0 |
+| 60 | 115/182/16 | 149/149/15 | (0.00,0.40,1.99) · (0.00,0.40,2.00) | 18 / 0 |
+| 90 | 71/197/8 | 119/132/6 | (0.00,0.40,2.00) · (0.00,0.40,2.00) | 30 / 30 |
+| 120 | 83/181/12 | 138/93/16 | (0.00,0.40,2.00) · (0.00,0.40,1.99) | 4 / 5 |
+| 150 | 133/139/24 | 145/107/30 | (0.00,0.41,1.95) · (0.00,0.40,2.00) | 0 / 0 |
+| 180 | 137/140/26 | 148/116/32 | (0.01,0.41,1.95) · (0.01,0.40,2.00) | 0 / 0 |
+| 240 | 143/139/28 | 149/123/36 | (0.02,0.41,1.96) · (0.04,0.42,1.92) | 0 / 0 |
+| 300 | 143/139/25 | 148/127/33 | (0.01,0.42,1.94) · (0.24,0.42,1.93) | 0 / 0 |
+| 360 | 142/137/21 | 148/123/28 | (0.01,0.43,1.87) · (0.49,0.43,1.91) | 0 / 0 |
+| 420 | 141/133/20 | 147/103/27 | (0.04,0.46,1.77) · (0.34,0.44,1.89) | 0 / 0 |
+| 480 | 139/130/27 | 145/105/19 | (0.02,0.49,1.61) · (0.19,0.45,1.89) | 0 / 0 |
+| 540 | 136/128/62 | 143/114/45 | (0.03,0.50,1.57) · (0.14,0.45,1.89) | 0 / 0 |
+| 600 | 135/129/106 | 141/120/86 | (0.05,0.49,1.58) · (0.10,0.44,1.90) | 0 / 0 |
+| 660 | 100/132/141 | 138/125/130 | (0.04,0.49,1.61) · (0.02,0.44,1.91) | 0 / 0 |
+| 690 | 59/137/145 | 98/128/142 | (0.00,0.49,1.60) · (0.03,0.44,1.91) | 0 / 0 |
+| 720 | 80/141/143 | 111/132/141 | (0.01,0.46,1.71) · (0.01,0.44,1.90) | 0 / 0 |
+| 780 | 118/142/139 | 131/135/139 | (0.02,0.49,1.61) · (0.01,0.44,1.90) | 0 / 0 |
+| 840 | 131/141/137 | 136/135/137 | (0.05,0.47,1.69) · (0.02,0.44,1.90) | 0 / 0 |
+| 900 | 134/140/135 | 137/136/134 | (0.10,0.46,1.73) · (0.01,0.43,1.91) | 0 / 0 |
+
+(The drop at t=660–690 in both runs is the pull-away ending on the box wall at x≈24; both regrow.)
+
+Against the four criteria:
+
+1. **Overlap is normal — produced.** The centres come within 6 (baseline 8) at t=90 with 30 units of each body inside the
+   other; nothing repels. As in the baseline the press carries the player straight through and out the far side (cx 204 vs
+   the other at ~170 by t=150), so the 5 s "hold" is spent 26–36 apart: this model gives no spatial boundary.
+2. **No taking — produced at the end, with a transient.** After parting 137/136 (baseline 134/140). During the passage the
+   other lost 39 while the player gained 19 (t=90→120: 132→93 vs 119→138), i.e. ≈19 units of its matter crossed the interface
+   with a mixed label and stayed; the baseline instead swaps 84 symmetrically and reverses it. Steerability is kept: the
+   centroid moves 13–17 cells per 30 ticks pressing through the other wisp (baseline 10–15) and 20–22 pulling away alone
+   (baseline 20–23); nothing is sluggish.
+3. **Loss is allowed — produced.** At the deepest overlap the pair totals 251 (baseline 268) of 311; after the passage the
+   other's cells displaced out of its home (mean away 0.49–0.51 s, a quarter of its cells on excursion at t=360–390) fade:
+   127→102 over t=330–450 while the player holds 148; it regrows to 136. Reported as loss, not transfer: the player's mass does
+   not rise while it happens.
+4. **Learning together — not produced.** Patience is identical before contact (2.00 vs 2.00) and diverges after: 1.73 vs 1.91
+   at t=900 (Δ 0.18, against a core-vs-edge Δ inside the player of 0.01 at t=900 and 0.23 at t=450). The shared channel only
+   averages where the bodies touch, and the contact was a 1.5 s pass-through; the player's shorter window comes from its own
+   returns while moving, not from the other. Bond: the player's rose 0.40→0.50 (returns, strengthened), the other's 0.40→0.44.
+
+**Tearing, commitment, holding** (`ledge&warm=900`, `commit`, `hold`), return vs the main outcomes table:
+
+| scenario | return | main outcomes table (2026-11-02) | verdict |
+|---|---|---|---|
+| ledge (pressed up against the ledge, lowest rows in the jet, 450 ticks) | 109 at t=30, 78 at t=60 (31 torn in 1 s; no past life formed, the torn matter faded), then the pressed body erodes 78→65 over t=60–420 instead of regrowing: its edge cells have mean away 1.0→5.6 s (core-vs-edge Δaway, never returning, fading inside rfar), bond flat at 0.40; when the press ends it regrows to 133 by t=600 | 68 of 162 torn in 2 s, carried 39 away, faded in ~4 s; the rest held and regrew to 135 | testing the waters still produced (a part is torn, the rest holds); the new cost is that a flattened self's far edges fade while it stays pressed |
+| commit (move into the jet after a second, then let it carry you) | 137 → 111 at t=120 (a part splits, bond 0.20 = adopted stranger, a past life that fades by t=150) → 147–154; carried from x=83 to x=382 by t=600 at mass 132–154; bond 0.45 after the entry (returns), patience 1.76→2.0 | carried ~160 cells at full mass | commitment produced: the whole self rides the jet ~300 cells at full mass |
+| hold (inside the jet, push upstream until tired) | effort 0.98 at t=30, stamina 1.0→0.76 at t=60→0.71 at t=90 while the jet pushes the body out (cy 141→153), then it re-enters and the cycle repeats (effort 0.29–0.40 at t=390–450, stamina 0.78); mass 153→137–142, no scatter, no past lives; bond 0.40→0.46 from the re-entries | effort 0.3–0.4, stamina 1.0→0.72 in 2.5 s, exhaustion scatters | holding is work still produced; exhaustion was not reached because the body is pushed out of the jet before draining |
+
+**What the model does not produce.** No boundary in space: the wisps pass through each other exactly as the baseline, because
+return is a rule about time, not about place; it will only matter in a long entanglement, which enmesh2 does not produce. No
+learning together: the window is shared only through touching neighbours and the contact is too short. And the "never
+returns → fades inside rfar" rule barely fires for the player in this scenario (mean away ≤0.10 s), only for the other wisp's
+displaced cells; the gold/violet tint shows bond and excursions but excursions are rare for a body that keeps moving as one.
+Smoke test `#test=1&n=60&w=1024&h=512&touch=60,0`: title without `Uncaught`, glerr 0, mass 151 (the other 154).
