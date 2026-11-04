@@ -236,7 +236,8 @@
     const effort=Math.min(1,Math.hypot(dirS[0],dirS[1]));
     bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh*(1.0+1.2*(1-effort));
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
-    bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
+    { const live=1+selves.filter((s,i)=>i>0&&s.live).length; bd.total=Math.max(0,1-SIM.red.mass/(BODY.massMax*live*1.15)); }   // growth of any wisp is also capped by the total mass of all of them, so allegiance drifting across bodies cannot create matter without end
+    bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax)*bd.total:0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
@@ -430,7 +431,7 @@
     if(NPC.state==='waiting'){ if(NPC.alc.repairedAt){ NPC.state='going'; NPC.i=0; AUDIO.tone(440,660,0.4,'sine',0.05); } else { const dx=NPC.ax-px, dy=NPC.ay-py; const dd=Math.hypot(dx,dy); if(dd>5) d=[dx/dd*0.6,dy/dd*0.6]; } }
     if(NPC.state==='going'){ const r=followPath(NPC,px,py); if(r){ d=r.d; const le=NPC.legEnds.find(e=>e[0]>=NPC.i-6&&!NPC.rested.has(e[1])); if(le&&NPC.i>=le[0]-6){ if(NPC.restT<300){ NPC.restT++; d=[0,0]; } else { NPC.rested.add(le[1]); NPC.restT=0; } }
         if(NPC.i>=NPC.full.length-8){ NPC.state='gone'; s.npc=false; pushCentres(); } } }
-    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=(0.05+0.12*Math.max(0,1-s.mass/(0.5*BODY.massMax)))*Math.max(0,1-s.mass/BODY.massMax); bd.friend=NPC.state==='friend'?1:0; }   // a thin friend regrows fast
+    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=(0.05+0.12*Math.max(0,1-s.mass/(0.5*BODY.massMax)))*Math.max(0,1-s.mass/BODY.massMax)*(bd.total===undefined?1:bd.total); bd.friend=NPC.state==='friend'?1:0; }   // a thin friend regrows fast, within the shared cap
   // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
   const BOT=HASH.bot? {on:true,path:null,i:+HASH.boti||0,arrivals:[],lastCp:-1,t0:0} : {on:false};

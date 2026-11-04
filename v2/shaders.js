@@ -37,7 +37,7 @@ int ownerK(vec4 q, vec2 pp){ return q.w>0.5 ? 0 : nearestOther(pp); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
   q.xy=mix(q.xy,vel*8.0,0.03);                     // a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // time lived
-  q.w=mix(q.w, kk==0?1.0:0.0, 0.02);               // allegiance moves toward whoever is nearest, slowly: a cell is not yours one tick and theirs the next
+  q.w=mix(q.w, kk==0?1.0:0.0, 0.02);               // allegiance moves toward whoever is nearest over a third of a second (slower let a long embrace swallow you whole)
   return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==ownerK(q,pp)?1.0:0.0; }
@@ -319,7 +319,10 @@ void main(){
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
   // identity state: carried with the matter like exposure, then updated by the identity model
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
-  q=identUpdate(q,self,v0b,dc,kkNear,sp,dr,p); if(s0<=0.003 && self>0.0) q.w= kkNear==0?1.0:0.0; if(self<=0.0) q=vec4(0.0);   // a new cell belongs to whoever is nearest; after that, allegiance has memory
+  q=identUpdate(q,self,v0b,dc,kkNear,sp,dr,p);
+  if(s0<=0.003 && self>0.0){ // a new cell belongs to whoever grew it: the allegiance of the neighbours that fed it (not the nearest centre, which let one wisp's growth feed the other without limit)
+    float ws=0.0, ss=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; ws+=texelFetch(uQ,qq,0).w*sn; ss+=sn; } q.w= ss>0.0? ws/ss : (kkNear==0?1.0:0.0); }
+  if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
