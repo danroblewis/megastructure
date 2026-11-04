@@ -31,7 +31,7 @@ const SIM={
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),probeQ:prog(SH.probeQ),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -81,7 +81,7 @@ const SIM={
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uSwim,bd.swim); gl.uniform1f(pr.u.uCoh,bd.coh); gl.uniform1f(pr.u.uRnear,bd.rnear);
     this.draw(this.BVfbo,this.W,this.H);
     pr=this.P.body; const bo=1-this.bcur;
-    this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uDirs,this.dirs);
+    this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uDirs,this.dirs); gl.uniform4fv(pr.u.uSpot,bd.spot||[0,0,0,0]); gl.uniform1f(pr.u.uFriend,bd.friend||0);
     gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform4fv(pr.u.uAlcove,bd.alcove||[0,0,0,0]); gl.uniform4fv(pr.u.uPick,bd.pick||[0,0,0,0]); gl.uniform1f(pr.u.uPayInit,bd.payInit||0); gl.uniform1f(pr.u.uNpcGrow,bd.npcGrow||0);
     gl.uniform1f(pr.u.uRnear,bd.rnear); gl.uniform1f(pr.u.uRfar,bd.rfar); gl.uniform1f(pr.u.uGrow,bd.grow); gl.uniform1f(pr.u.uDroneR,bd.droneR||5);
     const ib=bd.injectB; gl.uniform4f(pr.u.uInjectB,ib?ib[0]:-999,ib?ib[1]:-999,ib?ib[2]:0,ib?ib[3]:0);
@@ -97,7 +97,7 @@ const SIM={
   },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
-    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
+    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
     for(let i=1;i<this.levels.length;i++){ pr=this.P.reduceN; const L=this.levels[i-1]; this.use(pr,{uMask:this.Mdyn,uL0:L.ts[0],uL1:L.ts[1],uL2:L.ts[2],uL3:L.ts[3]}); gl.uniform2i(pr.u.uLRes,L.w,L.h); this.draw(this.levels[i].f,this.levels[i].w,this.levels[i].h); }
   },
   // sample fields at up to 64 points and reduce the body; results are read back asynchronously
@@ -113,6 +113,16 @@ const SIM={
     gl.bindFramebuffer(gl.FRAMEBUFFER,L.f); for(let i=0;i<4;i++){ gl.readBuffer(gl.COLOR_ATTACHMENT0+i); gl.bindBuffer(gl.PIXEL_PACK_BUFFER,this.pbos[2+i]); gl.readPixels(0,0,L.w,L.h,gl.RGBA,gl.FLOAT,0); } gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
     if(this.fence) gl.deleteSync(this.fence); this.fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0); this.pending=true; gl.flush();
+  },
+  // identity state q at up to 64 points, read back synchronously (lab measurements only). returns [q (64*4), self (64*4)]
+  probeQ(points,n){
+    const gl=this.gl; for(let i=0;i<64;i++){ this.pts[i*2]=i<n?points[i*2]:0; this.pts[i*2+1]=i<n?points[i*2+1]:0; }
+    if(!this.probeQTex){ const mk=()=>{ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,64,1,0,gl.RGBA,gl.FLOAT,null); return t; };
+      this.probeQTex=[mk(),mk()]; const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f); this.probeQTex.forEach((t,i)=>gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0+i,gl.TEXTURE_2D,t,0)); gl.drawBuffers([gl.COLOR_ATTACHMENT0,gl.COLOR_ATTACHMENT1]); gl.bindFramebuffer(gl.FRAMEBUFFER,null); this.probeQFbo=f; this.probeQBuf=[new Float32Array(64*4),new Float32Array(64*4)]; }
+    const pr=this.P.probeQ; this.use(pr,{uMask:this.Mdyn,uQ:this.Q[this.bcur],uB:this.B[this.bcur]}); gl.uniform2fv(pr.u.uPts,this.pts); this.draw(this.probeQFbo,64,1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,this.probeQFbo); gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+    for(let i=0;i<2;i++){ gl.readBuffer(gl.COLOR_ATTACHMENT0+i); gl.readPixels(0,0,64,1,gl.RGBA,gl.FLOAT,this.probeQBuf[i]); } gl.readBuffer(gl.COLOR_ATTACHMENT0); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    return this.probeQBuf;
   },
   collect(){
     const gl=this.gl; if(!this.pending) return [this.probeBuf,this.probeBuf2,this.red];

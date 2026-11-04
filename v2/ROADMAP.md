@@ -168,3 +168,70 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+---
+
+## Identity experiment 3: commitment — 2026-11-03, branch `ident-3-commitment`
+
+Marcia's identity statuses as local regimes, no identity tag. `q.xy` is the intention a cell has committed to; it moves toward
+the proposals it receives (its centre's per-cell drive, and what its neighbours hold) over about a second, a foreclosed cell
+four times slower. `q.z` is how long (seconds, capped at 4) its commitment has matched what is asked of it; `q.w` how much it
+has changed intention over its life. Diffuse = never held, never changed (cohesion 0.6, speed 0.6); foreclosed = long hold,
+little change (rigid, speed 1.45); moratorium = changing after having changed (cohesion 0.75, sway); achieved = held after
+having changed (cohesion 1.3). `identDrive` follows the commitment 85 % for committed cells, so you steer what has committed
+to you; `identWeight` keeps the nearest-centre split except that a wisp (you, the other) claims a cell when its drive agrees
+with the cell's commitment *better* than the nearest centre's does, times proximity over ~5 cells; a past life claims nothing.
+Tint: grey diffuse, amber moratorium, blue foreclosed, lilac-white achieved. Scaffold changes on the branch: `uC/uCN/uDirs`
+live in `SH.head` so every pass (the reduction included) sees every centre's drive; the body pass hands `identUpdate` the same
+per-cell attention drive the velocity pass follows; a `probeQ` pass reads `q` at 64 points for the lab (`qd` in enmesh rows).
+
+A first version used a symmetric soft membership (proximity × agreement for every centre). It merged centres: in `ledge` the
+torn part's centre crept into the main body (part distance 19→12→8→0 while the drive was straight up) and the past-life rule
+withered the body from 155 to 3. The differential form above fixed that; the numbers below are from it.
+
+`#lab=enmesh&npc=170,60&warm=300&n=900` (push right 4 s, hold 5 s, pull left 6 s; from t≈780 both runs hit the box wall at x=20):
+
+| t | baseline main / other / dist | commitment main / other / dist | centroid moved per 30 ticks, baseline → commitment |
+|---|---|---|---|
+| 90 | 128 / 193 / 12 | 161 / 160 / 26 | 12.0 → 9.1 (alone, approaching) |
+| 150 | 164 / 155 / 24 | 147 / 178 / 11 | 17.0 → 8.2 (entangled) |
+| 180 | 163 / 158 / 41 | 183 / 136 / 9 | 15.0 → 9.5 (entangled) |
+| 240 | 161 / 160 / 74 | 172 / 149 / 24 | 14.0 → 5.1 |
+| 540 | 162 / 157 / 77 | 159 / 160 / 30 | 1.0 → 4.0 (no drive) |
+| 720 | 158 / 160 / 44 | 159 / 161 / 118 | 20.0 → 18.0 (pulling away) |
+| 750 | 159 / 160 / 64 | 160 / 161 / 134 | 22.0 → 16.3 |
+| 900 | 66 / 160 / 145 | 85 / 162 / 144 | both crushed on the wall |
+
+- Overlap: yes. The baseline passes straight through the other wisp during the 4 s push (dist 74 at t=240); with commitment the
+  push ends on top of it (dist 24, you just above it): its foreclosed cells adopt your proposal slowly and block the way.
+- No taking: at t=750 (before the wall) 160 / 161 against 163 / 160 at the start, as in the baseline (159 / 160). During
+  contact the membership accounting swings ±25 cells both ways (147/178 at t=150, 183/136 at t=180); the baseline swings once
+  (128/193 at t=90). Neither side kept anything after parting.
+- Steerability (centroid moved per 30 ticks under the scripted drive): alone 10.2 / 9.1, entangled 8.2 / 8.2 / 9.5 / 8.1, so
+  about 80 % of alone (baseline 15 / 12 alone, 17.5 / 17 / 15 entangled, 100 %). The committed body is slower than the
+  baseline everywhere (9 vs 15 approaching, 16–18 vs 20–25 pulling away): the statuses take about 2.5 s to ramp up from
+  diffuse and the commitment lags a change of drive by about a second. Not produced: the other wisp's cells not answering your
+  drive. They answer it slowly (foreclosed cells at a quarter rate, anchored by their neighbours), which is what blocks you.
+- Loss: none (fades 0, both masses flat).
+- Learning together: not produced. The mean-q distance between the bodies is 0.85 before contact (t=30: intention 0.69, hold
+  and change 0.49) and 3.4 after parting (t=750: intention 1.2, hold and change 3.2), against a centre-to-edge distance within
+  one body of 0.04–0.4. `q` records what each body has been asked to do, and the two scripts differ; cells that spent the
+  contact next to each other did not converge.
+- Oddity: during the 5 s hold with zero drive the pair slides left together at ~4 cells per 30 ticks (baseline ~1), and in
+  `ledge` the remainder slides left along the ledge under a straight-up drive. Most likely the return flow of the box carrying
+  cells whose status leaves them weak (moratorium, diffuse); not confirmed, the lab's `u` probe reads the jet line, not the player.
+
+`ledge`, `commit`, `hold` (same code; the ROADMAP table above gives the baseline):
+
+| scenario | baseline | commitment |
+|---|---|---|
+| ledge (testing the waters) | 68 of 162 torn in 2 s, the rest held at the ledge and regrew to 135 | 37 of 155 torn in 1 s; the rest did not hold: it shrank to 30 while sliding 40 cells left along the ledge with a part trailing 9–26 cells behind, climbed past the ledge's end at t≈420 and regrew to 160 above it |
+| commit | the whole self carried by the jet (~160 cells at full mass) | not carried as a whole: in the 1.2 s of drive only the lower edge reaches the jet; a 64-cell part is torn, carried 147 cells and fades, the other 70 stay above the jet and regrow to 164 |
+| hold (holding is work) | effort 0.3–0.4, stamina 1.0→0.72 in 2.5 s, exhaustion scatters | swept 60 cells downstream in the first 2 s before it could commit upstream (stamina 1.0→0.71), then drifted out of the jet, came back and held within ±10 cells at 158–164 for 8 s, stamina 0.85–1.0, never scattered, never dissociated |
+
+Produced: a body that cannot be walked through, no mass taken either way, no loss at the interface, statuses a player can read
+(the whole spawn goes grey, turns amber as it is first steered, settles blue when a direction is held and lilac-white once it
+has turned and held again). Not produced: a shared history between cells that were together (q diverges with the scripts),
+the other wisp ignoring your drive (it answers slowly instead), and the baseline's tearing and holding outcomes, which the
+status ramp (2.5 s from diffuse) and the one-second adoption lag blunt: the self is slower, enters currents late, and loses a
+part instead of committing to or anchoring against them. A player who has read the tint would likely call it sluggish.
