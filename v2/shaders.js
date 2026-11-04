@@ -26,22 +26,86 @@ uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v
 uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
 uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];   // the live centres (0 you), how many, and the intention each gave this substep
+uniform sampler2D uQB;     // the body texture, bound in the body and velocity passes for the identity hooks (self at the neighbours)
+uniform sampler2D uQV;     // the body velocity texture, bound in the body pass: the history model carries q with the matter's own flux
+uniform vec4 uHistC[3];    // history model (uIdent 5): each centre's mean history, measured on the CPU from a probe grid round each wisp
+uniform float uHistN[3];   // the mass behind each mean (0: unmeasured; the rules then fall back to the nearest centre)
+vec4 identAux=vec4(0.0);   // set by the body pass just before identUpdate: x self before this substep, y payload (ore + / charge -), z exposure, w gas speed at the cell
+ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
+// 5. history: q is what the matter has lived through. x heat lived, y cold lived, z current lived (0..1 each), w ore (+) or charge (-) carried.
+// each a running mix: quick to take in (about half a second), slow to forget (about ten seconds), so recent experience counts most and the
+// past is kept. affinity is similarity of pasts: cohesion between a cell and its neighbourhood, membership in a centre, answer to attention.
+float histDist(vec4 a, vec4 b){ return length(a-b); }
+// which wisp a cell's past says it belongs to. the nearest centre, unless the other wisp's mean past fits clearly better (by more than a
+// third of the gap between the two wisps' pasts, never less than 0.12) and that wisp is within reach. hard either way: no cell is half
+// of two centres, so the centres cannot merge (soft membership dragged the other wisp along: codependence). a past life claims nothing.
+int histOwner(int nearestK, vec4 q, vec2 pp){
+  if(uIdent!=5 || uNpcK<0 || uNpcK>=uCN) return nearestK;
+  int other= nearestK==0 ? uNpcK : (nearestK==uNpcK ? 0 : -1);
+  if(other<0 || uHistN[nearestK]<=0.0 || uHistN[other]<=0.0) return nearestK;
+  float D=histDist(uHistC[0],uHistC[uNpcK]); if(D<0.1) return nearestK;      // the two wisps have lived the same life: nothing to tell them apart but distance
+  float dn=histDist(q,uHistC[nearestK]), dO=histDist(q,uHistC[other]);
+  if(dn-dO>max(0.12,0.35*D) && distance(pp,uC[other])-distance(pp,uC[nearestK])<20.0) return other;
+  return nearestK; }
+// how clearly a cell's past matches wisp k's over the other wisp's: 0 the other's, 1 k's, 1 when there is no other wisp or no difference
+float histMatch(int k, vec4 q){
+  if(uIdent!=5 || uNpcK<0 || uNpcK>=uCN || (k!=0 && k!=uNpcK)) return 1.0;
+  int other= k==0 ? uNpcK : 0; if(uHistN[k]<=0.0 || uHistN[other]<=0.0) return 1.0;
+  float D=histDist(uHistC[0],uHistC[uNpcK]); if(D<0.1) return 1.0;
+  return smoothstep(-0.5*D,0.5*D,histDist(q,uHistC[other])-histDist(q,uHistC[k])); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
+  if(uIdent==5){
+    if(self<=0.0) return vec4(0.0);
+    float s0=max(identAux.x,0.0);
+    // carried with the matter: the body moves by an upwind flux across each face (below half a cell a substep, so the scaffold's look-back
+    // never moves q off its texel and a body walks into its own stale halo). q is a property of the matter: what stays keeps its past, what
+    // arrives brings its own, the mix is weighted by mass. the numerical exchange that smooths the body is left out, so pasts do not blend
+    // across an interface at rest; they blend only where matter actually flows across it
+    vec4 qo=texelFetch(uQ,p,0); vec2 v0=texelFetch(uQV,p,0).xy; float stay=s0; vec4 acc=vec4(0.0); float win=0.0;
+    for(int k=0;k<4;k++){ ivec2 e=ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); ivec2 n=wrapP(p+e); float sn=texelFetch(uQB,n,0).x; if(sn<=0.0) continue;
+      float vf=dot(0.5*(v0+texelFetch(uQV,n,0).xy),vec2(e)); if(vf>0.0) stay-=vf*s0; else { float w=-vf*sn; acc+=w*texelFetch(uQ,n,0); win+=w; } }
+    stay=max(stay,0.0); if(stay+win>1e-5) q=(stay*qo+acc)/(stay+win);
+    // born of the smoothing alone (no flux brought anything): it inherits its living neighbours' pasts
+    if(s0<0.03 && win<=1e-5){ vec4 a2=vec4(0.0); float ws=0.0;
+      for(int k=0;k<4;k++){ ivec2 n=wrapP(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0)); float sn=texelFetch(uQB,n,0).x; if(sn<=0.02) continue; a2+=sn*texelFetch(uQ,n,0); ws+=sn; }
+      if(ws>0.0) q=a2/ws; }
+    // what it lives through now
+    vec4 t=vec4(clamp(max(sp.y,0.0)*1.5+identAux.z,0.0,1.0), clamp(-sp.y*3.0,0.0,1.0), clamp(identAux.w*6.0,0.0,1.0), clamp(identAux.y/max(self,0.05),-1.0,1.0));
+    vec4 r=mix(vec4(0.0005),vec4(0.012),step(abs(q),abs(t)));   // quick to take in, slow to forget
+    return clamp(mix(q,t,r),vec4(0.0,0.0,0.0,-1.0),vec4(1.0)); }
   q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
   return q; }
-// how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard.
-float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==nearestK?1.0:0.0; }
-// the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
-// the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
-// how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
-ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
+// how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard. history: the centre its past says, hard.
+float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==histOwner(nearestK,q,pp)?1.0:0.0; }
+// the drive a cell actually follows, given the drive of its centre. history: a cell the past gives to the other wisp follows that wisp's
+// intention instead; cells whose past matches their wisp's answer its attention fully, strangers and hybrids weakly
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent!=5) return drive;
+  int own=histOwner(ki,q,gl_FragCoord.xy); if(own!=ki) drive=uDirs[own];
+  return drive*mix(0.25,1.0,histMatch(own,q)); }
+// the cohesion a cell actually feels, given the gradient climb and homing computed for it. history: scaled by similarity between the
+// cell's past and its neighbourhood's (1/(1+4|dq|), floor a quarter): matter with a different past is held loosely, and thins at an interface
+vec2 identCohere(vec4 q, vec2 coh, float self){
+  if(uIdent!=5) return coh;
+  ivec2 p=ivec2(gl_FragCoord.xy); vec4 acc=vec4(0.0); float ws=0.0;
+  for(int k=0;k<4;k++){ ivec2 n=wrapP(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0)); float sn=texelFetch(uQB,n,0).x; if(sn<=0.02) continue; acc+=sn*texelFetch(uQ,n,0); ws+=sn; }
+  if(ws<=0.0) return coh;
+  return coh*(0.25+0.75/(1.0+4.0*histDist(q,acc/ws))); }
+// how a cell is tinted for display, given the colour it would have. history: warm red for heat lived, blue for cold, pale for current,
+// gold for ore carried, bright cyan for a charge, so a player can read where a cell has been
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent!=5) return bc;
+  vec3 c=bc;
+  c=mix(c,vec3(0.84,0.86,0.88),clamp(q.z*0.8,0.0,0.6));
+  c=mix(c,vec3(0.3,0.5,1.0),clamp(q.y*1.2,0.0,0.8));
+  c=mix(c,vec3(1.0,0.35,0.25),clamp(q.x*1.2,0.0,0.8));
+  if(q.w>0.0) c=mix(c,vec3(1.0,0.8,0.3),clamp(q.w*1.3,0.0,0.85)); else c=mix(c,vec3(0.5,1.0,0.95),clamp(-q.w*1.3,0.0,0.85));
+  return c; }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
 uniform sampler2D uWf;     // walls field: solidity, soot, residue, kind (0 metal, 0.5 frost, 1 tissue)
@@ -58,7 +122,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3]; uniform float uRadial;
+uniform vec2 uDir; uniform float uPush; uniform float uRadial;
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -182,7 +246,6 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
 uniform float uFriend;                                // 1 when the other wisp is your friend: its cells follow your attention too
@@ -254,13 +317,13 @@ void main(){
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
 uniform vec4 uAlcove;               // x0 y0 x1 y1 of a dead alcove being repaired (zeros: none)
 uniform vec4 uPick;                 // x y radius charge of a power pickup being taken (radius 0: none)
 uniform float uPayInit;             // test hook: payload given to injected cells
+uniform float uExInit;              // test hook: exposure (heat lived) given to injected cells: matter with a past
 uniform float uNpcGrow;             // another wisp's regrowth, capped by its mass on the CPU
 layout(location=0) out vec4 o; layout(location=1) out vec4 oq;
 bool fluidAt(ivec2 q){ return !solidAt(q); }
@@ -311,9 +374,10 @@ void main(){
   // exposure: what this matter has lived through (heat), carried with it
   float ex=texelFetch(uB,p,0).z; vec2 v0b=texelFetch(uBV,p,0).xy; ivec2 from=ivec2(floor(vec2(p)+0.5-v0b)); float exFrom=texelFetch(uB,wrapP(from),0).z;
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
+  if(uExInit>0.0 && dd<uInjectB.z*uInjectB.z && self>0.0) ex=max(ex,uExInit);
   // identity state: carried with the matter like exposure, then updated by the identity model
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
-  q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
+  identAux=vec4(s0,pay,ex,length(texelFetch(uFC,p,0).zw)); q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
@@ -389,7 +453,7 @@ void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=flo
 // of the main self (centre 0), and the farthest cell from the main self (for re-seeding a lost fragment).
 //  T0 (m0, mx0, my0, burn)   T1 (xx0, yy0, xy0, m1)   T2 (mx1, my1, m2, mx2)   T3 (my2, farDist, farX, farY)
 SH.reduce0 = SH.head + `
-uniform sampler2D uB, uS; uniform vec2 uC[3]; uniform int uCN;
+uniform sampler2D uB, uS;
 layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=2) out vec4 o2; layout(location=3) out vec4 o3;
 void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
@@ -428,6 +492,11 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
+SH.probe3 = SH.head + `
+uniform sampler2D uB; uniform vec2 uPts[64]; layout(location=0) out vec4 oQ; layout(location=1) out vec4 oS;
+void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 b=texelFetch(uB,p,0); vec4 q=texelFetch(uQ,p,0);
+  int k=0; float bd=distance(pt,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pt,uC[j]); if(dj<bd){ bd=dj; k=j; } } }
+  oQ=q; oS=vec4(b.x,b.w,float(histOwner(k,q,pt)),b.z); }`;   // identity state at the point; self, payload, the centre the identity model gives it, exposure
 
 // ---------------- render ----------------
 SH.render = SH.head + `
@@ -435,7 +504,7 @@ uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
-uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
+uniform float uPHurt, uPHp; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours

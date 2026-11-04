@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='history';
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -186,7 +186,7 @@
       else if(m.kind==='piston'){ const ph=(Math.sin(m.phase+t*m.speed)*0.5+0.5)*m.len; const dirY=m.y<=H/2?1:-1; const y0=Math.min(m.y,m.y+dirY*ph), y1=Math.max(m.y,m.y+dirY*ph); if(e.x>m.x-m.w/2-r&&e.x<m.x+m.w/2+r&&e.y>y0-r&&e.y<y1+r){ dmg+=0.012; e.vy+=dirY*0.5; e.x+= (e.x<m.x?-1:1)*0.8; } } }
     return dmg; }
   function ctxNow(){ return {pad:PAD,bd,player,selves,dirS,target,touches,keys,touchLog,hover,red:SIM.red,camX,camY,zoom,dpr,W,H,world,BODY,SIM,AUDIO,now:performance.now(),frame:SIM.frame,steps,sw,sh,isTouch}; }
-  const probePts=new Float32Array(128), droneArr=new Float32Array(32);
+  const probePts=new Float32Array(128), droneArr=new Float32Array(32), qPts=new Float32Array(128);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
   window.__eval=(js)=>eval(js);   // remote debugging: a direct eval inside this closure sees player, selves, bd, world, AUDIO, SIM ...
   window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
@@ -240,6 +240,7 @@
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
+    if(IDENT.tick) IDENT.tick(ctxNow());   // the identity model's CPU half (history: each wisp's mean past from the q probe)
     npcTick();
     // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
     { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
@@ -275,7 +276,9 @@
     // --- simulate ---
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
+    if(bd.payInit&&HASH.ppay&&!HASH.pay) bd.payInit=0; if(bd.exInit&&HASH.pex) bd.exInit=0;   // lab: #ppay / #pex give only the player's spawn a load / a heat past (a different past from the other wisp's)
     SIM.lightStep(3);
+    { let k=0; const put=(cx,cy)=>{ for(let gy=0;gy<5;gy++) for(let gx=0;gx<6;gx++){ qPts[k*2]=cx+(gx-2.5)*5; qPts[k*2+1]=cy+(gy-2)*5; k++; } }; put(player.x,player.y); const o=selves.find(s=>s.live&&s.npc); put(o?o.x:-999,o?o.y:-999); SIM.qpts=qPts; }   // identity probe: a 6x5 grid, 5 cells apart, round you (slots 0..29) and round the other wisp (30..59)
     SIM.probe(probePts,64);
     updateSelves(red);
     player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
@@ -346,6 +349,7 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
+    if(IDENT.hud) IDENT.hud(ctxNow(),c);
     // until iOS lets the sound start (it needs a touch release), say so
     if(!AUDIO.muted&&(touchLog.length>0||Object.keys(keys).length>0)&&(!AUDIO.ctx||AUDIO.ctx.state!=='running')){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='center'; c.textBaseline='bottom'; c.fillStyle='rgba(255,255,255,0.45)'; c.fillText('tap once for sound',sw/2,sh-(26+(window.safeBottom||0))*s); c.textAlign='left'; c.textBaseline='top'; }
     // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
@@ -449,7 +453,13 @@
     const labIntent=[0,0];
     SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; };
     SCHEME.useTarget=false;
-    const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
+    const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; if(HASH.ppay) bd.payInit=+HASH.ppay; if(HASH.pex) bd.exInit=+HASH.pex; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
+      measureQ:()=>{ // identity state of each body from the 6x5 q grid round it: self-weighted mean q over the cells the model gives that body, its core (r<6) against its edge (self<0.4), and the mass in each grid the model gives the other wisp
+        const q=SIM.probeBuf3, s=SIM.probeBuf3s; const r4=v=>+v.toFixed(3);
+        const body=(g,mine)=>{ const m=[0,0,0,0],core=[0,0,0,0],edge=[0,0,0,0]; let mw=0,cw=0,ew=0,oth=0,ex=0; for(let i=g*30;i<g*30+30;i++){ const sv=s[i*4]; if(sv<=0.01) continue; const own=Math.round(s[i*4+2]); if(own!==mine){ oth+=sv; continue; } const r=Math.hypot(i%6-2.5,((i/6)|0)%5-2)*5; mw+=sv; ex+=sv*s[i*4+3]; for(let c=0;c<4;c++) m[c]+=sv*q[i*4+c]; if(r<6){ cw+=sv; for(let c=0;c<4;c++) core[c]+=sv*q[i*4+c]; } if(sv<0.4){ ew+=sv; for(let c=0;c<4;c++) edge[c]+=sv*q[i*4+c]; } }
+          const mean=(a,w)=>w>0?a.map(v=>v/w):null; return {m:mean(m,mw),core:mean(core,cw),edge:mean(edge,ew),oth:+(oth*25).toFixed(0),w:+(mw*25).toFixed(0),ex:mw>0?r4(ex/mw):null}; };
+        const dist=(a,b)=>a&&b?r4(Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2],a[3]-b[3])):null; const A=body(0,0), B=body(1,SIM.npcK);
+        return {d:dist(A.m,B.m),h0:A.m&&A.m.map(r4),hn:B.m&&B.m.map(r4),e0:dist(A.core,A.edge),en:dist(B.core,B.edge),othIn:A.oth,mineIn:B.oth,w0:A.w,wn:B.w,ex0:A.ex,exn:B.ex}; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }

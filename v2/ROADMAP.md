@@ -168,3 +168,96 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+
+---
+
+## Identity experiment 5: history — 2026-11-04, branch `ident-5-history`
+
+The model (`#ident=history`, the default on this branch; `#ident=centroid` is the baseline): `q` is what the matter has lived
+through. `q.x` heat lived (species heat and the body's exposure channel), `q.y` cold lived, `q.z` current lived (gas speed at
+the cell), `q.w` ore (+) or charge (−) carried, each a running mix per substep that takes experience in quickly (0.012, about
+half a second) and forgets slowly (0.0005, about ten seconds), so recent experience counts most and the past is kept. Affinity
+is similarity of pasts: `identCohere` scales the cohesion a cell feels by `0.25+0.75/(1+4|q−q̄|)` against the self-weighted
+mean past of its four neighbours; `identWeight` gives a cell to its nearest centre unless the other wisp's mean past fits
+clearly better (by more than a third of the gap between the two wisps' pasts, never less than 0.12) and that wisp is within
+20 cells of being nearest, hard either way, so centres cannot merge (soft membership drags the other wisp along: the
+codependence failure of experiment 1); `identDrive` makes a cell the past gives to the other wisp follow that wisp's intention,
+and scales any wisp's attention by how clearly the cell's past matches that wisp's over the other's (floor a quarter); when the
+two wisps' mean pasts differ by less than 0.1 all of this falls back to distance. `identTint`: red for heat lived, blue for
+cold, pale for current, gold for ore, cyan for a charge. Each wisp's mean past is measured on the CPU (`IDENTS.history.tick`)
+from a new q probe (`SH.probe3`, a 6×5 grid five cells apart round each wisp, slots 0..29 you, 30..59 the other), over the
+cells the model itself gives that wisp, and handed to the shaders as `uHistC[3]`/`uHistN[3]`; `uC/uCN/uDirs` moved into
+`SH.head` so the hooks see every centre. Lab additions: rows carry `q` (mean past of each body, the difference `d` between
+them, each body's core-to-edge difference `e0`/`en`, the other wisp's mass in your grid `othIn` and yours in its `mineIn`);
+`#pex=` gives the player's spawn a heat past (exposure stamped into the injected cells, a test hook like `#pay`) and `#ppay=`
+gives only the player's spawn ore, so the two wisps can start with different pasts in a box where nothing else happens to them.
+
+A scaffold finding that cost most of the day: the body moves by an upwind flux below half a cell a substep, so the Q
+texture's semi-Lagrangian look-back never moves `q` off its texel; a moving body walks into its own low-density halo, whose
+texels hold stale `q`, and loses its past in about a body length (a stamped heat past of 0.5 was at 0.02 after 60 ticks of
+motion; the same stamp on a resting body held). Exposure (`uB.z`) has the same flaw. On this branch the history model carries
+`q` with the matter's own flux: what stays keeps its past, what arrives brings its own, mixed by mass; the numerical exchange
+that smooths the body is left out, so pasts do not blend across an interface at rest, only where matter actually flows across
+it. With that, a body drifting at 9 cells per 30 ticks holds a past of 0.46 at 0.38 after 2 s, and one travelling at 15 cells
+per 30 ticks is diluted by its halo to 0.11 (a first version that followed the smoothing exchange too made the two bodies' pasts
+converge in 2.5 s of contact: the medium mixes, so a boundary by history can only last as long as matter takes to mix).
+
+`#lab=enmesh2&npc=170,60&warm=300&n=900` (press 2.5 s at 0.7, hold inside 5 s, pull away 4 s at 0.7, rest): the two wisps
+spawn in the same still gas, so with no hook their pasts are the same and the model has nothing to work with; the `pex=1`
+column gives the player a heat past, the `ppay=0.7` column ore. The baseline is bit-identical with or without either hook
+(neither has physics outside the history hooks). main / other / otherDist:
+
+| t | baseline | history (same pasts) | history, heat past (`pex=1`) | history, ore (`ppay=0.7`) |
+|---|---|---|---|---|
+| 90 | 139 / 176 / 8 | 135 / 177 / 8 | 122 / 201 / 7 | 150 / 142 / 7 |
+| 150 | 163 / 159 / 35 | 162 / 158 / 36 | 180 / 149 / 18 | 171 / 140 / 29 |
+| 300 | 162 / 160 / 38 | 163 / 161 / 38 | 168 / 158 / 16 | 162 / 160 / 31 |
+| 450 | 160 / 156 / 30 | 161 / 158 / 33 | 162 / 156 / 25 | 160 / 154 / 24 |
+| 690 | 128 / 157 / 141 | 142 / 157 / 139 | 71 / 160 / 145 | 106 / 159 / 143 |
+| 900 | 159 / 161 / 134 | 161 / 160 / 131 | 161 / 161 / 136 | 159 / 161 / 135 |
+
+Masses are the reduction's centre weights (the swing at t=90 is assignment while the bodies overlap, not cells moving); the
+drop at t=690 is the box's left wall at x=20 in every run, and the heat-past body reaches it 60 ticks sooner because its
+pull-away starts 40 cells nearer the wall (from x=149 instead of 189), so it is crushed longer.
+
+Against the four criteria, for the heat-past run (the same-pasts run is the baseline to within two cells in every column):
+1. *Overlap, no repulsion.* The player reaches the other wisp's centre (otherDist 7 at t=90, 5 at t=120) and, instead of the
+   baseline's pass straight through (35 by t=150), stays inside it: the press ends at 18 and the pair stays entangled at 15–21
+   cells for the whole 5 s hold, with 46–60 of the other's mass in the player's grid and 9–65 of the player's in its. The ore
+   run passes to 29 and holds at 24–31.
+2. *No taking.* After parting 161 / 156 (t=480–600) against 162 / 161 before contact (baseline 160 / 157); ore run 159 / 161.
+   While entangled the other wisp's centre moved 1–3 cells per 30 ticks, as in the baseline. Steerability (player centroid per
+   30 ticks under the scripted drive): alone, pressing +15/+12 and pulling −20…−24 in every run; entangled on the press
+   (t=120, 150) baseline +21/+17, history same pasts +21/+17, heat past +9/+13, ore +15/+15. The attention of the heat-past
+   body is answered at about half while it is inside the other wisp: its cells that have flowed through the other's texels
+   have hybrid pasts and answer weakly, and the other's cells near its centre answer the other's (zero) intention, not yours.
+3. *Loss.* Fades 0 in every run, no mass lost at the interface (both bodies flat at 156–168 through the hold); the only loss is
+   the wall.
+4. *Learning together.* Mean |Δq| between the bodies: heat past 0.345 before contact (t=30), 0.34 at first contact (t=90),
+   0.054 inside (t=150), 0.03–0.08 through the hold, 0.03 after parting (t=480–600), against a body's own core-to-edge
+   difference of 0.001–0.03 (player) and 0.003–0.04 (other) at those times: after parting the two bodies are as alike as a
+   body's core is to its own edge, and they got there by exchanging matter (the other's mean heat lived rose 0.01 → 0.10 while
+   the player's fell 0.35 → 0.15), not by both forgetting. Then the box separates them again: the player ends in the cold corner
+   (cold lived 0.27, current 0.40) and the difference is 0.31 at t=900. Ore: 0.42 → 0.24 at t=150 → 0.20 through the hold →
+   0.27 at the end, the other wisp keeping ore lived 0.13–0.24 because the ore itself diffused into it.
+
+`ledge`, `commit`, `hold` (no other wisp, so only the cohesion rule and the carried past act):
+
+| scenario | baseline | history |
+|---|---|---|
+| `ledge` warm=900 (testing the waters) | 118→81 torn in the first 2 s, held 81–86 for 13 s, regrew to 161 after release | identical: 118→81 torn in the first 2 s, held 81–86 for 13 s, no part tracked, regrew to 161 after release |
+| `commit` (commitment) | the whole self carried by the jet, x 84→389 at mass 160; one part torn at t=120, faded by t=180 | the whole self carried, x 84→390 at mass 156–163; one part torn at t=120 (73 cells away) faded by t=180, and a second small one at t=480–510 (26–28 away) faded by t=540 |
+| `hold` (holding is work) | carried 36 cells downstream in the first second, stamina 1→0.71 at t=90, pushed out of the band, effort 0.3–0.38 | identical to within a cell: carried 36 cells downstream in the first second (x 160→196→230), stamina 1→0.71 at t=90, pushed out of the band, effort 0.3–0.4 when it pushes again at t=390–450, never dissociated |
+
+What was produced: a past that travels with the matter and can be read (gold, red, blue, pale), an entanglement that lasts
+when the pasts differ (the pair stays inside each other for the whole hold instead of passing through), no taking either way,
+no loss at the interface, attention answered at half by matter whose past is hybrid, and a shared history that is really
+shared: after a contact the bodies are as alike as core and edge, because matter was exchanged. What was not: a boundary that
+outlasts the mixing. In this medium matter flows across an interface in a second or two and the past goes with it, so two
+pasts that differ by 0.35 are 0.05 apart after 2.5 s inside each other and the model is back to distance for the rest of the
+hold; a hybrid interface that belongs to neither and thins was not seen (no fades), and with no hook the lab's two wisps have the
+same past and the model is the baseline. The experiment's premise holds in the game only where the structure gives wisps
+different lives (the player comes through fire and current, the waiting wisp has sat in its chamber), which the enmesh box
+does not; and the heat-past body paid for its difference at the wall, since a body whose parts have lived differently is
+held together less.
