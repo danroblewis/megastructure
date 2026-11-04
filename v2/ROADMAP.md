@@ -168,3 +168,79 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+## Identity experiment 4: phase — 2026-11-04, branch `ident-4-phase`
+
+The model (`#ident=phase`, the default on this branch; `#ident=centroid` is the baseline). Every cell is an oscillator. `q.xy`
+is its phase, held as a unit phasor (cos, sin) rather than an angle, because the scaffold carries `q` by mixing it and an angle
+cannot be mixed across its wrap; the shrinking of a mixed phasor is itself decoherence. `q.z` is its natural rate (radians a
+substep, about 0.021, a beat every 1.7 s), seeded from a hash of the 24-cell block its body's centre was in when it was born
+(±20 %) with 3 % per-cell jitter, inherited from the neighbourhood by cells born at a moving edge, and adapting slowly toward
+whatever pulls it (frequency adaptation, 1e-5 per unit pull a substep). `q.w` is local coherence. Eight neighbours couple
+Kuramoto-style (pull = sin(neighbourhood phase − own) × neighbourhood coherence, gain 0.12 a substep). Each centre's rhythm
+(mean phasor × coherence, mean rate) is measured on the CPU from a 21-point probe grid round it (`SH.probeQ`, async, in the
+same readback as the other probes) and passed as `uPhaseC[3]`. `identWeight`: the nearest centre holds a cell unless the
+other wisp's rhythm agrees with the cell's phase better than the nearest's does, that difference × proximity over ~5 cells
+being the claim (the differential form from the commitment branch; a symmetric soft membership merges centres).
+`identDrive`: a wisp's intention is answered × (0.25 + 0.75 × agreement with its rhythm), and a cell beating with the other
+wisp follows the other wisp's intention instead; while the player holds a direction, the rate of cells in the player's rhythm
+is nudged (0.002 a substep) toward one shared beat. `identCohere`: cohesion × agreement with the nearest centre's rhythm
+(floor 0.3) × local coherence (floor 0.6). `identTint`: hue by phase, saturation by coherence. Scaffold changes: `uC`, `uCN`,
+`uDirs` live in `SH.head`; `q` is now carried by the same upwind fluxes that move `self` (mass-weighted, bulk motion only, not
+the symmetric exchange) instead of the whole-cell look-back, which at sub-cell speeds carried nothing, so a body pressing into
+another simply took the phase of the texels it entered; the lab rows carry `qd` (phase gap, rate gap, coherence, centre–edge).
+
+`#lab=enmesh2&npc=170,60&warm=300&n=900` (press 2.5 s at 0.7, hold 5 s, pull away 4 s at 0.7, rest), main / other / otherDist:
+
+| t | baseline | phase | phase: gap between the bodies (dphi rad, drate ×1e-3), coherence RA / RB |
+|---|---|---|---|
+| 30 (apart) | 163 / 160 / 30 | 163 / 160 / 30 | 2.99, 3.48 (22.1 vs 18.6); 1.00 / 1.00 |
+| 90 (inside) | 139 / 176 / 8 | 133 / 174 / 8 | 1.20, 0.81; 0.44 / 0.46 |
+| 150 (through) | 163 / 159 / 35 | 158 / 162 / 29 | 0.23, 0.04; 0.82 / 0.60 |
+| 300 (hold) | 162 / 160 / 38 | 163 / 159 / 31 | 0.75, 0.11; 0.93 / 0.77 |
+| 450 | 160 / 156 / 30 | 163 / 159 / 23 | 0.99, 0.27; 0.99 / 0.79 |
+| 690 (on the wall) | 128 / 157 / 141 | 101 / 160 / 144 | 0.88, 0.07; 1.00 / 0.85 |
+| 900 | 159 / 161 / 134 | 161 / 158 / 136 | 1.10, 0.33 (20.0 vs 20.3); 1.00 / 0.88 |
+
+The gentler press still carries the player straight through the other wisp (otherDist 8 at t=90, 29–35 at t=150) in both
+models, so the "hold inside" happens 23–38 cells past it, the pair drifting together on the box's return current; the pull
+ends on the box wall at x≈22 (the mass dip at t=690, regrown by t=900) in both.
+
+- Overlap: produced, no repulsion.
+- No taking: 163 / 160 before contact; 159 / 160 (phase) against 160 / 156–158 (baseline) at t=600–660, after parting and
+  before the wall; the other wisp's cells did not follow the player's drive (its centre moved ≤ 2 cells per 30 ticks except
+  while being pushed through, as in the baseline). Steerability, player centroid moved per 30 ticks under the scripted drive:
+  pressing alone +15 (baseline +15); entangled (t=90, 120, otherDist 8–20) +11, +17 (baseline +12, +21); pulling away alone
+  −18 … −23 (baseline −18 … −23). Nothing is lost in steerability, because nothing of the other wisp's rhythm survives inside
+  the player's body for long enough to refuse the drive.
+- Loss: fades 0, both masses flat to ±4 through contact and parting. The wall takes more from the phase body (101 against
+  128): cohesion scaled by coherence lets go of cells the wall has decohered.
+- Learning together: produced, by mixing. Mean |Δq| between the bodies (phasor xy and rate z, rate in 1e-3) 4.01 before
+  contact (t=30), 0.25–0.33 right after the pass (t=150–210), 0.75–1.04 after parting (t=600–900), against a body's own
+  centre–edge |Δq| of 0.01–0.2 (player) and 0.2–0.9 (other). The rates converged from 17 % apart to 1–2 % (22.1 / 18.6 → 20.0 /
+  20.3) and stayed converged; the phase gap settled at 0.8–1.1 rad, because once the rates agree nothing closes it. Both bodies
+  were fully coherent again by t=510 (RA 1.00, RB 0.77–0.94), so they came out similar without becoming one.
+
+`ledge`, `commit`, `hold` (baseline from the coherence branch's rerun of the same lab box, 2026-11-03):
+
+| scenario | baseline (centroid) | phase |
+|---|---|---|
+| `ledge` warm=900 (testing the waters) | 118→81 torn in the first 2 s, no part tracked, held 81–86 for 13 s, regrew to 161 after release | 119→82 torn in the first 2 s, no part tracked, held 82–87 for 13 s (coherence 1.00 throughout), regrew to 160 after release |
+| `commit` | the whole self carried x 84→389 at mass 160; one part torn at t=120, faded by t=180 | the whole self carried x 84→387 at mass 157–163; one part torn at t=120 (73 cells off), faded by t=210; a second small part at t=510, faded by t=570 |
+| `hold` (holding is work) | carried 36 cells downstream in the first second, stamina 1→0.71 at t=90, pushed out of the band, effort 0.3–0.38 | carried 34 cells downstream in the first second, stamina 1→0.71 at t=90, pushed out of the band, back in it at t=180–270 pushing upstream 3–9 cells per 30 ticks, out again at effort 0.3–0.38, never scattered |
+
+A single body is one rhythm with agreement ~1 everywhere, so every hook reduces to the baseline there; these three are the
+baseline to within noise, as they should be. Entangled-pair screenshot: `#test=1&small=1&n=300&spawn=294,118&touch=0,14`
+shows the two bodies as one bright blob of one hue: the waiting wisp (294,129, by then `friend`) three cells from the player (292,132) after five seconds inside each other, one rhythm.
+
+What was produced: a rhythm per body that a player can read (one hue sweeping round the wheel; two bodies born apart beat at
+different rates and show different hues, and a decohered edge goes grey), decoherence as the visible event of contact (both
+bodies' coherence fell to ~0.45 while one was pushed through the other and recovered within two seconds of parting), no mass
+taken, and a shared state that survives parting: the two bodies' rates, which differed by 17 % before contact, differ by 1–2 %
+after it, while each is a coherent body of its own. What was not: a boundary with any resistance, or one that lasts. Two
+rhythms were meant to synchronise only with time in contact; in this scenario the scripted press shoves one body's matter
+through the other's texels, the flux carry (correctly) mixes their phasors and rates where the matter mixes, and the pair are
+in phase after about one second (dphi 2.87 at t=60, 0.23 at t=120). The steep phase gradient exists only for that second. Rate
+seeding by block of birth is also arbitrary: two wisps born in adjacent blocks can beat alike by chance of the hash, and then
+this model is the baseline with a tint. The attention beat worked as designed (the player's rate went to the shared 0.0209
+under drive) but, with the rates converged, it had nothing to select against.

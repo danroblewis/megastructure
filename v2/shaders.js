@@ -25,22 +25,101 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
 uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
-uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform int uIdent;        // which identity model is running (0 = centroid, the baseline; 4 = phase)
+uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];   // the live centres, how many, and the intention each gave this substep (in the head so every pass and hook sees them)
+uniform vec4 uPhaseC[3];   // each centre's rhythm, measured on the CPU from a probe grid round it: xy its mean phasor times its coherence (0: no rhythm known), z its mean rate
+ivec2 wrapP(ivec2 p); uint hashu(uvec3 v);   // defined below; the hooks read neighbours and hash positions
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
+//
+// experiment 4, phase (uIdent==4): every cell is an oscillator and a self is one coherent rhythm.
+//   q.xy  the cell's phase, held as a unit phasor (cos, sin): the scaffold carries q by mixing it linearly, and an angle cannot be
+//         mixed across its wrap; a phasor can, and the shrinking of a mixed phasor is itself decoherence.
+//   q.z   its natural rate (radians a substep). seeded from a hash of the block its body's centre was in when it was born, with a
+//         little per-cell jitter, so bodies born apart beat at different rates; inherited from the neighbourhood by cells born at a
+//         moving edge, so a body keeps its rate as it moves; it adapts slowly toward what pulls it (frequency adaptation), which
+//         is how two rhythms in contact come to agree, and all a body has to remember of another.
+//   q.w   local coherence: how much the neighbourhood beats with this cell, smoothed. dispersal is decoherence.
+//   neighbours couple Kuramoto-style (8 neighbours, the pull is sin(neighbourhood phase - own phase)). two bodies with different
+//   rates do not lock on contact: a line of phase slips forms where they meet, the boundary, and only time in contact (rate
+//   adaptation across it) lets them synchronise. the player's attention carries a beat: while held, your cells' rates are nudged
+//   toward one shared rate, and cells far out of phase with your centre answer the attention weakly.
+#define PH_W0 0.0209
+#define PH_K 0.12
+#define PH_EPS 0.00001
+vec3 identHue(float h){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return clamp(p-1.0,0.0,1.0); }
+float identHash(ivec2 p, uint s){ return float(hashu(uvec3(uint(p.x+7777),uint(p.y+7777),s))&0xffffffu)/16777216.0; }
+int identNearest(vec2 pp){ int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } } return k; }
+// how well a phasor agrees with centre k's rhythm: 0..1; 0.5 when the centre has no measured rhythm yet
+float identAgree(vec2 u, int k){ vec2 c=uPhaseC[k].xy; float R=length(c); if(R<0.12) return 0.5; float a=0.5+0.5*dot(u,c)/R; return mix(0.5,a,smoothstep(0.12,0.45,R)); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
-  q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
-  q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
-  return q; }
+  if(uIdent!=4){
+    q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
+    q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
+    return q; }
+  if(self<=0.0) return vec4(0.0);
+  // the neighbourhood's rhythm. dead cells carry q=0 and count nothing; a live cell's phasor has length ~1
+  vec2 Z=vec2(0.0); float nw=0.0, nr=0.0;
+  for(int i=0;i<8;i++){ ivec2 d=ivec2(i==0?1:i==1?-1:i==2?0:i==3?0:i==4?1:i==5?-1:i==6?1:-1, i==2?1:i==3?-1:i<2?0:i==4?1:i==5?-1:i==6?-1:1);
+    vec4 qn=texelFetch(uQ,wrapP(p+d),0); float w=length(qn.xy); if(w<0.05) continue; Z+=qn.xy; nw+=w; nr+=qn.z*w; }
+  float um=length(q.xy); float rate=q.z;
+  if(um<0.3){   // newborn, or decohered to nothing: take the neighbourhood's rhythm; with no neighbours, a rhythm seeded from where this body's centre is
+    if(nw>0.5){ q.xy=Z/max(length(Z),1e-4); rate=nr/nw; }
+    else { ivec2 blk=ivec2(floor(uC[kk]/24.0)); float hb=identHash(blk,41u); float a=hb*6.2832+(identHash(p,43u)-0.5)*0.6; q.xy=vec2(cos(a),sin(a)); rate=PH_W0*(0.8+0.4*hb); }
+    rate*=1.0+0.06*(identHash(p,47u)-0.5);
+    return vec4(q.xy,clamp(rate,PH_W0*0.6,PH_W0*1.4),0.0); }
+  vec2 u=q.xy/um;
+  float pull=0.0, R=0.0;
+  if(nw>0.0){ vec2 zn=Z/nw; pull=(u.x*zn.y-u.y*zn.x)*min(1.0,nw/3.0); R=length(Z)/max(nw,2.0); }   // sin(neighbourhood phase - own) times neighbourhood coherence; few neighbours pull weakly
+  rate+=PH_EPS*pull;                                                   // a cell that is always pulled forward learns to beat faster
+  if(kk==0 && length(drive)>0.05){ float a=identAgree(u,0); rate=mix(rate,PH_W0,0.002*max(0.0,a-0.5)*2.0); }   // attention carries a beat; only cells in your rhythm take it up
+  rate=clamp(rate,PH_W0*0.6,PH_W0*1.4);
+  float dth=rate+PH_K*pull;
+  float c=cos(dth), s=sin(dth); vec2 u1=vec2(u.x*c-u.y*s,u.x*s+u.y*c);
+  float w=mix(q.w,R,0.05);
+  return vec4(u1,rate,w); }
 // how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard.
-float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==nearestK?1.0:0.0; }
+// phase: the nearest centre holds a cell unless another wisp's rhythm agrees with the cell's phase *better* than the nearest's
+// does; that difference, times proximity (over about five cells), is the other wisp's claim. two bodies in the same rhythm, or a
+// cell with no phase, fall back to the nearest-centre split, so two centres can never dissolve into one (a symmetric soft membership
+// merged the centres on sibling branches, which is codependence); a past life has no will and holds only what is nearest.
+float identWeight(int k, int nearestK, vec4 q, vec2 pp){
+  if(uIdent!=4) return k==nearestK?1.0:0.0;
+  float um=length(q.xy); if(um<0.3) return k==nearestK?1.0:0.0;
+  vec2 u=q.xy/um; float dn=distance(pp,uC[nearestK]); float an=identAgree(u,nearestK); float raw[3]; float tot=0.0;
+  for(int j=0;j<3;j++){ raw[j]=0.0; if(j>=uCN) continue;
+    if(j==nearestK) raw[j]=1.0; else if(j==0 || j==uNpcK){ float dj=distance(pp,uC[j]); float prox=exp(-max(0.0,dj-dn)*0.2); raw[j]=prox*3.0*max(0.0,identAgree(u,j)-an); }
+    tot+=raw[j]; }
+  return raw[k]/max(tot,1e-4); }
 // the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
+// phase: a wisp's intention is answered in proportion to agreement with its rhythm; a cell that beats with the other wisp's rhythm
+// follows that wisp's intention instead, so your cells inside the other wisp still answer you and its cells inside you do not
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent!=4) return drive;
+  if(ki!=0 && ki!=uNpcK) return drive;
+  float um=length(q.xy); if(um<0.3) return drive*0.6;
+  vec2 u=q.xy/um; float a=identAgree(u,ki); vec2 d=drive*(0.25+0.75*a);
+  int o=-1; if(ki==0 && uNpcK>0) o=uNpcK; else if(ki==uNpcK) o=0;
+  if(o>=0){ float ao=identAgree(u,o); float m=max(0.0,ao-a); d=mix(d,uDirs[o]*(0.25+0.75*ao),m); }
+  return d; }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
+// phase: cohesion scales with agreement with the nearest centre's rhythm (a cell in the overlap that has fallen into the other
+// wisp's rhythm stops cohering with you) and with local coherence (a decohered straggler lets go)
+vec2 identCohere(vec4 q, vec2 coh, float self){
+  if(uIdent!=4) return coh;
+  float um=length(q.xy); if(um<0.3) return coh;
+  int ki=identNearest(gl_FragCoord.xy); float a=identAgree(q.xy/um,ki);
+  float c=mix(0.3,1.0,smoothstep(0.0,0.8,a))*(0.6+0.4*smoothstep(0.0,0.6,q.w));
+  return coh*c; }
 // how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
+// phase: hue by phase, so a rhythm is one colour sweeping round the wheel and a boundary is a hue edge; a decohered cell goes grey
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent!=4) return bc;
+  float um=length(q.xy); if(um<0.1) return bc;
+  float th=atan(q.y,q.x)/6.2832+0.5; vec3 hc=identHue(th)*0.85+0.15;
+  float sat=smoothstep(0.1,0.6,um)*(0.5+0.5*smoothstep(0.0,0.6,q.w));
+  return mix(bc,hc,0.5*sat); }
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
@@ -58,7 +137,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3]; uniform float uRadial;
+uniform vec2 uDir; uniform float uPush; uniform float uRadial;
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -182,7 +261,6 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
 uniform float uFriend;                                // 1 when the other wisp is your friend: its cells follow your attention too
@@ -254,7 +332,6 @@ void main(){
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
@@ -273,6 +350,7 @@ void main(){
   // it moves with the cells (same upwind flux and exchange as self), so it cannot spread across the self, and it dies with them.
   float pay=texelFetch(uB,p,0).w; float w0=pay; bool ore=false;
   vec2 v0=texelFetch(uBV,p,0).xy;
+  vec4 q0=texelFetch(uQ,p,0); vec4 qacc=vec4(0.0); float qin=0.0, qout=0.0;   // identity state rides the same fluxes as the matter
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
   for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(!fluidAt(q)) continue;
     float sq=texelFetch(uB,q,0).x; vec2 vq=texelFetch(uBV,q,0).xy;
@@ -281,6 +359,7 @@ void main(){
     self-=flux;
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
     float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
+    float qi=max(-flux,0.0); qacc+=qi*texelFetch(uQ,q,0); qin+=qi; qout+=max(flux,0.0);   // identity rides the bulk motion only, not the symmetric exchange: a body at rest keeps its edges
   }
   // near ore: any ore cell within a 9x9 window (the attention point lets cells settle a few cells short of a bar, so reach must be generous)
   for(int dy=-4;dy<=4&&!ore;dy++) for(int dx=-4;dx<=4;dx++){ if(mtype(maskAt(p+ivec2(dx,dy)))==M_ORE){ ore=true; break; } }
@@ -311,8 +390,9 @@ void main(){
   // exposure: what this matter has lived through (heat), carried with it
   float ex=texelFetch(uB,p,0).z; vec2 v0b=texelFetch(uBV,p,0).xy; ivec2 from=ivec2(floor(vec2(p)+0.5-v0b)); float exFrom=texelFetch(uB,wrapP(from),0).z;
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
-  // identity state: carried with the matter like exposure, then updated by the identity model
-  vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
+  // identity state: carried with the matter by the fluxes above (mass-weighted; the whole-cell look-back used for exposure does not
+  // move anything at sub-cell speeds), then updated by the identity model
+  float qstay=max(s0-qout,0.0); vec4 q= (qstay+qin)>1e-5? (qstay*q0+qacc)/(qstay+qin) : q0; vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
   q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
@@ -389,7 +469,7 @@ void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=flo
 // of the main self (centre 0), and the farthest cell from the main self (for re-seeding a lost fragment).
 //  T0 (m0, mx0, my0, burn)   T1 (xx0, yy0, xy0, m1)   T2 (mx1, my1, m2, mx2)   T3 (my2, farDist, farX, farY)
 SH.reduce0 = SH.head + `
-uniform sampler2D uB, uS; uniform vec2 uC[3]; uniform int uCN;
+uniform sampler2D uB, uS;
 layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=2) out vec4 o2; layout(location=3) out vec4 o3;
 void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
@@ -428,6 +508,10 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
+// identity state at up to 64 points of its own (round each live centre): q.xyz and the self there
+SH.probeQ = SH.head + `
+uniform sampler2D uB; uniform vec2 uQPts[64]; out vec4 o;
+void main(){ int i=int(gl_FragCoord.x); vec2 pt=uQPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 q=texelFetch(uQ,p,0); o=vec4(q.xyz,texelFetch(uB,p,0).x); }`;
 
 // ---------------- render ----------------
 SH.render = SH.head + `
@@ -435,7 +519,7 @@ uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
-uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
+uniform float uPHurt, uPHp; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours

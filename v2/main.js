@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='phase';
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -145,7 +145,14 @@
   const dirS=[0,0];
   // selves: up to three fragments tracked by the reduction. index 0 is "you"; the others are ghosts.
   const selves=[{x:0,y:0,mass:0,live:true,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0}];
-  function pushCentres(){ let n=0; SIM.npcK=-1; for(let i=0;i<3;i++){ if(selves[i].live){ if(selves[i].npc) SIM.npcK=n; SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:selves[i].npc?[selves[i].hx,selves[i].hy]:[selves[i].hx*0.45,selves[i].hy*0.45]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; n++; } } SIM.nC=Math.max(1,n); }
+  function pushCentres(){ let n=0; SIM.npcK=-1; for(let i=0;i<3;i++){ if(selves[i].live){ if(selves[i].npc) SIM.npcK=n; SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:selves[i].npc?[selves[i].hx,selves[i].hy]:[selves[i].hx*0.45,selves[i].hy*0.45]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; const ph=selves[i].ph||[0,0,0]; SIM.phaseC[n*4]=ph[0]; SIM.phaseC[n*4+1]=ph[1]; SIM.phaseC[n*4+2]=ph[2]; SIM.phaseC[n*4+3]=0; n++; } } SIM.nC=Math.max(1,n); for(let j=n;j<3;j++){ SIM.phaseC[j*4]=0; SIM.phaseC[j*4+1]=0; SIM.phaseC[j*4+2]=0; } }
+  // identity model 4 (phase): each live centre's rhythm, read from the q probe (21 points round each centre: itself, 8 at r=4, 12 at r=9,
+  // self-weighted): mean phasor times coherence, and mean rate. the points are set before the probe, the means taken from the readback.
+  const QRING=(()=>{ const o=[[0,0]]; for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; o.push([Math.cos(a)*4,Math.sin(a)*4]); } for(let k=0;k<12;k++){ const a=k/12*Math.PI*2; o.push([Math.cos(a)*9,Math.sin(a)*9]); } return o; })();
+  function setQPts(){ const q=SIM.qpts; q.fill(0); for(let i=0;i<3;i++){ if(!selves[i].live) continue; for(let k=0;k<21;k++){ q[(i*21+k)*2]=selves[i].x+QRING[k][0]; q[(i*21+k)*2+1]=selves[i].y+QRING[k][1]; } } }
+  function readPhases(){ const b=SIM.probeBuf3; for(let i=0;i<3;i++){ if(!selves[i].live){ selves[i].ph=null; selves[i].qstat=null; continue; } let zx=0,zy=0,r=0,w=0, czx=0,czy=0,cr=0,cw=0, ezx=0,ezy=0,er=0,ew=0;
+      for(let k=0;k<21;k++){ const j=(i*21+k)*4; const s=b[j+3]; if(s<0.05) continue; const ux=b[j],uy=b[j+1],rt=b[j+2]; zx+=ux*s; zy+=uy*s; r+=rt*s; w+=s; if(k<9){ czx+=ux*s; czy+=uy*s; cr+=rt*s; cw+=s; } else { ezx+=ux*s; ezy+=uy*s; er+=rt*s; ew+=s; } }
+      if(w>0.2){ selves[i].ph=[zx/w,zy/w,r/w]; selves[i].qstat={R:Math.hypot(zx,zy)/w,phi:Math.atan2(zy,zx),rate:r/w,c:cw>0?[czx/cw,czy/cw,cr/cw]:null,e:ew>0?[ezx/ew,ezy/ew,er/ew]:null}; } else { selves[i].ph=null; selves[i].qstat=null; } } }
   const TR=[];   // last 24 ticks of self bookkeeping, attached to camera-jump reports
   function updateSelves(red){
     const cl=red.clusters; if(!cl||cl.length<3) return;
@@ -209,7 +216,7 @@
     const alc=world.checkpoints.find(c=>c.dead&&Math.abs(c.x-player.x)<c.w/2+14&&Math.abs(c.y-player.y)<c.h/2+14)||null;
     if(alc){ let k=40; const aw=alc.w+12, ah=alc.h+12; for(let gy=0;gy<4;gy++) for(let gx=0;gx<6;gx++){ probePts[k*2]=alc.x-aw/2+(gx+0.5)*aw/6; probePts[k*2+1]=alc.y-ah/2+(gy+0.5)*ah/4; k++; } }
     else { let k=1; const sp=BODY.rnear*0.5; for(let gy=0;gy<7;gy++) for(let gx=0;gx<9;gx++){ probePts[k*2]=player.x-4.5*sp+(gx+0.5)*sp; probePts[k*2+1]=player.y-3.5*sp+(gy+0.5)*sp; k++; } }   // a dense 9x7 grid round the body (slots 1..63; cores and drones are retired) for its total load
-    const [pb,pb2,red]=SIM.collect();
+    const [pb,pb2,red]=SIM.collect(); readPhases();
     if(!alc){ let sum=0; for(let k=1;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const sp=BODY.rnear*0.5; player.carried=sum*sp*sp; }   // ore carried, from the dense grid round the body
     if(alc&&player.alc===alc){ let sum=0; for(let k=40;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const inside=sum*((alc.w+12)*(alc.h+12))/24; const dep=inside*0.04*steps; alc.repair=(alc.repair||0)+dep; player.depositing=dep>0.02*MK;
       if(player.depositing&&SIM.frame%20===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*4,0.012,0,0.4,'sine');
@@ -276,7 +283,7 @@
     SIM.updateMask(world.machines,SIM.frame);
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
-    SIM.probe(probePts,64);
+    setQPts(); SIM.probe(probePts,64);
     updateSelves(red);
     player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
     if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
@@ -451,6 +458,13 @@
     SCHEME.useTarget=false;
     const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
+      // identity state of the two bodies from the q probe (the 21 points round each centre, self-weighted; measure() has just refreshed it):
+      // ab the distance between the mean q of your cells and the other wisp's (phasor xy and rate z, rate in units of 1e-3 rad a substep);
+      // dphi the gap between the two mean phases (rad, 0..pi), drate the rate gap (1e-3), R each body's coherence; ace/bce the same q distance
+      // between a body's own centre (9 points within r=4) and its edge (12 points at r=9), for scale. null when the other wisp is not live.
+      measureQ:()=>{ readPhases(); const A=selves[0].qstat, B=selves[2].live?selves[2].qstat:null; const qv=(m)=>m?[m[0],m[1],m[2]*1000]:null; const dist=(a,b)=>{ if(!a||!b) return null; let s=0; for(let c=0;c<3;c++) s+=(a[c]-b[c])**2; return +Math.sqrt(s).toFixed(3); };
+        const mean=(st)=>st?qv([st.R*Math.cos(st.phi),st.R*Math.sin(st.phi),st.rate]):null; const ang=(a,b)=>{ if(!a||!b) return null; let d=Math.abs(a.phi-b.phi)%(2*Math.PI); if(d>Math.PI) d=2*Math.PI-d; return +d.toFixed(2); };
+        return {ab:dist(mean(A),mean(B)),dphi:ang(A,B),drate:A&&B?+(Math.abs(A.rate-B.rate)*1000).toFixed(2):null,RA:A?+A.R.toFixed(2):null,RB:B?+B.R.toFixed(2):null,rateA:A?+(A.rate*1000).toFixed(2):null,rateB:B?+(B.rate*1000).toFixed(2):null,ace:A?dist(qv(A.c),qv(A.e)):null,bce:B?dist(qv(B.c),qv(B.e)):null}; },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
         SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
