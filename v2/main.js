@@ -419,7 +419,7 @@
   function npcTick(){ if(!NPC||NPC.state==='dead'||NPC.state==='gone') return; const s=selves[2];
     if(NPC.state==='waiting'&&!s.live&&SIM.frame>=NPC.spawnAt&&!pendingInjectB){ s.live=true; s.npc=true; s.x=NPC.x; s.y=NPC.y; s.mass=0; s.hx=0; s.hy=0; s.age=0; pushCentres(); pendingInjectB=[NPC.x,NPC.y,BODY.spawnR,1.0]; NPC.born=SIM.frame; return; }
     if(!s.live||!s.npc) return;
-    if(NPC.born&&SIM.frame-NPC.born>120){ NPC.lowT=s.mass<2*MK?NPC.lowT+1:0; if(NPC.lowT>200){ s.live=false; s.npc=false; NPC.state='dead'; pushCentres(); return; } }
+    if(NPC.born&&SIM.frame-NPC.born>120){ NPC.lowT=s.mass<2*MK?NPC.lowT+1:0; if(NPC.lowT>400){ NPC.lowT=0; let c=null,bd=1e9; for(const k of world.checkpoints){ if(k.dead) continue; const d=Math.hypot(k.x-s.x,k.y-s.y); if(d<bd){ bd=d; c=k; } } const rx=c?c.x:NPC.ax, ry=c?c.y:NPC.ay; s.x=rx; s.y=ry; pushCentres(); if(!pendingInjectB) pendingInjectB=[rx,ry,BODY.spawnR,1.0]; player.hint='the friend found its way back'; player.hintT=360; return; } }   // thinned to nothing: it reforms in the nearest cold room; losing a friend is never the lesson
     const px=s.mass>0.5?s.x:NPC.x, py=s.mass>0.5?s.y:NPC.y; NPC.x=px; NPC.y=py; let d=[0,0];
     NPC.dist=Math.hypot(player.x-px,player.y-py);
     // friendship: stay embedded in it for three seconds and it comes with you; lose it by staying far away for ten
@@ -430,7 +430,7 @@
     if(NPC.state==='waiting'){ if(NPC.alc.repairedAt){ NPC.state='going'; NPC.i=0; AUDIO.tone(440,660,0.4,'sine',0.05); } else { const dx=NPC.ax-px, dy=NPC.ay-py; const dd=Math.hypot(dx,dy); if(dd>5) d=[dx/dd*0.6,dy/dd*0.6]; } }
     if(NPC.state==='going'){ const r=followPath(NPC,px,py); if(r){ d=r.d; const le=NPC.legEnds.find(e=>e[0]>=NPC.i-6&&!NPC.rested.has(e[1])); if(le&&NPC.i>=le[0]-6){ if(NPC.restT<300){ NPC.restT++; d=[0,0]; } else { NPC.rested.add(le[1]); NPC.restT=0; } }
         if(NPC.i>=NPC.full.length-8){ NPC.state='gone'; s.npc=false; pushCentres(); } } }
-    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=0.05*Math.max(0,1-s.mass/BODY.massMax); bd.friend=NPC.state==='friend'?1:0; }
+    s.hx=d[0]; s.hy=d[1]; bd.npcGrow=(0.05+0.12*Math.max(0,1-s.mass/(0.5*BODY.massMax)))*Math.max(0,1-s.mass/BODY.massMax); bd.friend=NPC.state==='friend'?1:0; }   // a thin friend regrows fast
   // bot mode (?bot=1): a guided body follows the static path through the level with the attention drive.
   // it is the dynamic completability test: currents, fans, heat, stamina and withering all act on it.
   const BOT=HASH.bot? {on:true,path:null,i:+HASH.boti||0,arrivals:[],lastCp:-1,t0:0} : {on:false};
