@@ -24,9 +24,10 @@ const IDENTS={
       const S=red.spread||0, E=red.elong||1; const rx=(p.vx||0)-(ctx.ux||0), ry=(p.vy||0)-(ctx.uy||0);   // motion relative to the gas: a streak riding a jet is still
       const now={S,E,M:m,X:rx,Y:ry};
       if(!st.f||p.respawnT>=28){ st.f={...now}; st.s={...now}; st.stable=0; }
-      const f=st.f, s=st.s; for(const k in now){ f[k]+=(now[k]-f[k])/10; s[k]+=(now[k]-s[k])/60; }
+      else { for(const k of ['X','Y']) now[k]=Math.max(st.f[k]-0.03,Math.min(st.f[k]+0.03,now[k])); }   // one bad flow reading cannot flip an identity (real accelerations are slower); the shape terms are left raw: clamping a noisy one turns its fast view into a random walk
+      const f=st.f, s=st.s; for(const k in now){ f[k]+=(now[k]-f[k])/8; s[k]+=(now[k]-s[k])/45; }
       // how fast the configuration is changing, as fast-minus-slow, each term scaled so ~1 is a real change of shape or motion
-      const cS=Math.abs(f.S-s.S)/Math.max(3,s.S)*4, cE=Math.abs(f.E-s.E)/Math.max(1,s.E)*3, cM=Math.abs(f.M-s.M)/Math.max(10,s.M)*3, cV=Math.hypot(f.X-s.X,f.Y-s.Y)/0.1;
+      const cS=Math.abs(f.S-s.S)/Math.max(3,s.S)*3, cE=Math.abs(f.E-s.E)/Math.max(1,s.E)*1.5, cM=Math.abs(f.M-s.M)/Math.max(10,s.M)*3, cV=Math.hypot(f.X-s.X,f.Y-s.Y)/0.15;
       st.flux=Math.max(cS,cE,cM,cV); st.cmp=[cS,cE,cM,cV].map(v=>+v.toFixed(2));
       const MK=ctx.MK||1; const parts=ctx.selves.filter((q,k)=>k>0&&q.live&&!q.npc&&q.mass>6*MK).length;
       if(parts>st.parts) st.lostAt=st.t; st.parts=parts;
@@ -50,7 +51,7 @@ const IDENTS={
         if(from>0&&!p.dead){ p.hint=want===1?'diffusion · nothing holds':want===2?'moratorium · in between':want===3?(from===4?'achievement · the harm is gone':'achievement · this is stable, whatever it is'):'negative identity · stable, and it hurts · leaving costs the stability for a while'; p.hintT=150; } }
       // strength: a bonus arrives over a second, diffusion deepens as the body thins, moratorium is as strong as the change
       if(st.status>=3) st.k=Math.min(1,st.k+1/60); else { const want_k= st.status===1? Math.max(0.4,Math.min(1,1-m/(0.5*massMax))) : Math.min(1,0.4+st.flux/this.TH*0.6); st.k+=(want_k-st.k)*0.1; }
-      p.status=STATUS_WORD[st.status]||undefined; p.statusK=st.k; p.statusDbg={flux:+st.flux.toFixed(2),stable:st.stable,harm:+st.harm.toFixed(2),parts,cmp:st.cmp};
+      p.status=STATUS_WORD[st.status]||undefined; p.statusK=st.k; p.statusDbg={flux:+st.flux.toFixed(2),stable:st.stable,harm:+st.harm.toFixed(2),parts,cmp:st.cmp,raw:[S,E,m,p.vx||0,p.vy||0,ctx.ux||0,ctx.uy||0].map(v=>+v.toFixed(3)),fs:[f.X,s.X,f.Y,s.Y].map(v=>+v.toFixed(3))};
       bd.status=st.status; bd.statusK=st.k;
       if(st.status===1) bd.grow*=1-0.5*st.k; else if(st.status>=3) bd.grow*=1+0.6*st.k;   // regrowth follows the status; cohesion and steering are applied per cell in the shader
     },

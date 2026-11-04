@@ -50,13 +50,13 @@ float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==ownerK(q,pp)?
 vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
   if(uIdent!=11 || ki!=0 || uStatus==0) return drive; float k=uStatusK;
   if(uStatus==1) return drive*(1.0-0.45*k);                                                                       // diffusion: the will barely reaches the cells
-  if(uStatus==2){ float dl=length(drive); if(dl>0.02){ vec2 pp=vec2(-drive.y,drive.x)/dl; drive+=pp*dl*0.25*k*sin(uTime*4.0); } return drive; }   // moratorium: steerable, but it sways
-  return drive*(1.0+0.15*k); }                                                                                    // achievement, negative identity too: the whole body answers
+  if(uStatus==2) return drive;                                                                                    // moratorium: steerable as ever (a sway here fed back into the stability measure: the body never settled)
+  return drive; }                                                                                                 // achievement, negative identity too: full steering, no more (extra speed would favour the streak)
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
 vec2 identCohere(vec4 q, vec2 coh, float self){
   if(uIdent!=11 || q.w<0.5 || uStatus==0) return coh; float k=uStatusK;
   if(uStatus==1) return coh*(1.0-0.45*k);                                                                         // diffusion: nothing holds
-  if(uStatus==2) return coh*(1.0-0.25*k);                                                                         // moratorium: loose
+  if(uStatus==2) return coh*(1.0-0.25*k*(1.0+0.4*sin(uTime*2.5)));                                                // moratorium: loose, and it breathes (looseness that pulses moves no centroid)
   return coh*(1.0+0.35*k); }                                                                                      // stability is rewarded with cohesion, whatever the shape
 // how a cell is tinted for display, given the colour it would have
 vec3 identTint(vec4 q, vec3 bc, float self){
