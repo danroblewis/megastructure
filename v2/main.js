@@ -128,7 +128,7 @@
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
-  const DEFAULT_SCHEME='attention';
+  const DEFAULT_SCHEME='consistency';
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
   const MENU={open:false,rows:[],pill:null,names:Object.keys(SCHEMES)};
