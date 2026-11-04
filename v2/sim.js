@@ -27,11 +27,12 @@ const SIM={
     this.maskData=maskData; this.Mstatic=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,maskData); this.Mdyn=tex(W,H,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE); this.Mfbo=fbo([this.Mdyn]);
     this.probeTex=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo=fbo([this.probeTex]);
     this.probeTex2=tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT); this.probeFbo2=fbo([this.probeTex2]);
+    this.probeTexQ=[tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT),tex(64,1,gl.RGBA32F,gl.RGBA,gl.FLOAT)]; this.probeFboQ=fbo(this.probeTexQ); this.probeBufQ=new Float32Array(64*4); this.probeBufQS=new Float32Array(64*4);
     this.cur=0; this.scur=0;
     const prog=(fs,vs)=>{ const p=gl.createProgram(); const mk=(t,src)=>{ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); const m=/ERROR: \d+:(\d+)/.exec(log); throw new Error(log+' >> '+(src.split('\n')[(m?+m[1]:1)-1]||'')); } return s; };
       gl.attachShader(p,mk(gl.VERTEX_SHADER,vs||SH.vs)); gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS); for(let i=0;i<n;i++){ const inf=gl.getActiveUniform(p,i); u[inf.name.replace('[0]','')]=gl.getUniformLocation(p,inf.name); } return {p,u}; };
-    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),render:prog(SH.render)};
+    this.P={lbm:prog(SH.lbm),species:prog(SH.species),body:prog(SH.body),bodyVel:prog(SH.bodyVel),walls:prog(SH.walls),wallsInit:prog(SH.wallsInit),light:prog(SH.light),bloomExtract:prog(SH.bloomExtract),blur:prog(SH.blur),reduce0:prog(SH.reduce0),reduceN:prog(SH.reduceN),maskCopy:prog(SH.maskCopy),mach:prog(SH.machFS,SH.machVS),probe:prog(SH.probe),probe2:prog(SH.probe2),probeQ:prog(SH.probeQ),render:prog(SH.render)};
     // machine geometry
     this.machVAO=gl.createVertexArray(); gl.bindVertexArray(this.machVAO); this.machBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.machBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,20,0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,20,8); gl.bindVertexArray(null);
@@ -97,9 +98,17 @@ const SIM={
   },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
-    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
+    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
     for(let i=1;i<this.levels.length;i++){ pr=this.P.reduceN; const L=this.levels[i-1]; this.use(pr,{uMask:this.Mdyn,uL0:L.ts[0],uL1:L.ts[1],uL2:L.ts[2],uL3:L.ts[3]}); gl.uniform2i(pr.u.uLRes,L.w,L.h); this.draw(this.levels[i].f,this.levels[i].w,this.levels[i].h); }
   },
+  // lab measurement: the identity state q and the self at up to 64 points, read back synchronously (stalls the GPU; lab only)
+  probeQ(points,n){
+    const gl=this.gl; const pts=new Float32Array(128); for(let i=0;i<n&&i<64;i++){ pts[i*2]=points[i*2]; pts[i*2+1]=points[i*2+1]; }
+    const pr=this.P.probeQ; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur]}); gl.uniform2fv(pr.u.uPts,pts); this.draw(this.probeFboQ,64,1);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null); gl.bindFramebuffer(gl.FRAMEBUFFER,this.probeFboQ);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0); gl.readPixels(0,0,64,1,gl.RGBA,gl.FLOAT,this.probeBufQ);
+    gl.readBuffer(gl.COLOR_ATTACHMENT1); gl.readPixels(0,0,64,1,gl.RGBA,gl.FLOAT,this.probeBufQS); gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    return [this.probeBufQ,this.probeBufQS]; },
   // sample fields at up to 64 points and reduce the body; results are read back asynchronously
   // (collect() returns last frame's values, so the GPU never stalls)
   probe(points,n){

@@ -168,3 +168,61 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+## Identity experiment 1: coherence — 2026-11-03, branch `ident-1-coherence`
+
+The model (`#ident=coherence`, the default on this branch; `#ident=centroid` is the baseline): `q.xy` is a slow habit of the
+cell's own motion (velocity x6, mixed at 0.012 per substep, about half a second), `q.zw` a quarter-second memory of the drive
+its centre gave it. Cohesion is scaled by agreement between the cell's habit and the habit of what it climbs toward (a still cell
+and a moving one disagree; floor 0.3) and by agreement with its centre's drive (overall floor 0.2). Membership in a centre: a
+resting cell belongs to its nearest centre as in the baseline; a moving cell belongs to the centres whose drive it has been moving
+with (a centre asking for rest disagrees with a moving cell), within a band 4..20 cells past the nearest centre, normalised.
+Steerability is 40%..100% of the drive by agreement between habit and drive. Tint: hue by habit direction (right red, down
+yellow-green, left cyan, up violet), saturation by habit strength. Scaffold changes: `uC/uCN/uDirs` moved into `SH.head` so
+`identWeight` can see the drives; `SH.probeQ` / `SIM.probeQ` / lab `qstat` sample q at t=30, 540, 900; rows carry `ox,oy`.
+
+Enmesh (`#lab=enmesh&npc=170,60&warm=300&n=900`), main / other / otherDist:
+
+| t | baseline | coherence |
+|---|---|---|
+| 90 | 128 / 193 / 12 | 132 / 188 / 12 |
+| 240 | 161 / 160 / 74 | 162 / 160 / 73 |
+| 540 | 162 / 157 / 77 | 162 / 157 / 75 |
+| 720 | 158 / 160 / 44 | 160 / 159 / 46 |
+| 900 | 66 / 160 / 145 | 72 / 160 / 145 |
+
+The scripted 4 s press passes clean through the other wisp in about 2 s (t≈75–140) and the 5 s "hold inside" happens 73 cells past
+it; the pull-away crosses it again (t≈630–690); the mass loss at t=900 is the box's left wall at x=20 in both runs. The swap at
+t=90 (132/188) is the reduction's assignment while the bodies overlap, not cells moving.
+
+- Overlap: produced, no repulsion (both pass through).
+- No taking: masses after parting 162/160 against 163/160 before contact (baseline 161/160). The other wisp's centroid moves
+  0.0/3.2/4.0/3.2 cells per 30 ticks during the first contact (baseline 1.0/4.1/4.0/3.2) and 0–1 during the second pass (both).
+- Steerability (player centroid displacement per 30 ticks under the scripted drive): alone 14.0–15.1 for both; entangled on the
+  first pass (t=90/120/150) baseline 12.0/17.5/17.0, coherence 12.0/15.3/19.1; second pass 19–20 for both.
+- Loss: none measurable outside the wall.
+- Learning together (self-weighted mean q over a 3x3 core and a 12-point ring at r=8 of each body; |Δq| over four channels, habit
+  xy alone in brackets, against the core–edge difference within a body): before contact t=30: 1.09 (0.46) vs 0.09/0.19; resting
+  apart t=540: 0.31 (0.18) vs 0.22/0.07; after parting t=900: 1.44 (0.12) vs 0.07/0.08. The habit difference after parting is down
+  at a body's own core–edge level, but because both bodies are near rest then, not because of the contact; `q.zw` differs by
+  construction (what each centre asks). This q carries no shared history. Baseline q (scaffold example): 1.02 / 0.23 / 0.44.
+
+Ledge, commit, hold, both models rerun on this code (the 2026-11-02 table predates payload and other wisps):
+
+| scenario | baseline (centroid) | coherence |
+|---|---|---|
+| `ledge` warm=900 | 118→81 torn in the first 2 s, no part tracked, held 81–86 for 13 s, regrew to 161 after release | 118→84, held 84–87, regrew to 160 |
+| `commit` | carried x 84→389 at mass 160, one part torn at t=120 faded by t=180 | identical |
+| `hold` | carried 36 cells downstream in the first second, stamina 1→0.71 at t=90, pushed out of the band, effort 0.3–0.38 | identical to within 1 cell / 0.01 |
+
+What was produced and what was not. A first version with soft membership (50/50 when habit and drive said nothing) collapsed both
+centres onto one point at t=270, after which every cell was "nearest" to centre 0 and the other wisp was dragged 190 cells along
+with the player, equal masses, both moving 22 cells per 30 ticks: the codependence failure, and a hazard of any soft membership in
+the centre reduction. The delivered version (rest → nearest centre; motion → agreement with the drive; still against moving counts
+as disagreement) is indistinguishable from the baseline in all four scenarios to within noise: no boundary beyond what distance
+already gives, no taking but none in the baseline either, steerability kept because it was never reduced where it mattered; the
+habit tint is the one visible product. The reason is that the habit only registers for cells that swim or are carried, the drive
+is the same for every cell of a body, so habit agreement carries no more information than nearest-centre does, and the still/moving
+disagreement at the interface lasts only the two seconds a pass-through takes. The experiment's claim (parting wisps leave averaged
+habits that belong to neither) needs a scenario where the wisps actually stay inside each other, which this enmesh script does not
+produce, and a cohesion cut strong enough to matter, which the first version showed costs the centres their separation.

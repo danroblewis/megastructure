@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='coherence';   // branch ident-1-coherence: experiment 1 by default; #ident=centroid is the baseline
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -449,6 +449,15 @@
     SCHEME.useTarget=false;
     const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
+      qstat:()=>{ // identity state of you and the other wisp: self-weighted mean q over a core (3x3 at spacing 2) and an edge ring (12 points at radius 8) of each; |difference| between the bodies and between core and edge
+        const bodies=[selves[0],selves[2]].filter(s=>s&&s.live); const pts=[]; const tag=[];
+        for(let b=0;b<bodies.length;b++){ const s=bodies[b]; for(let dy=-2;dy<=2;dy+=2) for(let dx=-2;dx<=2;dx+=2){ pts.push(s.x+dx,s.y+dy); tag.push([b,0]); } for(let k=0;k<12;k++){ const a=k/12*Math.PI*2; pts.push(s.x+Math.cos(a)*8,s.y+Math.sin(a)*8); tag.push([b,1]); } }
+        const [q,qs]=SIM.probeQ(pts,tag.length); const acc=[[[0,0,0,0,0],[0,0,0,0,0]],[[0,0,0,0,0],[0,0,0,0,0]]];
+        for(let i=0;i<tag.length;i++){ const w=qs[i*4]; if(w<0.1) continue; const a=acc[tag[i][0]][tag[i][1]]; for(let c=0;c<4;c++) a[c]+=q[i*4+c]*w; a[4]+=w; }
+        const mean=(a)=>a[4]>0?a.slice(0,4).map(v=>v/a[4]):null; const both=(b)=>{ const a=[0,0,0,0,0]; for(const r of acc[b]) for(let c=0;c<5;c++) a[c]+=r[c]; return mean(a); };
+        const dist=(u,v,c0,c1)=>{ if(!u||!v) return null; let s=0; for(let c=c0;c<c1;c++) s+=(u[c]-v[c])**2; return +Math.sqrt(s).toFixed(3); };
+        const mA=both(0), mB=bodies.length>1?both(1):null; const ce=[0,1].filter(b=>b<bodies.length).map(b=>[dist(mean(acc[b][0]),mean(acc[b][1]),0,4),dist(mean(acc[b][0]),mean(acc[b][1]),0,2)]);
+        return {ab:dist(mA,mB,0,4),abH:dist(mA,mB,0,2),abD:dist(mA,mB,2,4),ce:ce.map(v=>v[0]),ceH:ce.map(v=>v[1]),qA:mA&&mA.map(v=>+v.toFixed(2)),qB:mB&&mB.map(v=>+v.toFixed(2)),nA:+acc[0][0][4].toFixed(1)+'+'+(+acc[0][1][4].toFixed(1)),nB:bodies.length>1?+acc[1][0][4].toFixed(1)+'+'+(+acc[1][1][4].toFixed(1)):null}; },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
         SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
