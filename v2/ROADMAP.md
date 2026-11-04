@@ -188,3 +188,16 @@ wall; `enmesh2` (gentler) is used from wave 2. Criteria: overlap normal; no taki
 Take-aways so far: distance alone already gives "no taking" (exchanged cells fade); what the models add is *not passing
 through* (commitment, familiarity) at a cost in responsiveness; none yet produces learning-together; soft membership that
 can merge centres must be ruled out in the reduction (it is codependence by the numbers).
+
+---
+
+## 14. The friend's story — idea 2026-11-04
+
+Enmeshment with the green wisp, as it stands, slows you and blurs who is who; the user's reading: if that is meant to be
+bad boundaries it "kind of works", but it needs a story. Codependency, properly: someone with a problem they are capable
+of working through on their own (the father's drinking; the son buying the bottle, the wife phoning in sick for him),
+and the lesson that without your own boundaries you cannot help, because your boundaries enmesh and you both end up
+with the same problem. So the friend needs a problem of its own that it can overcome, text on screen that tells the
+story as it happens, and a way for the player to help that is not doing it for them. Never a lesson that leaving a bad
+entanglement kills the other: the friend now regrows and returns. Experiments 3 (commitment, rejected as prescriptive)
+and 11 (statuses: diffusion, moratorium, achievement, negative identity as emergent stability) are the Marcia side.
