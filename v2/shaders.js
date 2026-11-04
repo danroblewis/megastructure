@@ -25,23 +25,50 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
 uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
-uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform int uIdent;        // which identity model is running (0 = centroid, the baseline; 8 = held)
+uniform float uHold;       // 1 while the player holds the boundary (a second finger, or the space bar): model 8
+uniform vec2 uDirs[3];     // the drive each centre gives its cells this substep (0 is you); here so the hooks can read your own
+ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
+// model 8 (held): q.x a smoothed density of the cell (so neighbours can read the neighbourhood from uQ), q.y whose the matter is (+1 yours,
+// -1 another centre's, a fraction in between: it travels with the matter in the body pass and relaxes toward the nearest centre except
+// while held), q.z contact with the other wisp, q.w how firmly the cell holds the boundary.
+// holding is the player's act: while uHold is on, q.w rises at the edge of your body; released, it fades and the edges mix again.
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
+  if(uIdent==8){
+    q.x=mix(q.x,min(1.0,self/0.6),0.3);
+    float occ=0.0; float foreign=0.0; float heldNb=0.0;
+    for(int k=0;k<4;k++){ ivec2 d=ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0); ivec2 n=p+d; if(n.x<0||n.y<0||n.x>=uRes.x||n.y>=uRes.y) continue;
+      vec4 qn=texelFetch(uQ,n,0); occ+=qn.x; if(qn.y*q.y<-0.04 && qn.x>0.05){ foreign=1.0; heldNb=max(heldNb,qn.w); } }   // the other wisp's matter next door, and whether it is held there
+    float edge=max(foreign,1.0-smoothstep(1.5,3.0,occ));            // thin neighbourhood, or a contact with the other wisp
+    float own= kk==0? 1.0 : -1.0;
+    q.y=mix(q.y,own,0.15*(1.0-max(q.w,heldNb)));                      // whose it is follows the nearest centre, except across a held contact: neither side relabels the other
+    q.z=foreign;
+    if(uHold>0.5){ float rise= q.y>0.0? 0.06*edge : 0.06*heldNb;      // your edge firms while you hold; the other wisp's cells firm only where they touch your held edge
+      q.w=min(1.0,q.w+rise-0.004*(1.0-max(edge,heldNb))); }
+    else q.w=max(0.0,q.w-0.015);                                      // let go and the edge softens in about a second
+    return q; }
   q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
   return q; }
-// how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard.
-float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==nearestK?1.0:0.0; }
-// the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
-// the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
-// how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
-ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
+// how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard. held cells of yours stay yours wherever they are.
+// model 8: membership is the label fraction (soft), so a cell whose matter is mostly yours counts as yours wherever it sits.
+float identWeight(int k, int nearestK, vec4 q, vec2 pp){
+  if(uIdent==8){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(k==0) return m; if(uNpcK>0) return k==uNpcK? 1.0-m : 0.0; return k==nearestK? 1.0-m : 0.0; }
+  return k==nearestK?1.0:0.0; }
+// the drive a cell actually follows, given the drive of its centre. model 8: matter answers its own wisp in proportion to whose it is.
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent==8){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(ki==0){ vec2 od= uNpcK>0? uDirs[uNpcK] : vec2(0.0); return mix(od,drive,m); } return mix(drive,uDirs[0],m); }
+  return drive; }
+// the cohesion a cell actually feels, given the gradient climb and homing computed for it. held cells are stiffer.
+vec2 identCohere(vec4 q, vec2 coh, float self){ if(uIdent==8) return coh*(1.0+0.6*q.w); return coh; }
+// how a cell is tinted for display, given the colour it would have. model 8: whose the matter is (pale for yours, green for the other wisp's), violet where held.
+vec3 identTint(vec4 q, vec3 bc, float self){ if(uIdent==8){ bc=mix(bc, q.y>0.0? vec3(0.8,0.9,1.0) : vec3(0.72,1.0,0.62), 0.5*min(1.0,abs(q.y))); return mix(bc,vec3(0.95,0.5,1.0),0.75*q.w); } return bc; }
+// model 8: how much of the diffusive exchange across the face between two cells is allowed. between cells whose matter belongs to different wisps,
+// a held face lets none across. the same value is computed from both sides, so the exchange stays conservative. moving matter is never blocked: overlap is normal.
+float identKeep(vec4 qa, vec4 qb){ if(uIdent!=8 || qa.y*qb.y>-0.04) return 1.0; return 1.0-max(qa.w,qb.w); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
 uniform sampler2D uWf;     // walls field: solidity, soot, residue, kind (0 metal, 0.5 frost, 1 tissue)
@@ -58,7 +85,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3]; uniform float uRadial;
+uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform float uRadial;
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -182,7 +209,7 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+uniform vec2 uC[3]; uniform int uCN;
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
 uniform float uFriend;                                // 1 when the other wisp is your friend: its cells follow your attention too
@@ -254,7 +281,7 @@ void main(){
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
+uniform vec2 uC[3]; uniform int uCN;
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
@@ -274,13 +301,16 @@ void main(){
   float pay=texelFetch(uB,p,0).w; float w0=pay; bool ore=false;
   vec2 v0=texelFetch(uBV,p,0).xy;
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
+  vec4 qp0=texelFetch(uQ,p,0); float lab=s0*qp0.y;   // model 8: label mass (whose matter this is), carried with the matter through the same transport
   for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(!fluidAt(q)) continue;
-    float sq=texelFetch(uB,q,0).x; vec2 vq=texelFetch(uBV,q,0).xy;
+    float sq=texelFetch(uB,q,0).x; vec2 vq=texelFetch(uBV,q,0).xy; vec4 qn=texelFetch(uQ,q,0);
+    float keep=identKeep(qp0,qn);                     // model 8: a held face between two wisps lets no diffusion across (same value from both sides, so conservative)
     float vf=dot(0.5*(v0+vq),vec2(E4[k]));          // velocity across the face, positive = leaving p
     float flux= vf>0.0? vf*s0 : vf*sq;                // upwind
     self-=flux;
-    self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
-    float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
+    self+=0.03*(sq-s0)*keep;                          // symmetric exchange: conservative diffusion
+    lab-= vf>0.0? flux*qp0.y : flux*qn.y; lab+=0.03*keep*(sq*qn.y-s0*qp0.y);   // the label travels with what moves and what diffuses
+    float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0)*keep;
   }
   for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE||mtype(maskAt(p+E4[k]*2))==M_ORE) ore=true; }
   float st=max(self,0.0);
@@ -293,6 +323,7 @@ void main(){
     if(ghost){ if(calm<0.4) self*=0.986; }                                            // a past life fades unless it rests in a cold still pocket
     else if(npc) self+=uNpcGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                   // another wisp keeps itself together much as you do
     else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
+  float labY=0.0; if(uIdent==8){ if(self<before && before>0.0) lab*=self/before; else lab+=(self-before)*(kk==0?1.0:-1.0); labY=clamp(lab/max(self,1e-4),-1.0,1.0); }   // model 8: withering keeps the label's share; regrowth is the growing wisp's own
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
   self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
@@ -312,6 +343,7 @@ void main(){
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
   // identity state: carried with the matter like exposure, then updated by the identity model
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
+  if(uIdent==8) q.y=labY;                            // model 8: whose the matter is came with the matter, not with the semi-Lagrangian carry
   q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;

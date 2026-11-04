@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='held';   // branch ident-8-held: the boundary as an act of will. #ident=centroid for the baseline
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -236,7 +236,7 @@
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
     bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax):0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
-    bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
+    bd.app=[0,0,0]; bd.hold=0; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
     npcTick();
     // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
@@ -248,6 +248,7 @@
       else { player.stamina=Math.max(0,player.stamina-effort*0.0045); if(effort<0.1) player.stamina=Math.min(1,player.stamina+0.005*(heat<0?2:1)); if(player.stamina<=0.02){ player.dissoc=150; AUDIO.tone(180,60,1.2,'sine',0.05); } }
       const st=player.stamina; bd.swim*=0.35+0.65*st; bd.push*=0.35+0.65*st; bd.coh*=0.6+0.4*st;
       if(st<0.6){ const g=1-st/0.6; bd.tint=[0.55,0.55,0.6,Math.max(bd.tint?bd.tint[3]:0,0.5*g)]; } }
+    if(alive && IDENT.tick) IDENT.tick(ctxNow());   // the identity model's CPU side (held: the hold input and its stamina cost)
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
     if(alive){
@@ -344,6 +345,7 @@
     const c=hctx, s=dpr; c.clearRect(0,0,sw,sh); const pad=6*s;
     if(HASH.hud||BOT.on){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textBaseline='top'; c.fillStyle='rgba(255,255,255,0.6)'; c.fillText(`mass ${player.mass|0}  ${dtAvg.toFixed(0)}ms ×${steps}`+(BOT.on?`   bot: chamber ${player.cpIndex+1}  deaths ${player.deaths}  t=${(SIM.frame/60)|0}s`:''),pad,pad); }
     if(SCHEME.hud) SCHEME.hud(ctxNow(),c);
+    if(IDENT.hud) IDENT.hud(ctxNow(),c);
     // until iOS lets the sound start (it needs a touch release), say so
     if(!AUDIO.muted&&(touchLog.length>0||Object.keys(keys).length>0)&&(!AUDIO.ctx||AUDIO.ctx.state!=='running')){ const fs=Math.round(12*s); c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; c.textAlign='center'; c.textBaseline='bottom'; c.fillStyle='rgba(255,255,255,0.45)'; c.fillText('tap once for sound',sw/2,sh-(26+(window.safeBottom||0))*s); c.textAlign='left'; c.textBaseline='top'; }
     // thin bars at the bottom: stamina, and attention left in the attention scheme. only there when something is being spent.
@@ -444,11 +446,12 @@
   }
   // lab mode: fixed scenarios with measurements
   if(HASH.lab){
-    const labIntent=[0,0];
-    SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; };
+    const labIntent=[0,0]; let labHold=false;
+    SCHEME.tick=(cx)=>{ cx.dirS[0]=labIntent[0]; cx.dirS[1]=labIntent[1]; cx.bd.dir[0]=labIntent[0]; cx.bd.dir[1]=labIntent[1]; cx.bd.hold=labHold?1:0; };   // a script step with hold:true holds the boundary (identity model 8)
     SCHEME.useTarget=false;
     const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
+      setHold:(h)=>{ labHold=!!h; },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
         SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
@@ -463,7 +466,7 @@
     const fakeTouch=(wx,wy,hold)=>{ player.ft=(player.ft||0)+1; const sx=(wx-camX)*zoom/dpr, sy=(wy-camY)*zoom/dpr; const ev={t:performance.now(),x:wx,y:wy,sx,sy,id:99,up:0,dur:0}; touchLog.push(ev); const ev0={t:ev.t,x:player.x,y:player.y,sx:(player.x-camX)*zoom/dpr,sy:(player.y-camY)*zoom/dpr,id:99,up:0,dur:0}; if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev0); if(SCHEME.onMove) SCHEME.onMove(ctxNow(),ev);   // a fake touch starts on the body and moves to the offset, so pad and pointer modes both see it
       if(hold){ touches.set(99,{x0:sx,y0:sy,x:sx,y:sy,t:performance.now(),moved:false,primary:true}); } else { ev.up=performance.now()+50; ev.dur=50; if(SCHEME.onUp) SCHEME.onUp(ctxNow(),ev); }
       if(SCHEME.useTarget!==false){ target.x=wx; target.y=wy; target.set=performance.now(); } };
-    let bestX=0, stuck=0;
+    let bestX=0, stuck=0; if(HASH.hold) keys.Space=true;   // #hold=1: hold the boundary throughout (identity model 8)
     for(let i=0;i<N;i++){ if(HASH.touch&&i===5){ const [tx,ty]=HASH.touch.split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,HASH.touchHold!=='0'); } if(HASH.tapEvery&&i%+HASH.tapEvery===0){ const [tx,ty]=(HASH.touch||'60,0').split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,false); } if(i===6) player.tgt6=target.x; if(i===20) player.tgt20=target.x;
       if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}`+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}u${SIM.probeBuf[0].toFixed(2)},${SIM.probeBuf[1].toFixed(2)}w${BOT.wp?BOT.wp[0]|0:'-'},${BOT.wp?BOT.wp[1]|0:'-'}st${(player.stamina||0).toFixed(2)}e${(SIM.red.elong||0).toFixed(1)}`:'')); }
     SIM.gl.finish(); const ms=performance.now()-t0;

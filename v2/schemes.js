@@ -63,8 +63,9 @@ SCHEMES.attention={name:'attention',blurb:'hold a spot to attend to it · the se
   st:{fat:0,spots:[],focus:1},
   // on a touch screen the finger is a pad, not a pointer: where you first touch is an origin, and the attended spot is the body
   // plus your finger's displacement from it (scaled), so your thumb can rest low on the screen while the spot sits near the body
-  onDown(ctx,ev){ this.st.spots.push({t:ev.t,x:ev.x,y:ev.y,sx0:ev.sx,sy0:ev.sy,ax:ctx.player.x,ay:ctx.player.y,rel:ctx.pad?[0,0]:null}); if(this.st.spots.length>40) this.st.spots.shift(); },
-  onMove(ctx,ev){ const sp=this.st.spots[this.st.spots.length-1]; if(!sp) return; if(sp.rel){ const g=2.2*ctx.dpr/ctx.zoom; sp.rel=[(ev.sx-sp.sx0)*g,(ev.sy-sp.sy0)*g]; sp.x=sp.ax+sp.rel[0]; sp.y=sp.ay+sp.rel[1]; } else { sp.x=ev.x; sp.y=ev.y; } },   // the point is anchored where the body was when you touched down, so it stays put if the body splits
+  // a second finger is not attention (it is the hold of identity model 8): onDown runs before the touch is registered, so a touch already down means this is not the first
+  onDown(ctx,ev){ if(ctx.touches.size>0) return; this.st.spots.push({t:ev.t,x:ev.x,y:ev.y,sx0:ev.sx,sy0:ev.sy,ax:ctx.player.x,ay:ctx.player.y,rel:ctx.pad?[0,0]:null}); if(this.st.spots.length>40) this.st.spots.shift(); },
+  onMove(ctx,ev){ const sp=this.st.spots[this.st.spots.length-1]; if(!sp) return; { const t=ctx.touches.get(ev.id); if(t&&!t.primary) return; } if(sp.rel){ const g=2.2*ctx.dpr/ctx.zoom; sp.rel=[(ev.sx-sp.sx0)*g,(ev.sy-sp.sy0)*g]; sp.x=sp.ax+sp.rel[0]; sp.y=sp.ay+sp.rel[1]; } else { sp.x=ev.x; sp.y=ev.y; } },   // the point is anchored where the body was when you touched down, so it stays put if the body splits
   tick(ctx){ const s=this.st, bd=ctx.bd; const held=ctx.touches.size>0; const sp=s.spots[s.spots.length-1];
     const active=held&&sp&&(!sp.rel||Math.hypot(sp.rel[0],sp.rel[1])>2);
     if(active){ s.fat=Math.min(1,s.fat+1/600); const str=1-0.5*s.fat; const d=_unit(sp.x-ctx.player.x,sp.y-ctx.player.y); ctx.dirS[0]+=(d[0]*str-ctx.dirS[0])*0.15; ctx.dirS[1]+=(d[1]*str-ctx.dirS[1])*0.15; s.linger=1; s.lx=sp.x; s.ly=sp.y; s.lstr=str; }
