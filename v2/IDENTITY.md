@@ -35,6 +35,18 @@ player is the wisp's free will; everything else is simulated.
   `<title>` (`LAB {json}`). Headless runs take minutes; run them in the background. Game smoke test:
   `#test=1&n=60&w=1024&h=512&touch=60,0` must print a title with no `Uncaught`.
 
+## What a boundary means here (judge the enmesh scenario against this, not against "no mixing")
+
+1. **Overlap is normal.** The two bodies may interpenetrate during contact; a model that repels them fails.
+2. **No taking.** After parting, neither wisp has gained mass at the other's expense beyond noise, and while entangled the
+   other wisp's cells do not answer the player's attention. Report steerability: how far the player's centroid moves per
+   30 ticks under the scripted drive while entangled, against the same drive alone.
+3. **Loss is allowed.** Interface cells may drift too far from their own body and fade, on either side. Report it as loss,
+   not as transfer.
+4. **Learning together.** Cells that spent the contact near each other should come out with similar identity state
+   (whatever q carries) without becoming the same body. Measure the mean |q| difference between the two bodies before
+   contact (t≈30) and after parting (t≈900), against the difference between a body's own centre and its edge.
+
 ## The ten experiments (one branch each: `ident-N-<name>`)
 
 1. **coherence** — `q.xy` a slow habit of the cell's motion. Cohesion acts only between neighbours whose habits agree;
