@@ -80,7 +80,8 @@
         this.deg=Math.max(0,Math.min(9,this.deg)); const oct=m.mass>110?1:2; const f=root*Math.pow(2,PENT[this.deg]/12)*oct;
         const vol=(0.012+0.03*x)*(0.4+0.6*Math.min(1,m.mass/150))*(0.5+0.5*m.stamina); this.pluck(f,vol,m.pan,0.35+0.4*(1-x),m.cold?'sine':'triangle'); }
       // tearing: a falling pair when a chunk goes; cold regrowth: a rising pair
-      const dm=m.mass-this.lastMass; this.lastMass=m.mass; if(dm<-6&&!m.dead){ this.pluck(root*2,0.03,m.pan,0.5); setTimeout(()=>this.pluck(root*Math.pow(2,1/12),0.03,m.pan,0.8),120); }
+      this.massHist=this.massHist||[]; this.massHist.push(m.mass); if(this.massHist.length>20) this.massHist.shift(); const dm=m.mass-this.massHist[0]; this.tearCd=Math.max(0,(this.tearCd||0)-1);
+      if(dm<-8&&!m.dead&&!m.near&&this.tearCd===0){ this.tearCd=150; this.pluck(root*2,0.03,m.pan,0.5); setTimeout(()=>this.pluck(root*Math.pow(2,1/12),0.03,m.pan,0.8),120); }
       else if(dm>1.2&&m.cold&&m.frame%20===0){ this.pluck(root*4,0.012,m.pan,0.6); setTimeout(()=>this.pluck(root*4*Math.pow(2,7/12),0.012,m.pan,0.8),140); } },
     ambience(speed,heat){ if(!this.ctx||this.muted||!this.wind) return; const t=this.ctx.currentTime;
       // speed is the gas speed at your centroid in lattice units (vent jets are about 0.18, the cap is 0.3).
@@ -291,7 +292,7 @@
         player.act=(player.act||0)+(want-(player.act||0))*(want>(player.act||0)?0.08:0.006); AUDIO.act=isFinite(player.act)?player.act:0; }   // release ~ 5 s
       try{ AUDIO.self(player.mass/MK,(red.spread||0)*COARSE,red.elong||1,pan,player.dead); }catch(e){ AUDIO.panic(e); }
       if(SIM.frame%2===0){ const r=world.rooms.find(r=>player.x>=r.x0&&player.x<=r.x1&&player.y>=r.y0&&player.y<=r.y1); const pb=SIM.probeBuf;
-        try{ AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20}); }catch(e){ AUDIO.panic(e); } if(r) player.roomI=r.i; } }
+        try{ AUDIO.music({frame:SIM.frame,room:r?r.i:(player.roomI||0),x:player.x,y:player.y,srcs:SRCS,speed:Math.hypot(pb[0],pb[1]),vy:pb[1],mass:player.mass/MK,stamina:player.stamina,pan,dead:player.dead,cold:(player.coldT||0)>20,near:!!(NPC&&NPC.dist<BODY.rnear*2)}); }catch(e){ AUDIO.panic(e); } if(r) player.roomI=r.i; } }
     shake*=0.85;
   }
 
@@ -402,6 +403,12 @@
     if(!s.live||!s.npc) return;
     if(NPC.born&&SIM.frame-NPC.born>120){ NPC.lowT=s.mass<2*MK?NPC.lowT+1:0; if(NPC.lowT>200){ s.live=false; s.npc=false; NPC.state='dead'; pushCentres(); return; } }
     const px=s.mass>0.5?s.x:NPC.x, py=s.mass>0.5?s.y:NPC.y; NPC.x=px; NPC.y=py; let d=[0,0];
+    NPC.dist=Math.hypot(player.x-px,player.y-py);
+    // friendship: stay embedded in it for three seconds and it comes with you; lose it by staying far away for ten
+    if(NPC.state==='waiting'||NPC.state==='going'){ NPC.near=NPC.dist<BODY.rnear*1.3?(NPC.near||0)+1:0; if(NPC.near>180){ NPC.state='friend'; NPC.farT=0; NPC.near=0; AUDIO.tone(523,784,0.5,'sine',0.05); setTimeout(()=>AUDIO.tone(659,988,0.6,'sine',0.045),160); player.hint='a friend · it comes with you now'; player.hintT=420; } }
+    if(NPC.state==='friend'){ NPC.farT=NPC.dist>BODY.rfar*1.6?(NPC.farT||0)+1:0;
+      if(NPC.farT>600||player.dead){ NPC.state=NPC.alc.repairedAt?'going':'waiting'; NPC.ax=px; NPC.ay=py; NPC.i=0; AUDIO.tone(440,300,0.9,'sine',0.045); player.hint='the friend is gone'; player.hintT=360; }
+      else { const dx=player.x-px, dy=player.y-py; if(NPC.dist>BODY.rnear*0.9){ d=[dx/NPC.dist,dy/NPC.dist]; } else { d=[dirS[0]*0.8,dirS[1]*0.8]; } } }   // it keeps near you and moves as you intend
     if(NPC.state==='waiting'){ if(NPC.alc.repairedAt){ NPC.state='going'; NPC.i=0; AUDIO.tone(440,660,0.4,'sine',0.05); } else { const dx=NPC.ax-px, dy=NPC.ay-py; const dd=Math.hypot(dx,dy); if(dd>5) d=[dx/dd*0.6,dy/dd*0.6]; } }
     if(NPC.state==='going'){ const r=followPath(NPC,px,py); if(r){ d=r.d; const le=NPC.legEnds.find(e=>e[0]>=NPC.i-6&&!NPC.rested.has(e[1])); if(le&&NPC.i>=le[0]-6){ if(NPC.restT<300){ NPC.restT++; d=[0,0]; } else { NPC.rested.add(le[1]); NPC.restT=0; } }
         if(NPC.i>=NPC.full.length-8){ NPC.state='gone'; s.npc=false; pushCentres(); } } }

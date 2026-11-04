@@ -477,7 +477,9 @@ void main(){
   for(int i=0;i<uNEnt;i++){ vec4 e=uEnt[i]; float dd=length(wc-e.xy); float el=min(1.0,lit+0.08); if(dd<e.w){ vec3 ec = e.z<1.0? vec3(1.0,0.85,0.2) : e.z<2.0? vec3(1.0,0.2,0.2) : vec3(0.4,1.0,0.9); col=mix(col,ec*el,0.9); } else if(dd<e.w*2.5){ col+=(e.z<1.0?vec3(0.5,0.4,0.1):e.z<2.0?vec3(0.4,0.05,0.05):vec3(0.1,0.3,0.3))*(1.0-dd/(e.w*2.5))*el; } }
   float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
-    { float d0=distance(wc,uC[0]); int gk=0; for(int j=1;j<3;j++){ if(j<uCN && distance(wc,uC[j])<d0){ d0=distance(wc,uC[j]); gk=j; } } if(gk>0){ if(gk==uNpcK) bc=mix(bc,vec3(0.72,1.0,0.62),0.6); else { bc=mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8; k*=0.85; } } }   // another wisp is green; your past lives are blue
+    { float d0=distance(wc,uC[0]); float dk=1e9; int gk=0; for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(wc,uC[j]); if(dj<dk){ dk=dj; gk=j; } } }
+      if(gk>0){ float wgt=smoothstep(-6.0,6.0,d0-dk);   // ownership blends over twelve cells where two wisps meet, so nothing flickers when they entangle
+        if(gk==uNpcK) bc=mix(bc,vec3(0.72,1.0,0.62),0.6*wgt); else { bc=mix(bc,mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8,wgt); k*=1.0-0.15*wgt; } } }   // another wisp is green; your past lives are blue
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
     { float pay=texture(uB,uv).w; float pf=clamp(abs(pay)/max(0.05,self),0.0,1.0); if(pay>0.0) bc=mix(bc,vec3(1.0,0.78,0.3),0.75*pf); else if(pay<0.0) bc=mix(bc,vec3(0.55,1.0,0.95),0.75*pf); }   // what the cells carry: ore is gold, a charge is bright
     if(uSplitSideR>0.0){ float ex=texture(uB,uv).z; bc=mix(bc, ex>0.5? vec3(1.0,0.6,0.3):vec3(0.4,0.7,1.0), uSplitSideR*0.6); } bc=mix(bc,vec3(1.0,0.35,0.3),uPHurt*0.7); col=mix(col,bc,min(1.0,k*1.2)); col+=vec3(0.12,0.22,0.4)*k; }
