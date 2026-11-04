@@ -1,0 +1,16 @@
+# Interaction schemes (psychology experiments)
+
+Branch `psych` carries all eight schemes in `v2/schemes.js`; **attention** is the default. Pick one with the address hash, e.g. `http://localhost:8000/v2/#scheme=breath`. Each `psych-N-<name>` branch is the same code with that scheme as the default, so `git checkout psych-3-breath` and a plain reload gives you that one. `#scheme=target` is the `main` branch behaviour for comparison. Add `&hud=1` to see a scheme's internal numbers.
+
+In every scheme the current is now the stronger partner: the body's own push is weaker and its grip on the gas stronger than on `main`. None of these reads a touch as an instruction. Each reads the pattern of what you do and lets it into the body's rules. Space stands in for "hold" on a keyboard.
+
+| # | branch | model | what you do | what the self does with it |
+|---|--------|-------|-------------|-----------------------------|
+| 1 | `psych-1-consistency` | Marcia identity statuses | hold a spot to lean toward it (no persistence) | cohesion, drive and regrowth follow the consistency of your leaning over the last two minutes: scattered is moratorium, absent is diffusion, consistent is achievement; the body pales as it diffuses |
+| 2 | `psych-2-appetites` | emotions processed linearly, three chemical axes | tap (or space) to move to the next appetite | no steering; the self chases one chemical at a time, cold, fuel, heat, then flees each, in a fixed order; the body is tinted by its appetite and wanders when there is nothing to chase |
+| 3 | `psych-3-breath` | rhythm, entrainment | hold to breathe in, release to breathe out | inhale draws the gas toward you and gathers you; exhale pushes gas out away from your finger or mouse and carries you off it; a steady rhythm holds you together, a ragged one scatters you |
+| 4 | `psych-4-integrate` | integration vs differentiation | two fingers or D to differentiate, one finger or I to integrate, tap a part to centre on it | differentiation sorts the self by what its matter has lived through: warm-remembering cells (orange) go toward heat, the rest (blue) toward cold; integration treats it all as one and gathers it; the split is radial, along experience, not along your finger |
+| 5 | `psych-5-attention` | attention span, fatigue | hold a spot to attend to it | the self drifts toward what is attended; attention tires while held and recovers when released; the fewer things you attend to, the tighter you hold together |
+| 6 | `psych-6-memory` | layered retention | tap anywhere | every touch is remembered as a direction in short, medium and long traces; the self moves by their sum; pain (burning) flashes red, sounds, and erases the middle trace; a stable long trace is an identity |
+| 7 | `psych-7-presence` | Internal Family Systems | hold anywhere to be present | Self is always here; while present you are calm, dense and carried, and parts unburden and come home; let go and hunger drives you toward fuel (green), or a large part's burden drives the whole (orange) |
+| 8 | `psych-8-tempo` | Lovheim-style mood from input statistics | touch where you'd go, as on main | tap tempo is arousal (white, quick, loose), hold length is contentment (blue, calm, dense), spread of your touches is seeking (green, hungry for fuel); the three set speed, cohesion, regrowth and appetite |
