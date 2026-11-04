@@ -449,7 +449,7 @@ void main(){
     else if(t==M_ORE) col=mix(col,vec3(0.95,0.72,0.3),0.55+0.15*sin(uTime*2.5+float(p.x*7+p.y*3)));
     else if(t==M_DEAD) col=mix(col,vec3(0.16,0.2,0.28),0.75)+vec3(0.3,0.22,0.06)*(0.35+0.35*sin(uTime*1.6+float(p.x)*0.1));
     bool src=(t==M_BURNER||t==M_COOLER||t==M_FUEL||t==M_SPORE||t==M_ORE);
-    col*=src? max(lit,0.08) : lit;   // sources sit in the same shadow as everything else
+    col*=src? max(lit,t==M_ORE?0.22:0.08) : lit;   // sources sit in the same shadow as everything else; gold keeps a faint glint
     if(s.y>0.0 && t!=M_BURNER) col+=vec3(1.0,0.4,0.1)*clamp(s.y*0.3,0.0,0.5)*min(1.0,lit+0.1); // hot walls glow, in the light of the fire
     o=vec4(col,1.0); return;
   }
