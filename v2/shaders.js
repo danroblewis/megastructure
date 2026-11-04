@@ -282,7 +282,8 @@ void main(){
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
     float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
   }
-  for(int k=0;k<4;k++){ if(mtype(maskAt(p+E4[k]))==M_ORE||mtype(maskAt(p+E4[k]*2))==M_ORE) ore=true; }
+  // near ore: any ore cell within a 9x9 window (the attention point lets cells settle a few cells short of a bar, so reach must be generous)
+  for(int dy=-4;dy<=4&&!ore;dy++) for(int dx=-4;dx<=4;dx++){ if(mtype(maskAt(p+ivec2(dx,dy)))==M_ORE){ ore=true; break; } }
   float st=max(self,0.0);
   vec2 nd=nearestD(vec2(p)+0.5); float dc=nd.x; int kk=int(nd.y+0.5); bool npc=(kk>0 && kk==uNpcK); bool ghost=kk>0 && !npc;
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
@@ -302,7 +303,7 @@ void main(){
   vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; }
   if(self<0.003){ lost+=self; self=0.0; }
   if(self<st*0.9 && st>0.0) pay*=self/st;                              // a cell that loses a real part of itself loses that part of its load; ordinary metabolism keeps it
-  if(ore && pay>=0.0) pay=min(self,pay+0.07);                          // near ore: the cell fills up
+  if(ore && pay>=0.0) pay=min(self,pay+0.2);                           // near ore: the cell fills up in a few substeps
   if(uAlcove.z>uAlcove.x && pay>0.0 && float(p.x)>=uAlcove.x && float(p.x)<=uAlcove.z && float(p.y)>=uAlcove.y && float(p.y)<=uAlcove.w) pay*=0.96;   // inside a dead alcove: deposited
   if(uPick.z>0.0 && distance(vec2(p)+0.5,uPick.xy)<uPick.z) pay=-self*uPick.w;   // a power pickup charges the cells that touch it
   if(pay<0.0) pay*=0.9985;                                            // a charge fades in about ten seconds

@@ -100,7 +100,7 @@ const GEN={
     }
     // ore: a deposit in the chamber of the cold room before each dead one, so the resource is found on the way
     // two deposits for each dead alcove, one in the chamber before it and one in its own chamber, long enough to be seen
-    for(let k=1;k<checkpoints.length;k++){ if(!checkpoints[k].dead) continue; for(const pr of [rooms[checkpoints[k-1].room],rooms[checkpoints[k].room]]){ const len=ri(28,44); const ox=ri(pr.x0+15,Math.max(pr.x0+16,pr.x1-15-len)); if(R()<0.5) rect(ox,pr.y1,ox+len,pr.y1+3,M.ORE); else rect(ox,pr.y0-3,ox+len,pr.y0,M.ORE); if(!checkpoints[k].ore) checkpoints[k].ore={x:ox+len/2,y:pr.cy}; } }
+    for(let k=1;k<checkpoints.length;k++){ if(!checkpoints[k].dead) continue; for(const pr of [rooms[checkpoints[k-1].room],rooms[checkpoints[k].room]]){ const len=ri(28,44); const ox=ri(pr.x0+15,Math.max(pr.x0+16,pr.x1-15-len)); rect(ox,pr.y0-3,ox+len,pr.y0,M.ORE);   /* ceilings only: burners live on floors and would cook the cells at the bar */ if(!checkpoints[k].ore) checkpoints[k].ore={x:ox+len/2,y:pr.cy}; } }
     const last=rooms[rooms.length-1]; const exit={x:(last.tier%2===0)?last.x1-10:last.x0+10,y:Math.round(last.cy)}; disc(exit.x,exit.y,10,M.EXIT);
     const spawn={x:rooms[0].x0+30,y:Math.round(rooms[0].cy)};
     for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(type[i]===M.FLUID && type[i-1]===M.WALL&&type[i+1]===M.WALL&&type[i-W]===M.WALL&&type[i+W]===M.WALL) type[i]=M.WALL; }
