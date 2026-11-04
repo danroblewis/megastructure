@@ -26,7 +26,8 @@ uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v
 uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform vec2 uC[3]; uniform int uCN;   // the centres: 0 you, then past lives or the other wisp
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
-uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform int uIdent;        // which identity model is running (0 = centroid, the baseline; 7 = return)
+uniform float uRnear, uRfar;   // a body's near radius (homing starts beyond it; the return model's "home") and far radius (beyond it there is no coming back)
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
@@ -34,19 +35,51 @@ uniform int uIdent;        // which identity model is running (0 = centroid, the
 int nearestOther(vec2 pp){ int k=0; float bd=1e9; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; k=j; } } } return k; }
 // the centre a cell belongs to: yours while q.w says so, else the nearest other. ownership has memory (see identUpdate)
 int ownerK(vec4 q, vec2 pp){ return q.w>0.5 ? 0 : nearestOther(pp); }
+// ---- return (uIdent 7): identity is what comes back ----
+// q.x  seconds away from home (home: within uRnear of the cell's own centre); 0 while home. beyond uRfar it counts four times faster: there is no return from there.
+// q.y  bond: what has come back is kept and strengthened. a return after an excursion raises it; it relaxes toward 0.5 at home over a minute.
+// q.z  patience: the window in seconds. learned from the cell's own returns (toward twice the excursion it waited through) and shared with its
+//      neighbours, so a body learns together how long to wait. drifts back to 2 s. below 0.5 means "never set" (a cell grown this substep).
+// q.w  home: 1 you, 0 another. set when a cell is grown (from the cells that grew it); changed only when a cell has given up on returning
+//      (away past its window, or home out of reach beyond uRfar) while sitting inside another body's home: it is adopted there, weak (bond 0.2).
+//      a cell that gives up anywhere else fades (identKeep) even inside uRfar. nearness alone never changes q.w: the other wisp's cells that
+//      wander into you and leave again within their window were never yours.
+const float RET_DT=1.0/180.0;      // one substep in seconds (the fixed rate on desktop; a phone's 120 Hz makes every window 1.5x longer)
+const float RET_PAT0=2.0;          // the window a fresh body starts with
+float retLate(vec4 q){ return q.z>=0.5? smoothstep(1.0,1.6,q.x/q.z) : 0.0; }   // how far past its window a cell is: 0 inside, 1 given up
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
+  if(uIdent==7){
+    float nb=0.0, np=0.0, nn=0.0; for(int k=0;k<4;k++){ ivec2 pn=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,pn,0); if(qn.z>=0.5){ nb+=qn.y; np+=qn.z; nn+=1.0; } }
+    if(q.z<0.5){ q.x=0.0; q.y= nn>0.0? nb/nn : 0.4; q.z= nn>0.0? np/nn : RET_PAT0; return q; }   // a grown cell starts with the bond and patience of the cells that grew it
+    vec2 pp=vec2(p)+0.5; bool mine=q.w>0.5;
+    if(dc<uRnear){                                              // home
+      if(q.x>=0.15){ float a=q.x; q.y=min(1.0,q.y+0.3*clamp(a/q.z,0.2,1.0)); q.z=mix(q.z,clamp(2.0*a,1.0,6.0),0.3); }   // a return: kept and strengthened; the window learns how long returns take
+      q.x=0.0; q.y=mix(q.y,0.5,0.02*RET_DT); }
+    else { q.x+=RET_DT*(dc>uRfar?4.0:1.0);
+      bool other=(kk==0)!=mine; float dn=distance(pp,uC[kk]);
+      if(other && dn<uRnear && (retLate(q)>=1.0 || dc>uRfar)){ q.w= kk==0?1.0:0.0; q.x=0.0; q.y=0.2; } }   // given up, and at another body's home: adopted there, a stranger
+    q.z=mix(q.z,RET_PAT0,0.05*RET_DT); if(nn>0.0) q.z=mix(q.z,np/nn,0.5*RET_DT);   // the window drifts back to the default and is shared through the neighbourhood
+    return q; }
   q.xy=mix(q.xy,vel*8.0,0.03);                     // a slow habit of motion (unused by the baseline rules)
   q.z=mix(q.z,1.0,0.005);                          // time lived
   q.w=mix(q.w, kk==0?1.0:0.0, 0.02);               // allegiance moves toward whoever is nearest over a third of a second (slower let a long embrace swallow you whole)
   return q; }
-// how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
+// how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard. return: the same (soft membership that can merge centres is codependence)
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==ownerK(q,pp)?1.0:0.0; }
-// the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
-// the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
-// how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
+// the drive a cell actually follows, given the drive of its centre. return: a cell that has given up on returning no longer answers
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ if(uIdent==7) return drive*(1.0-retLate(q)); return drive; }
+// the cohesion a cell actually feels, given the gradient climb and homing computed for it.
+// return: at home, what has come back coheres harder (x0.8 at bond 0 .. x1.3 at bond 1); on an excursion cohesion starts loose (allowed) and tightens
+// into an urge to return as the window runs out; a cell that has given up lets go
+vec2 identCohere(vec4 q, vec2 coh, float self){
+  if(uIdent==7 && q.z>=0.5){ if(q.x<=0.0) return coh*(0.8+0.5*q.y); float urge=smoothstep(0.0,1.0,q.x/q.z); return coh*mix(0.6,1.2,urge)*(1.0-0.5*retLate(q)); }
+  return coh; }
+// survival of the cell this substep (a multiplier on self), after the distance rules. return: a cell past its window fades even inside uRfar
+float identKeep(vec4 q, float self, float dc){ if(uIdent==7) return 1.0-0.015*retLate(q); return 1.0; }
+// how a cell is tinted for display, given the colour it would have. return: an excursion darkens toward violet as its window runs out; what has come back glows gold
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent==7 && q.z>=0.5){ float w=clamp(q.x/q.z,0.0,1.0); bc=mix(bc,vec3(0.38,0.2,0.5),0.7*w); bc=mix(bc,vec3(1.0,0.9,0.6),0.45*smoothstep(0.4,1.0,q.y)*(1.0-w)); }
+  return bc; }
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
@@ -187,7 +220,7 @@ void main(){
 // pass 1: velocity of the body matter in each cell (gas drag + swimming + cohesion + homing)
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
-uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
+uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh;
 uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
 uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
@@ -259,7 +292,7 @@ void main(){
 // pass 2: conservative flux transport, then growth / withering / damage / injection
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
-uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
+uniform vec2 uCentroid; uniform float uGrow, uDroneR;
 uniform vec2 uDirs[3];
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
@@ -300,6 +333,7 @@ void main(){
     if(ghost){ if(calm<0.4) self*=0.986; }                                            // a past life fades unless it rests in a cold still pocket
     else if(npc) self+=uNpcGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                   // another wisp keeps itself together much as you do
     else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
+  self*=identKeep(q0,self,dc);                                   // identity model: a cell that has given up on returning fades (1.0 for the baseline)
   self*=0.9995;
   if(sp.y>0.35) self*=1.0-min(0.3,(sp.y-0.35)*0.18);
   self-=max(sp.w-0.08,0.0)*0.04;                                   // the organism feeds on you
@@ -438,6 +472,10 @@ SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
 
+// lab readback: the body and identity state of every cell, copied to float targets that readPixels can read
+SH.copyBQ = SH.head + `
+uniform sampler2D uB; layout(location=0) out vec4 o0; layout(location=1) out vec4 o1;
+void main(){ ivec2 p=ivec2(gl_FragCoord.xy); o0=texelFetch(uB,p,0); o1=texelFetch(uQ,p,0); }`;
 // ---------------- render ----------------
 SH.render = SH.head + `
 uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
