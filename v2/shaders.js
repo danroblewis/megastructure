@@ -56,11 +56,11 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
 // how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard. held cells of yours stay yours wherever they are.
 // model 8: membership is the label fraction (soft), so a cell whose matter is mostly yours counts as yours wherever it sits.
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){
-  if(uIdent==8){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(k==0) return m; if(uNpcK>0) return k==uNpcK? 1.0-m : 0.0; return k==nearestK? 1.0-m : 0.0; }
+  if(uIdent==8 && abs(q.y)>=0.1){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(k==0) return m; if(uNpcK>0) return k==uNpcK? 1.0-m : 0.0; return k==nearestK? 1.0-m : 0.0; }   // matter not yet labelled (fresh) belongs to its nearest centre
   return k==nearestK?1.0:0.0; }
 // the drive a cell actually follows, given the drive of its centre. model 8: matter answers its own wisp in proportion to whose it is.
 vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
-  if(uIdent==8){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(ki==0){ vec2 od= uNpcK>0? uDirs[uNpcK] : vec2(0.0); return mix(od,drive,m); } return mix(drive,uDirs[0],m); }
+  if(uIdent==8 && abs(q.y)>=0.1){ float m=clamp(q.y*0.5+0.5,0.0,1.0); if(ki==0){ vec2 od= uNpcK>0? uDirs[uNpcK] : vec2(0.0); return mix(od,drive,m); } return mix(drive,uDirs[0],m); }
   return drive; }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it. held cells are stiffer.
 vec2 identCohere(vec4 q, vec2 coh, float self){ if(uIdent==8) return coh*(1.0+0.6*q.w); return coh; }
@@ -330,7 +330,7 @@ void main(){
   if(sp.y>0.35 && sp.w>0.05 && dc<uRfar) self+=sp.w*(sp.y-0.35)*0.35;   // organism burning near you becomes you
   for(int i=0;i<uNDrones;i++){ if(distance(vec2(p)+0.5,uDrones[i])<uDroneR) self*=0.93; }
   float lost=max(0.0,before-self);
-  vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; }
+  vec2 dv=vec2(p)+0.5-uInjectB.xy; float dd=dot(dv,dv); if(dd<uInjectB.z*uInjectB.z){ self=max(self,uInjectB.w*(1.0-dd/(uInjectB.z*uInjectB.z)*0.5)); if(uPayInit>0.0) pay=self*uPayInit; if(uIdent==8) labY= kk==0?1.0:-1.0; }   // model 8: born matter is its nearest centre's
   if(self<0.003){ lost+=self; self=0.0; }
   if(self<st*0.9 && st>0.0) pay*=self/st;                              // a cell that loses a real part of itself loses that part of its load; ordinary metabolism keeps it
   if(ore && pay>=0.0) pay=min(self,pay+0.07);                          // near ore: the cell fills up
