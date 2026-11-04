@@ -25,22 +25,97 @@ uniform ivec2 uRes; uniform float uTime; uniform uint uFrame;
 uniform sampler2D uMask;   // r type/255, g,b = velocity or direction encoded (v*0.5+0.5), a unused
 uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
-uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform int uIdent;        // which identity model is running (0 = centroid, the baseline; 6 = agreement)
+ivec2 wrapP(ivec2 p);   // defined below; the hooks read neighbours
+uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];   // the live centres, how many, and the intention each gave this substep (shared by every pass so the hooks can see them)
+uniform vec4 uSpot;        // an attended point in the world: x y strength active. each of your cells steers toward it on its own
+uniform float uFriend;     // 1 when the other wisp is your friend: its cells follow your attention too
+uniform vec2 uStanceC[3];  // the mean stance of each centre's cells, measured on the CPU from the probe grid (experiment 6)
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
+//
+// experiment 6, agreement (uIdent==6): bounded-confidence opinion dynamics, no identity tag anywhere.
+//   q.xy  the cell's stance: a preferred direction with a magnitude. each substep it averages its stance with the neighbours
+//         whose stance is within a tolerance of its own (bounded confidence) and is pulled a little toward the drive its
+//         centre gives it. groups form and polarise without labels; the boundary is where neighbours are out of tolerance.
+//   q.z   how much of its neighbourhood agrees with it (0..1, smoothed); cohesion scales with it
+//   q.w   firmness: grows over the first second of a cell's life. a young cell is open (wide tolerance), an old one firm.
+//         nonzero for every live cell, so a neighbour can tell live from dead (q is zeroed with the cell)
+#define AG_TOL 0.4
+const ivec2 AG8[8]=ivec2[8](ivec2(2,0),ivec2(-2,0),ivec2(0,2),ivec2(0,-2),ivec2(2,2),ivec2(-2,-2),ivec2(2,-2),ivec2(-2,2));
+float agTol(float firm){ return AG_TOL*(1.0+3.0*(1.0-clamp(firm,0.0,1.0))); }
+float agAgree(vec2 a, vec2 b, float tol){ return 1.0-smoothstep(tol*0.7,tol*1.3,length(a-b)); }
+// the stance a centre stands for: its cells' measured mean stance, pulled toward its drive when it has one
+vec2 agCentre(int j){ vec2 d=uDirs[j]; return mix(uStanceC[j],d,0.5*smoothstep(0.05,0.2,length(d))); }
+// the per-cell drive centre j gives a cell at pp (the attention point when j is you, or the other wisp when it is your friend)
+vec2 agCentreDrive(int j, vec2 pp){ vec2 d=uDirs[j]; if((j==0 || (uFriend>0.5 && j==uNpcK)) && uSpot.w>0.0){ vec2 to=uSpot.xy-pp; float dl=length(to); d= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); } return d; }
+vec2 agFollow(int ki, vec4 q, vec2 drive, vec2 pp, float weak);   // defined after identWeight: the drive a cell is given by the wisps it belongs to
+// how contested a cell is: 1 when the other wisp's centre is within ~25 cells, 0 beyond ~45. the boundary matters only where another is;
+// alone, a wisp's cells adopt and follow its drive fully (a body at rest must still commit to a jet in a second)
+float agContest(int ki, vec2 pp){ if(uNpcK<0 || uNpcK>=uCN) return 0.0; int o= ki==uNpcK? 0 : uNpcK; return 1.0-smoothstep(25.0,45.0,distance(pp,uC[o])); }
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
-  q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
-  q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
-  return q; }
+  if(uIdent!=6){
+    q.xy=mix(q.xy,vel*8.0,0.03);                     // baseline example: a slow habit of motion (unused by the baseline rules)
+    q.z=mix(q.z,1.0,0.005);                          // baseline example: time lived
+    return q; }
+  vec2 s=q.xy; float firm=q.w; float tol=agTol(firm);
+  // bounded confidence: average only with the live neighbours whose stance is within tolerance of mine, firm ones counting more
+  vec2 acc=vec2(0.0); float wa=0.0, live=0.0;
+  for(int i=0;i<8;i++){ vec4 qn=texelFetch(uQ,wrapP(p+AG8[i]),0); if(qn.w<=0.0) continue; float w=qn.w*agAgree(qn.xy,s,tol); acc+=qn.xy*w; wa+=w; live+=qn.w; }
+  if(wa>0.0) s=mix(s,acc/wa,0.12*min(1.0,wa));       // consensus inside a group is fast (a few substeps)
+  vec2 dv=agFollow(kk,q,drive,vec2(p)+0.5,1.0); float dl=length(dv);   // what the wisps it belongs to ask of it (by agreement, not by nearest centre: a cell deep in the other wisp is not pulled to its stance)
+  if(dl>0.05){ float ok=mix(1.0,agAgree(s,dv,tol*1.5),agContest(kk,vec2(p)+0.5)); s=mix(s,dv,mix(0.006,0.02,ok)); }   // bounded confidence applies to the drive too where another wisp is near: asked for what it already roughly holds, a cell adopts it in ~0.3 s; asked for something else, in ~1 s (a firm resting wisp is not persuaded by a push through it)
+  else s*=0.9997;                                    // a silent centre leaves the stance to fade over ~10 s
+  float ag= live>0.0? wa/live : 1.0;
+  q.z=mix(q.z,ag,0.05);
+  firm=min(1.0,firm+1.0/180.0);
+  return vec4(s,q.z,firm); }
 // how strongly this cell belongs to centre k (0..1). the baseline is the nearest centre, hard.
-float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==nearestK?1.0:0.0; }
+// agreement: the nearest centre holds a cell unless the other wisp's stance (mean stance of its cells, pulled to its drive)
+// agrees with the cell's stance *better* than the nearest centre's does; that difference, times proximity (over ~10 cells),
+// is the other wisp's claim. where the two stand for the same stance this is exactly the nearest-centre split, so the centres
+// can never merge; a past life claims nothing and is claimed from by nobody (its cells share your stance anyway).
+float identWeight(int k, int nearestK, vec4 q, vec2 pp){
+  if(uIdent!=6) return k==nearestK?1.0:0.0;
+  float dn=distance(pp,uC[nearestK]); float tol=agTol(q.w); float an=agAgree(q.xy,agCentre(nearestK),tol);
+  bool nw=(nearestK==0 || nearestK==uNpcK); float raw[3]; float tot=0.0;
+  for(int j=0;j<3;j++){ raw[j]=0.0; if(j>=uCN) continue;
+    if(j==nearestK) raw[j]=1.0;
+    else if(nw && (j==0 || j==uNpcK)){ float dj=distance(pp,uC[j]); float prox=exp(-max(0.0,dj-dn)*0.1); float conf=smoothstep(0.2,0.45,length(q.xy)); raw[j]=prox*3.0*conf*max(0.0,agAgree(q.xy,agCentre(j),tol)-an); }   // only a cell with a definite stance can be claimed; the undecided (fresh, or mixed by overlap) stay with the nearest centre
+    tot+=raw[j]; }
+  return raw[k]/max(tot,1e-4); }
 // the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
+// agreement: a cell follows the drives of the wisps it belongs to (by stance agreement), and attention moves fully only the
+// cells whose stance is roughly within tolerance of it; the rest weakly. your own cells stay responsive because their stance
+// follows your drive within ~0.3 s and nothing contests them away from the other wisp.
+vec2 agFollow(int ki, vec4 q, vec2 drive, vec2 pp, float weak){
+  if(ki>0 && ki!=uNpcK) return drive;                        // a past life: nearest centre, its own habit
+  vec2 res=vec2(0.0); float ct=agContest(ki,pp);
+  for(int j=0;j<3;j++){ if(j>=uCN) break; if(j!=0 && j!=uNpcK) continue;
+    float w=identWeight(j,ki,q,pp); if(w<=0.0) continue;
+    vec2 d= j==ki? drive : agCentreDrive(j,pp); float f=1.0;
+    if(length(d)>0.05) f=mix(weak,1.0,mix(1.0,agAgree(q.xy,d,agTol(q.w)*1.5),ct));   // where another wisp is near, a drive within (a loose) tolerance of the stance moves the cell fully, one it does not hold weakly: a resting cell holds "rest"
+    res+=w*d*f; }
+  return res; }
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent!=6) return drive;
+  return agFollow(ki,q,drive,gl_FragCoord.xy,0.45); }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
+// agreement: cohesion does not climb into matter that disagrees with the cell, and scales with how much of its neighbourhood agrees
+vec2 identCohere(vec4 q, vec2 coh, float self){
+  if(uIdent!=6) return coh;
+  ivec2 p=ivec2(gl_FragCoord.xy); float tol=agTol(q.w); vec2 gD=vec2(0.0);
+  for(int i=0;i<8;i++){ vec4 qn=texelFetch(uQ,wrapP(p+AG8[i]),0); if(qn.w<=0.0) continue; gD+=vec2(AG8[i])*0.5*qn.w*(1.0-agAgree(qn.xy,q.xy,tol)); }
+  float gl=length(gD); if(gl>0.3){ vec2 nd=gD/gl; float a=dot(coh,nd); if(a>0.0) coh-=a*nd*min(1.0,(gl-0.3)); }
+  return coh*(0.55+0.45*q.z); }
 // how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
+// agreement: hue by stance direction, saturation by its magnitude, so groups and the boundary between them are visible
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent!=6) return bc;
+  float sl=length(q.xy); float h=atan(q.y,q.x)/6.2832+0.5; vec3 k3=vec3(1.0,2.0/3.0,1.0/3.0); vec3 pp=abs(fract(vec3(h)+k3)*6.0-3.0);
+  vec3 rgb=mix(vec3(1.0),clamp(pp-1.0,0.0,1.0),min(1.0,sl/0.7)*0.85);
+  return mix(bc,rgb,0.55); }
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
@@ -58,7 +133,7 @@ SH.lbm = SH.head + `
 uniform sampler2D uFA, uFB, uFC;   // f0..f3 | f4..f7 | f8, rho, ux, uy
 uniform sampler2D uS;              // fuel heat smoke life
 uniform sampler2D uB;              // body: self density
-uniform vec2 uDir; uniform float uPush; uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3]; uniform float uRadial;
+uniform vec2 uDir; uniform float uPush; uniform float uRadial;
 uniform float uTau, uBuoy, uIgn, uBurnP;
 layout(location=0) out vec4 oA; layout(location=1) out vec4 oB; layout(location=2) out vec4 oC;
 const ivec2 E[9]=ivec2[9](ivec2(0,0),ivec2(1,0),ivec2(0,-1),ivec2(-1,0),ivec2(0,1),ivec2(1,-1),ivec2(-1,-1),ivec2(-1,1),ivec2(1,1));
@@ -182,10 +257,7 @@ void main(){
 SH.bodyVel = SH.head + `
 uniform sampler2D uB, uFC, uS;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh, uRnear;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
-uniform vec4 uSpot;                                   // an attended point in the world: x y strength active. each of your cells steers toward it on its own
-uniform float uFriend;                                // 1 when the other wisp is your friend: its cells follow your attention too
 uniform float uDense;                                 // preferred density of the self
 uniform vec3 uApp;                                    // appetites: drift up (+) or down (-) the gradients of heat, fuel, cold
 uniform float uJet;                                   // how much harder fast gas grips matter
@@ -254,7 +326,6 @@ void main(){
 SH.body = SH.head + `
 uniform sampler2D uB, uBV, uS, uFC;
 uniform vec2 uCentroid; uniform float uRnear, uRfar, uGrow, uDroneR;
-uniform vec2 uC[3]; uniform int uCN; uniform vec2 uDirs[3];
 vec2 nearestD(vec2 pp){ float bd=distance(pp,uC[0]); float bi=0.0; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; bi=float(j); } } } return vec2(bd,bi); }
 uniform vec4 uInjectB;              // x y radius amount
 uniform vec2 uDrones[16]; uniform int uNDrones;
@@ -312,7 +383,7 @@ void main(){
   float ex=texelFetch(uB,p,0).z; vec2 v0b=texelFetch(uBV,p,0).xy; ivec2 from=ivec2(floor(vec2(p)+0.5-v0b)); float exFrom=texelFetch(uB,wrapP(from),0).z;
   ex=mix(ex,exFrom,0.5); ex+=max(sp.y,0.0)*0.02-ex*0.0008; if(self<=0.0) ex=0.0;
   // identity state: carried with the matter like exposure, then updated by the identity model
-  vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
+  vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? agCentreDrive(kk,vec2(p)+0.5) : vec2(0.0);   // the same per-cell drive the velocity pass follows
   q=identUpdate(q,self,v0b,dc,kk,sp,dr,p); if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
@@ -389,7 +460,7 @@ void main(){ vec2 uv=gl_FragCoord.xy*uTexel; vec3 acc=vec3(0.0); float ws[5]=flo
 // of the main self (centre 0), and the farthest cell from the main self (for re-seeding a lost fragment).
 //  T0 (m0, mx0, my0, burn)   T1 (xx0, yy0, xy0, m1)   T2 (mx1, my1, m2, mx2)   T3 (my2, farDist, farX, farY)
 SH.reduce0 = SH.head + `
-uniform sampler2D uB, uS; uniform vec2 uC[3]; uniform int uCN;
+uniform sampler2D uB, uS;
 layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=2) out vec4 o2; layout(location=3) out vec4 o3;
 void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
@@ -428,6 +499,9 @@ void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)
 SH.probe2 = SH.head + `
 uniform sampler2D uFC, uS, uB; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=wrapP(ivec2(floor(pt))); vec4 s=texelFetch(uS,p,0); vec4 b=texelFetch(uB,p,0); o=vec4(s.x,b.w,s.w,b.x); }`;   // fuel, payload, organism, self
+SH.probe3 = SH.head + `
+uniform vec2 uPts[64]; out vec4 o;
+void main(){ int i=int(gl_FragCoord.x); ivec2 p=wrapP(ivec2(floor(uPts[i]))); o=texelFetch(uQ,p,0); }`;   // identity state q at the probe points (the identity model reads each centre's mean stance from it)
 
 // ---------------- render ----------------
 SH.render = SH.head + `
@@ -435,7 +509,7 @@ uniform sampler2D uS, uFC, uDye, uB, uLight, uBloom;
 uniform vec2 uCam; uniform float uZoom; uniform vec2 uScreen; uniform int uDebug;
 uniform vec4 uPlayer;        // x y radius facing
 uniform vec4 uEnt[48]; uniform int uNEnt;   // x y kind radius
-uniform float uPHurt, uPHp; uniform vec2 uC[3]; uniform int uCN; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
+uniform float uPHurt, uPHp; uniform vec4 uTint; uniform vec2 uSplitAxisR; uniform float uSplitSideR;
 out vec4 o;
 vec3 hsv(float h,float s,float v){ vec3 k=vec3(1.0,2.0/3.0,1.0/3.0); vec3 p=abs(fract(vec3(h)+k)*6.0-3.0); return v*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),s); }
 float wallShade(ivec2 p){ // bevel from neighbours

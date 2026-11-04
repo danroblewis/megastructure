@@ -129,7 +129,7 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
-  const DEFAULT_IDENT='centroid';
+  const DEFAULT_IDENT='agreement';
   // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
   const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
@@ -241,6 +241,7 @@
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
     npcTick();
+    if(IDENT.tick) IDENT.tick(ctxNow());   // identity model CPU glue (experiment 6 measures each centre's mean stance from the probe grid)
     // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
     { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
       const fx=pb[0], fy=pb[1], fl=Math.hypot(fx,fy); const dl=Math.hypot(bd.dir[0],bd.dir[1]);
@@ -451,6 +452,17 @@
     SCHEME.useTarget=false;
     const ctx={N:+HASH.n||600,warm:HASH.warm===undefined?900:+HASH.warm,player,selves,world,dirS,bd,flow:()=>[SIM.probeBuf[0],SIM.probeBuf[1]],warmStep:()=>{ SIM.updateMask(world.machines,SIM.frame); const b0={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5,grip:1,dense:0.9}; for(let s=0;s<steps;s++) SIM.step(PARAMS,null,b0); },spawnAt:(x,y)=>{ player.x=x; player.y=y; player.px=x; player.py=y; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); player.respawnT=30; },
       setIntent:(d)=>{ const n=Math.hypot(d[0],d[1])||1; labIntent[0]=d[0]/n*(n>0?1:0); labIntent[1]=d[1]/n*(n>0?1:0); if(n===0){labIntent[0]=0;labIntent[1]=0;} },
+      // identity state (q) of the two bodies: 9 points within 3 cells of each centre and 12 on a ring of radius 9, weighted by self.
+      // ab: distance between the mean q.xy (the stance) of your cells and of the other wisp's; dmag: difference of their mean magnitudes;
+      // ace/bce: the same distance between a body's own centre and its edge, for scale. null when the other wisp is not live.
+      measureQ:()=>{ const o=selves[2]; const bodies=[[selves[0].x,selves[0].y]]; if(o&&o.live) bodies.push([o.x,o.y]); const tag=[]; let n=0;
+        bodies.forEach((b,bi)=>{ for(let dy=-3;dy<=3;dy+=3) for(let dx=-3;dx<=3;dx+=3){ probePts[n*2]=b[0]+dx; probePts[n*2+1]=b[1]+dy; tag.push(bi*2); n++; } for(let k=0;k<12;k++){ const a=k/12*Math.PI*2; probePts[n*2]=b[0]+Math.cos(a)*9; probePts[n*2+1]=b[1]+Math.sin(a)*9; tag.push(bi*2+1); n++; } });
+        SIM.probe(probePts,n); const [,pb2]=SIM.collect(); const pb3=SIM.probeBuf3; const acc=[0,1,2,3].map(()=>({q:[0,0,0,0],w:0}));
+        for(let k=0;k<n;k++){ const s=pb2[k*4+3]; if(s<0.05) continue; const a=acc[tag[k]]; for(let c=0;c<4;c++) a.q[c]+=pb3[k*4+c]*s; a.w+=s; }
+        const mean=(idx)=>{ const q=[0,0,0,0]; let w=0; for(const i of idx){ for(let c=0;c<4;c++) q[c]+=acc[i].q[c]; w+=acc[i].w; } return w>0?q.map(v=>v/w):null; };
+        const dist=(a,b)=>{ if(!a||!b) return null; return +Math.hypot(a[0]-b[0],a[1]-b[1]).toFixed(3); };
+        const A=mean([0,1]), B=bodies.length>1?mean([2,3]):null, Ac=mean([0]), Ae=mean([1]), Bc=bodies.length>1?mean([2]):null, Be=bodies.length>1?mean([3]):null;
+        return {ab:dist(A,B),dmag:A&&B?+Math.abs(Math.hypot(A[0],A[1])-Math.hypot(B[0],B[1])).toFixed(3):null,ace:dist(Ac,Ae),bce:dist(Bc,Be),a:A&&A.map(v=>+v.toFixed(2)),b:B&&B.map(v=>+v.toFixed(2))}; },
       measure:()=>{ // mass of self inside the jet band, sampled along the jet line with the probe
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
         SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };

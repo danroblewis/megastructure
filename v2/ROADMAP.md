@@ -168,3 +168,82 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+---
+
+## Identity experiment 6: agreement — 2026-11-04, branch `ident-6-agreement`
+
+Bounded-confidence opinion dynamics (Hegselmann–Krause), no identity tag. `q.xy` is a cell's *stance*, a preferred direction
+with a magnitude. Each substep a cell averages its stance with the eight neighbours two cells away whose stance is within a
+tolerance of its own (0.4 in stance space, four times wider for a cell in its first second of life, so the newly grown take
+their bearings from whoever is around them), firm neighbours counting more; and it is pulled toward the drive the wisps it
+belongs to give it: fast (~0.3 s) when that drive is roughly what it already holds, slowly (~1 s) when it is not, but only
+where another wisp is within reach (its centre within ~25 cells, fading out by 45); alone, a cell adopts any drive in ~0.3 s.
+A silent centre leaves the stance to fade over ~10 s, so rest is a stance too. `q.z` is how much of the neighbourhood agrees with the
+cell (cohesion scales with it, and cohesion never climbs into matter that disagrees), `q.w` firmness. `identWeight` keeps the
+nearest-centre split except that a wisp (you, the other) claims a cell whose definite stance agrees with that wisp's stance
+(its cells' measured mean stance, pulled to its drive) *better* than the nearest centre's, times proximity over ~10 cells;
+undecided or mixed cells stay with the nearest centre, past lives claim nothing, so the centres cannot merge. `identDrive`
+follows the drives of the wisps the cell belongs to, fully when the drive is within (a loose) tolerance of the stance, at 45 %
+otherwise, again only where another wisp is within reach. Tint: hue by stance direction, saturation by magnitude. Scaffold changes: `uC/uCN/uDirs`, `uSpot/uFriend` and a new
+`uStanceC[3]` live in `SH.head`; a third probe target (`probe3`, async like the other two) reads `q` at the probe points, and
+`IDENTS.agreement.tick` turns the 9×7 grid round the player into each live centre's mean stance; the lab rows carry `qd`
+(mean-stance distances) and `ox,oy` (the other wisp's position). Based on `2208a79`, before main's allegiance-memory baseline
+(`b86fda0`), which also uses `q.w` and moves the same uniforms: merging needs a hand.
+
+Three earlier versions on the way: pulling the stance toward the *nearest* centre's drive converted your cells to the other
+wisp's stance when you were deep inside it (113/207 at t=90); pulling toward the membership-weighted drive without gating
+claims fed back on itself (97/250); gating claims by stance confidence and adopting out-of-tolerance drives slowly fixed the
+accounting but made a body at rest answer a new drive at half speed for a second even with nobody near, so `commit` tore it
+in two (72 stayed above the jet, a 90-cell part was carried off and faded). Applying the tolerance to the drive only where
+another wisp is within reach gave the numbers below.
+
+`#lab=enmesh2&npc=170,60&warm=300&n=900` (press right 2.5 s, hold inside 5 s, pull left 4 s, rest; the pull ends on the box wall at x≈25 from t≈690):
+
+| t | baseline main / other / dist | agreement main / other / dist | other wisp x, baseline → agreement | centroid moved per 30 ticks, baseline → agreement |
+|---|---|---|---|---|
+| 30 | 163 / 160 / 30 | 163 / 160 / 30 | 173 → 173 | 15 → 15 (alone, approaching) |
+| 90 | 139 / 176 / 8 | 145 / 171 / 8 | 173 → 175 | 12 → 11 (entangled) |
+| 150 | 163 / 159 / 35 | 157 / 170 / 30 | 173 → 173 | 17 → 19 (entangled, end of the push) |
+| 300 | 162 / 160 / 38 | 163 / 160 / 31 | 166 → 166 | 2 → 2 (no drive, both drift with the box's return flow) |
+| 450 | 160 / 156 / 30 | 162 / 156 / 24 | 165 → 165 | 2 → 3 |
+| 690 | 128 / 157 / 141 | 133 / 159 / 141 | 165 → 165 | 15 → 16 (on the wall) |
+| 900 | 156 / 160 / 130 | 160 / 161 / 135 | 165 → 165 | 3 → 3 (resting) |
+
+Pull-away, cells per 30 ticks from t=450: baseline 18, 21, 21, 21, 22, 23, 23; agreement 11, 18, 21, 20, 22, 22, 23. (The
+other wisp's x comes from a second baseline run with the `ox` column; its first run matched it row for row.)
+
+- Overlap: yes, as in the baseline the 2.5 s push carries you through the other wisp (dist 8 at t=90) and out the far side;
+  nothing repels.
+- No taking: after parting 160 / 161 against 163 / 160 at the start (baseline 156 / 160). While entangled the accounting
+  swings *less* than the baseline's (145/171 at t=90, 157/170 at t=150, against 139/176 and 163/159). The other wisp's
+  centre moves 173 → 165 over the run in both models: the baseline does not drag it either (its homing drive holds it), so the
+  difference the model makes here is in whose cells answer whose drive, not in where the other wisp ends up. Its resting
+  cells hold "rest" as a stance, are out of tolerance with your drive, and follow it at most weakly.
+- Steerability: alone 15 cells per 30 ticks, entangled 11–19 during the push (baseline 12–17), i.e. the same. The one cost is
+  the first second of the pull-away while still inside the other wisp: 11 against the baseline's 18, because your cells' stance
+  (still pointing right) is out of tolerance with the new drive and adopts it over ~1 s; from the second half-second on it is
+  the baseline's speed (18–23).
+- Loss: none in this scenario (fades 0, both masses flat), as in the baseline.
+- Learning together: in contact, yes; after parting, no. The mean-stance distance between the bodies is 0.74 before contact
+  (t=30; you at (0.74, 0), it at rest), falls through the hold from 0.89 (t=150) to 0.27 (t=450) — within the tolerance, the
+  two are enmeshed — and jumps to 1.5 the moment you drive away (your stance flips to (−0.9, 0), its stays (0.55, 0.1), its
+  homing drive). At t=900 it is 0.63, against 0.00–0.1 between a body's own centre and its edge. The stance tracks the current
+  drive, so what was shared in contact is not retained once the drives differ; `q` records the present, not the past.
+
+`ledge`, `commit`, `hold` (same code; the baseline hold row is a fresh run on this base, the others from the Lab outcomes table above):
+
+| scenario | baseline | agreement |
+|---|---|---|
+| ledge (testing the waters) | 68 of 162 torn in 2 s, the rest held at the ledge and regrew to 135 | 80 of 162 torn in 1 s (carried off and faded, never tracked as a part); the rest, 82–87, held against the ledge for the whole 7.5 s of drive without regrowing, slid 3 cells, and regrew to 161 within 2.5 s of letting go |
+| commit | the whole self carried by the jet (~160 cells at full mass) | the whole self carried (cx 84 → 318 in 5 s at 157–164 cells; a ~15-cell wisp briefly tracked behind it and faded) |
+| hold (holding is work) | swept 100 cells downstream in 1.5 s (effort 0.98, stamina 1.0 → 0.71), drifted below the jet, came back into it twice, held with effort 0.2–0.35 at stamina 0.72–1.0, never dissociated | identical row for row (mass, position, stamina, effort all within 1): with no other wisp within reach the model changes nothing a lone body does |
+
+What was produced: a boundary that holds under the push *without* repulsion and without sluggishness. The other wisp's cells
+keep "rest" as a stance, are claimed by nobody and follow your drive only weakly; the accounting swings less than the
+baseline's while you are inside it; and alone you move exactly as before, which the first three versions did not manage.
+Against the baseline the visible difference in this scenario is small (the baseline's other wisp is not dragged either): the
+model's work shows in the accounting and the one-second lag of a turn while entangled, not in the masses or positions. What was not produced: cells that learn from each other and keep it.
+The stances meet within tolerance during the hold and part the moment the drives differ, because a stance is a disposition
+toward the present drive, not a history; and the boundary is still passed straight through, since one `q` per cell cannot
+hold two opinions where two bodies share a cell. Loss at the interface did not appear in this scenario at all.
