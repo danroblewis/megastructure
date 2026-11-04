@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>Megastructure</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  canvas{display:block;position:fixed;inset:0;width:100vw;height:100vh;}
+  #hud{pointer-events:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="hud"></canvas>
+<script src="report.js?v=5"></script>
+<script src="shaders.js?v=58"></script>
+<script src="gen.js?v=50"></script>
+<script src="sim.js?v=44"></script>
+<script src="schemes.js?v=40"></script>
+<script src="ident.js?v=2"></script>
+<script src="lab.js?v=40"></script>
+<script src="check.js?v=9"></script>
+<script src="main.js?v=92"></script>
+<script>if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});</script>
+</body>
+</html>
