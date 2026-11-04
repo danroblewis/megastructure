@@ -26,6 +26,7 @@ const LAB={
     hold:    {spawn:[160,128], script:[{t0:0,t1:900,dir:[-1,0],stayIn:true}]},   // inside the jet, push upstream (correcting to stay in it) until tired
     calm:    {spawn:[80,60],   script:[{t0:0,t1:300,dir:[1,0]}]},            // still gas: move freely
     calm2:   {spawn:[300,60],  script:[{t0:0,t1:300,dir:[1,0]}]},            // the same, away from the cold corner
+    settle:  {spawn:[300,60],  script:[{t0:300,t1:600,dir:[1,0]}]},          // calm gas: 5 s still, 5 s in a straight line, 5 s still. identity statuses: moratorium -> achievement -> moratorium -> achievement, and how long each took
     taste:   {spawn:[80,118],  script:[{t0:0,t1:450,dir:[0,-0.6]}]},         // straddling the jet while pulling away from it: is a part taken while the rest stays?
     ledge:   {spawn:[88,117],  script:[{t0:0,t1:450,dir:[0,-1]}]},           // pressed up against the ledge, lower edge in the jet: is a part taken while the rest holds?
     ledgeR:  {spawn:[88,117],  script:[{t0:0,t1:150,dir:[0,-1]},{t0:150,t1:450,dir:[1,0.6]}]},   // then let go and go after it
@@ -48,7 +49,7 @@ const LAB={
       tick();
       const ghosts=ctx.selves.filter((s,k)=>k>0&&s.live&&s.mass>6);
       if(ghosts.length<prevGhosts) fades+=prevGhosts-ghosts.length; prevGhosts=ghosts.length;
-      if(i%30===29){ const m=ctx.measure(); const o=ctx.selves[2]; rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),other:o&&o.live?+o.mass.toFixed(0):null,otherDist:o&&o.live?Math.round(Math.hypot(o.x-ctx.player.x,o.y-ctx.player.y)):null,inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
+      if(i%30===29){ const m=ctx.measure(); const o=ctx.selves[2]; rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),other:o&&o.live?+o.mass.toFixed(0):null,otherDist:o&&o.live?Math.round(Math.hypot(o.x-ctx.player.x,o.y-ctx.player.y)):null,inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,status:ctx.player.status,sk:ctx.player.statusK===undefined?undefined:+ctx.player.statusK.toFixed(2),ist:ctx.player.statusDbg,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
     }
     return rows;
   },

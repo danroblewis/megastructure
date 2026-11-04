@@ -27,6 +27,8 @@ uniform int uNpcK;         // which centre (1 or 2) is another wisp, -1 for none
 uniform vec2 uC[3]; uniform int uCN;   // the centres: 0 you, then past lives or the other wisp
 uniform sampler2D uQ;      // identity state per cell (see IDENTITY.md): carried with the cell like exposure; meaning set by the identity model
 uniform int uIdent;        // which identity model is running (0 = centroid, the baseline)
+uniform int uStatus;       // identity status of the whole body (model 11, computed on the CPU each tick): 0 none, 1 diffusion, 2 moratorium, 3 achievement, 4 negative identity
+uniform float uStatusK;    // how strongly that status holds, 0..1 (ramps in over a second so a bonus never arrives as a jolt)
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
@@ -41,12 +43,29 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ return k==ownerK(q,pp)?1.0:0.0; }
+// statuses (model 11, see v2/ident.js): the status is a property of the whole body over time, not of a cell. The CPU decides it from
+// the reduction (mass, parts, spread, elongation, motion relative to the gas, their rates of change, stamina, heat, the organism)
+// and these hooks only apply it, to your cells alone (ki==0 / q.w>0.5). Ownership (identWeight, identUpdate) stays the baseline's.
 // the drive a cell actually follows, given the drive of its centre
-vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
+vec2 identDrive(int ki, vec4 q, vec2 drive, float self){
+  if(uIdent!=11 || ki!=0 || uStatus==0) return drive; float k=uStatusK;
+  if(uStatus==1) return drive*(1.0-0.45*k);                                                                       // diffusion: the will barely reaches the cells
+  if(uStatus==2){ float dl=length(drive); if(dl>0.02){ vec2 pp=vec2(-drive.y,drive.x)/dl; drive+=pp*dl*0.25*k*sin(uTime*4.0); } return drive; }   // moratorium: steerable, but it sways
+  return drive*(1.0+0.15*k); }                                                                                    // achievement, negative identity too: the whole body answers
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
-vec2 identCohere(vec4 q, vec2 coh, float self){ return coh; }
+vec2 identCohere(vec4 q, vec2 coh, float self){
+  if(uIdent!=11 || q.w<0.5 || uStatus==0) return coh; float k=uStatusK;
+  if(uStatus==1) return coh*(1.0-0.45*k);                                                                         // diffusion: nothing holds
+  if(uStatus==2) return coh*(1.0-0.25*k);                                                                         // moratorium: loose
+  return coh*(1.0+0.35*k); }                                                                                      // stability is rewarded with cohesion, whatever the shape
 // how a cell is tinted for display, given the colour it would have
-vec3 identTint(vec4 q, vec3 bc, float self){ return bc; }
+vec3 identTint(vec4 q, vec3 bc, float self){
+  if(uIdent!=11 || q.w<0.5 || uStatus==0) return bc; float k=uStatusK;
+  if(uStatus==1) return mix(bc,vec3(0.5,0.5,0.55),0.55*k);                                                        // diffusion: grey
+  if(uStatus==2) return mix(bc,vec3(1.0,0.72,0.35),0.35*k*(0.7+0.3*sin(uTime*3.0)));                             // moratorium: amber, unsettled
+  vec3 a=mix(bc,vec3(1.0,0.97,0.85),0.45*k);                                                                      // achievement: warm white, steady
+  if(uStatus==4) a=mix(a,vec3(0.55,0.08,0.12),0.45*k*(0.5+0.5*sin(uTime*2.5+q.z*6.0)));                          // negative identity: the same light with a dark pulse through it
+  return a; }
 ivec2 wrapP(ivec2 p){ return clamp(p,ivec2(0),uRes-1); }
 vec4 maskAt(ivec2 p){ if(p.x<0||p.y<0||p.x>=uRes.x||p.y>=uRes.y) return vec4(1.0/255.0,0.5,0.5,0.0); return texelFetch(uMask,p,0); }
 int mtype(vec4 m){ return int(m.r*255.0+0.5); }
