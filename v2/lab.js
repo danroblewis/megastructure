@@ -36,7 +36,7 @@ const LAB={
   },
   run(name,ctx,tick){
     const sc=this.scenarios[name]; const rows=[]; const N=ctx.N; ctx.jet=ctx.world.jet;
-    for(let i=0;i<(ctx.warm||900);i++) ctx.warmStep();          // let the jet develop before anyone is in it
+    for(let i=0;i<(ctx.warm===undefined?900:ctx.warm);i++) ctx.warmStep();   // warm=0 means zero          // let the jet develop before anyone is in it
     ctx.player.x=sc.spawn[0]; ctx.player.y=sc.spawn[1]; ctx.spawnAt(sc.spawn[0],sc.spawn[1]);
     let fades=0, prevGhosts=0;
     for(let i=0;i<N;i++){
