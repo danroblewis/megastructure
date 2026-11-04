@@ -260,7 +260,7 @@ from elongation 1.1 to 4 and accelerates to 0.45 cells/tick); achieved again 4.5
 elongation 6–7 moving at 0.44 (the gas at the body reads −0.04, so the motion term is the swim itself, steady); lost
 0.8 s after the stop. The fourth achievement did not arrive in the last 5 s: stopping from the streak tore its tail (162 →
 141, a part 26 cells away that faded in 3 s), two more far cells were seeded as parts and faded, and the body was still
-contracting (flux 0.3 at t=840, 0.16 at 900, 20 ticks into the band when the run ended). The times to settle are then about
+contracting (flux 0.3 at t=840, 0.16 at 900, 52 ticks into the band when the run ended: achievement would have followed at about t=925). The times to settle are then about
 1.75 s for a fresh ball at rest, 4.5 s for a run from rest, and more than 5 s after a stop from speed when the stop costs
 cells.
 
