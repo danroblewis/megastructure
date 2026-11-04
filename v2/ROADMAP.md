@@ -168,3 +168,69 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+---
+
+## Identity experiment 8: held — 2026-11-04, branch ident-8-held
+
+The boundary as an act of will (`v2/IDENTITY.md` 8). While the player holds (a second finger, or the space bar) the edge of
+the body firms (`q.w`), and the firm edge is where the fluid rules stop: whose the matter is (`q.y`, a label that travels
+mass-weighted with the matter through the body pass's flux and diffusion, and is added with the sign of the wisp whose
+regrowth made it) stops relaxing toward the nearest centre at a held contact on either side, diffusion across the contact is
+refused, and matter answers its own wisp's drive in proportion to whose it is. Membership in the reduction is the label
+fraction. Holding drains stamina (net about 0.0012 per tick in calm gas, 1.0 to 0.46 over a 7.5 s hold, recovered in 2 s).
+Unheld, the label relaxes to the nearest centre in about ten substeps, so the rules are the baseline's: the edges mix like
+fluids. `identTint` shows the label (pale yours, green the other wisp's) and violet where held.
+
+`#lab=enmesh2&npc=170,60&warm=300&n=900`: press at 0.7 for 2.5 s, stay 5 s, pull away at 0.7 for 4 s, rest. Rows at
+t=90 (deepest overlap), 240 and 450 (in the stay), 540 and 690 (pulling away), 900 (parted). main / other / otherDist;
+stamina for the held run.
+
+| t | baseline (`#ident=centroid`) | held model, not holding | held model, holding (t<450) |
+|---|---|---|---|
+| 30 | 163 / 160 / 30 | 163 / 160 / 30 | 163 / 160 / 30 · st 0.96 |
+| 90 | 139 / 176 / 8 | 139 / 183 / 8 | 128 / 163 / 7 · st 0.89 |
+| 240 | 162 / 161 / 41 | 163 / 161 / 40 | 163 / 162 / 34 · st 0.71 |
+| 450 | 160 / 156 / 30 | 161 / 158 / 30 | 161 / 162 / 24 · st 0.46 |
+| 540 | 155 / 161 / 42 | 159 / 158 / 42 | 159 / 160 / 41 · st 0.88 |
+| 690 | 128 / 157 / 141 | 135 / 160 / 140 | 137 / 161 / 141 · st 1.00 |
+| 900 | 159 / 161 / 134 | 160 / 161 / 132 | 160 / 161 / 134 · st 1.00 |
+
+Steerability (centroid moved per 30 ticks under the scripted drive): press / stay / pull — baseline 10.1 / 7.8 / 13.5,
+unheld 10.2 / 7.7 / 13.5, held 9.2 / 7.2 / 13.5; alone (no other wisp, full drive) 15.6 press / 18.9 pull. The 0.7 press
+carries the player through the other wisp and out the far side in about 2 s in every run (otherDist 7–8 at t=90, 30–40
+by t=150); the stay is spent beside it, not inside it.
+
+Criteria (from the brief):
+- **Overlap normal** — produced: the bodies overlap at t=60–120 in all three runs and nothing pushes the other wisp away
+  (its centre moves less than 5 cells during the press, held or not).
+- **No taking** — produced after parting, held and unheld alike: at t=900 main 159–160 against 163 at the start,
+  other 161 against 160. Not produced inside the overlap: the other wisp's counted mass peaks at 176 (t=60) held and
+  183 (t=90) unheld, and yours dips to 128 held against 139 unheld; of the held dip about 25 units are loss (main+other
+  291 at t=90 against 315 in the baseline), the rest the relabelling of pooled matter that holding was meant to stop. (A
+  first cut that counted half-and-half cells half to each centre read 145/153 here; that was accounting, not a boundary.)
+  Their cells do not answer your drive while held (`identDrive` by label), but the steerability numbers above do not show
+  it: 9.2 held vs 10.2 unheld.
+- **Loss allowed** — produced as loss, not transfer: held, about 25 units go missing at the deepest overlap and regrow by
+  t=150 (162/154); the run ends 160/161 against 163/160 at the start; no fades (thin interface matter withers back into
+  both bodies).
+- **Learning together** — not produced, not attempted: `q` carries ownership, contact and hold only, nothing two bodies
+  could come to share. Mean |q| difference before and after contact is therefore not a meaningful measure for this model.
+
+What was produced and what was not. Holding costs stamina the player can see and refuses diffusion at the contact, but
+with a 0.7 press the body goes straight through the other wisp in 2 s, the pooled matter in the overlap is relabelled
+much as it is unheld, and after parting position re-sorts everything within a few seconds, so the outcome is the same
+held or not. The felt boundary is therefore small: the player is not slowed by the other wisp (steerability unchanged),
+nothing is kept that would otherwise be lost, and what the player gets is a violet edge. A first design with a cell-bound label (committed history, 8dda41c) produced stronger resistance (press 4.5 vs 15
+per 30 ticks alone) but took in both directions (other 160 to 197 during the press, main 162 to 270 during the stay),
+which is why the label now travels with the matter. Other scenarios on this branch: `ledge` 118 to 81 torn in the first
+second, the rest held at 84 against the ledge and regrew to 161 after release (the baseline's numbers exactly); `commit`: carried whole into the jet (50 cells per 30 ticks at t=120, 88 to 388 in 10 s), one part split off and
+faded, mass 156–162 throughout; `hold`: effort 0.98 upstream, stamina 1.0 to 0.71 in 1.5 s, dissociation, recovery by
+t=210, drained again to 0.70 by t=510 — all three unchanged in character from the baseline table above. Pair screenshot
+(`#test=1&small=1&n=300&spawn=294,118&touch=0,14&hold=1`): both wisps alive (33/25 on the phone world), no Uncaught; at
+that zoom the violet edge is too small to read.
+Smoke test (`#test=1&n=60&w=1024&h=512&touch=60,0`): title printed, no Uncaught, no shader error; spread 6.2 / elong 2.55
+against the baseline 6.3 / 2.57 (a first cut of the soft membership counted unlabelled new matter half to each centre, so
+the other wisp's spawn dragged the player's centroid and stretched the body to spread 16.4 / elong 6.7; fresh matter now
+belongs to its nearest centre until labelled). Not built: a boundary
+that resists being passed through, and anything two wisps could learn from each other.
