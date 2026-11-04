@@ -29,7 +29,7 @@ const IDENTS={
       // how fast the configuration is changing, as fast-minus-slow, each term scaled so ~1 is a real change of shape or motion
       const cS=Math.abs(f.S-s.S)/Math.max(3,s.S)*3, cE=Math.abs(f.E-s.E)/Math.max(1,s.E)*1.5, cM=Math.abs(f.M-s.M)/Math.max(10,s.M)*3, cV=Math.hypot(f.X-s.X,f.Y-s.Y)/0.15;
       st.flux=Math.max(cS,cE,cM,cV); st.cmp=[cS,cE,cM,cV].map(v=>+v.toFixed(2));
-      const MK=ctx.MK||1; const parts=ctx.selves.filter((q,k)=>k>0&&q.live&&!q.npc&&q.mass>6*MK).length;
+      const MK=ctx.MK||1; const parts=ctx.selves.filter((q,k)=>k>0&&q.live&&!q.npc&&q.mass>6*MK&&Math.hypot(q.x-p.x,q.y-p.y)>B.rnear*1.25).length;   // a part that has come back inside the body has rejoined, whatever the centre tracking still calls it
       if(parts>st.parts) st.lostAt=st.t; st.parts=parts;
       // harm, slow (about two seconds): heat at the body, burning cells, the organism in or round the body, exhaustion, no cold room anywhere near
       let h=0; const heat=ctx.heat||0; if(heat>0.2) h=Math.max(h,Math.min(1,(heat-0.2)*2.5)); if((red.burning||0)>1.5*MK) h=Math.max(h,0.6);

@@ -26,6 +26,7 @@ const LAB={
     hold:    {spawn:[160,128], script:[{t0:0,t1:900,dir:[-1,0],stayIn:true}]},   // inside the jet, push upstream (correcting to stay in it) until tired
     calm:    {spawn:[80,60],   script:[{t0:0,t1:300,dir:[1,0]}]},            // still gas: move freely
     calm2:   {spawn:[300,60],  script:[{t0:0,t1:300,dir:[1,0]}]},            // the same, away from the cold corner
+    burn:    {spawn:[452,212], script:[]},                                   // resting just above the burner: a stable place that hurts. identity statuses: does it settle into a negative identity, or disperse?
     settle:  {spawn:[300,60],  script:[{t0:300,t1:600,dir:[1,0]}]},          // calm gas: 5 s still, 5 s in a straight line, 5 s still. identity statuses: moratorium -> achievement -> moratorium -> achievement, and how long each took
     taste:   {spawn:[80,118],  script:[{t0:0,t1:450,dir:[0,-0.6]}]},         // straddling the jet while pulling away from it: is a part taken while the rest stays?
     ledge:   {spawn:[88,117],  script:[{t0:0,t1:450,dir:[0,-1]}]},           // pressed up against the ledge, lower edge in the jet: is a part taken while the rest holds?
