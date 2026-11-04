@@ -129,6 +129,9 @@
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
   const DEFAULT_SCHEME='attention';
+  const DEFAULT_IDENT='centroid';
+  // identity model (see v2/IDENTITY.md): which stability rules make a wisp a wisp. the shaders carry the model; this picks it
+  const IDENT=(IDENTS[HASH.ident||DEFAULT_IDENT]||IDENTS[DEFAULT_IDENT]); SIM.ident=IDENT.id;
   const SCHEME=(SCHEMES[HASH.scheme]||SCHEMES[DEFAULT_SCHEME]);
   const touchLog=[];   // {t, x, y (world), sx, sy (screen css px), up (time), dur}
   const MENU={open:false,rows:[],pill:null,names:Object.keys(SCHEMES)};
@@ -407,7 +410,8 @@
     st.wp=wp; return {d:_unit(wp[0]-px,wp[1]-py),bi,wp}; }
   // another wisp (roadmap 13): it waits before the first dead alcove, withering slowly outside the cold, until you repair
   // the alcove; then it goes on along the route, resting in each live cold room, until the exit. it is centre slot 2.
-  const NPC=(()=>{ if(HASH.lab||!world.legs||HASH.nonpc) return null; const k=world.checkpoints.findIndex(c=>c.dead); if(k<0) return null; const leg=world.legs[k]; if(!leg||leg.length<80) return null; const p=leg[leg.length-45];
+  const NPC=(()=>{ if(HASH.lab){ if(!HASH.npc) return null; const [x,y]=HASH.npc.split(',').map(Number); return {alc:{dead:true,repairedAt:null},x,y,ax:x,ay:y,state:'waiting',i:0,full:[],legEnds:[],spawnAt:2,restT:0,rested:new Set(),lowT:0,lab:true}; }   // lab: a waiting wisp at #npc=x,y
+    if(!world.legs||HASH.nonpc) return null; const k=world.checkpoints.findIndex(c=>c.dead); if(k<0) return null; const leg=world.legs[k]; if(!leg||leg.length<80) return null; const p=leg[leg.length-45];
     let full=[]; const legEnds=[]; for(let j=k+1;j<world.legs.length;j++){ if(world.legs[j]){ full=full.concat(world.legs[j]); legEnds.push([full.length-1,j]); } }
     return {alc:world.checkpoints[k],x:p[0],y:p[1],ax:p[0],ay:p[1],state:'waiting',i:0,full,legEnds,spawnAt:90,restT:0,rested:new Set(),lowT:0}; })();
   function npcTick(){ if(!NPC||NPC.state==='dead'||NPC.state==='gone') return; const s=selves[2];

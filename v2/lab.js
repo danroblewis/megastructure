@@ -30,6 +30,9 @@ const LAB={
     ledge:   {spawn:[88,117],  script:[{t0:0,t1:450,dir:[0,-1]}]},           // pressed up against the ledge, lower edge in the jet: is a part taken while the rest holds?
     ledgeR:  {spawn:[88,117],  script:[{t0:0,t1:150,dir:[0,-1]},{t0:150,t1:450,dir:[1,0.6]}]},   // then let go and go after it
     tasteR:  {spawn:[80,118],  script:[{t0:0,t1:120,dir:[0,-0.6]},{t0:120,t1:450,dir:[1,0.5]}]},   // the same, then go after what was taken
+    // enmesh (run with #npc=170,60&warm=300): press into another wisp for 4 s, hold inside it for 5 s, then pull away for 6 s.
+    // what does each keep, how much is exchanged, how steerable are you while entangled, what is left at the interface when you part?
+    enmesh:  {spawn:[120,60],  script:[{t0:0,t1:240,dir:[1,0]},{t0:240,t1:540,dir:[0,0]},{t0:540,t1:900,dir:[-1,0]}]},
   },
   run(name,ctx,tick){
     const sc=this.scenarios[name]; const rows=[]; const N=ctx.N; ctx.jet=ctx.world.jet;
@@ -42,7 +45,7 @@ const LAB={
       tick();
       const ghosts=ctx.selves.filter((s,k)=>k>0&&s.live&&s.mass>6);
       if(ghosts.length<prevGhosts) fades+=prevGhosts-ghosts.length; prevGhosts=ghosts.length;
-      if(i%30===29){ const m=ctx.measure(); rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
+      if(i%30===29){ const m=ctx.measure(); const o=ctx.selves[2]; rows.push({t:i+1,main:+ctx.selves[0].mass.toFixed(0),cx:+ctx.player.x.toFixed(0),cy:+ctx.player.y.toFixed(0),other:o&&o.live?+o.mass.toFixed(0):null,otherDist:o&&o.live?Math.round(Math.hypot(o.x-ctx.player.x,o.y-ctx.player.y)):null,inJet:+m.inJet.toFixed(0),parts:ghosts.length,partDist:ghosts.map(g=>Math.round(Math.hypot(g.x-ctx.player.x,g.y-ctx.player.y))),stamina:+(ctx.player.stamina===undefined?1:ctx.player.stamina).toFixed(2),fades,u:ctx.flow().map(v=>+v.toFixed(3)),dir:ctx.dirS.map(v=>+v.toFixed(2)),swim:+ctx.bd.swim.toFixed(3),diss:ctx.player.dissoc|0,effort:+(ctx.player.effort||0).toFixed(2),bdir:ctx.bd.dir.map(v=>+v.toFixed(2)),vx:+(ctx.player.vx||0).toFixed(2),dbg:ctx.player.dbg,dbg2:ctx.player.dbg2,st:ctx.player.stamina,prof:m.prof}); }
     }
     return rows;
   },

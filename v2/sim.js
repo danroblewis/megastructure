@@ -17,7 +17,7 @@ const SIM={
     this.LW=Math.ceil(W/4); this.LH=Math.ceil(H/4);
     this.L=[tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true),tex(this.LW,this.LH,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,null,true)]; this.Lfbo=this.L.map(t=>fbo([t])); this.lcur=0;
     this.Wf=[hfl(W,H),hfl(W,H)]; this.Wfbo=this.Wf.map(t=>fbo([t])); this.wcur=0;
-    this.B=[hfl(W,H),hfl(W,H)]; this.Bfbo=this.B.map(t=>fbo([t])); this.bcur=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
+    this.B=[hfl(W,H),hfl(W,H)]; this.Q=[hfl(W,H),hfl(W,H)]; this.Bfbo=this.B.map((t,i)=>fbo([t,this.Q[i]])); this.bcur=0; this.ident=0; this.BV=hf(W,H); this.BVfbo=fbo([this.BV]);
     // reduction chain for mass / centroid
     this.levels=[]; let lw=Math.ceil(W/4), lh=Math.ceil(H/4);
     while(true){ const ts=[0,1,2,3].map(()=>tex(lw,lh,gl.RGBA32F,gl.RGBA,gl.FLOAT)); this.levels.push({ts,f:fbo(ts),w:lw,h:lh}); if(lw*lh<=16) break; lw=Math.ceil(lw/4); lh=Math.ceil(lh/4); }
@@ -38,7 +38,7 @@ const SIM={
     this.machData=new Float32Array(5*6*2000);
     // initial fluid state: equilibrium at rest. Draw lbm pass with zero inputs twice to normalise
     for(let i=0;i<2;i++){ gl.bindFramebuffer(gl.FRAMEBUFFER,this.Ffbo[i]); gl.viewport(0,0,W,H); gl.clearBufferfv(gl.COLOR,0,[4/9,1/9,1/9,1/9]); gl.clearBufferfv(gl.COLOR,1,[1/9,1/36,1/36,1/36]); gl.clearBufferfv(gl.COLOR,2,[1/36,1,0,0]); }
-    for(let i=0;i<2;i++){ gl.bindFramebuffer(gl.FRAMEBUFFER,this.SDfbo[i]); gl.viewport(0,0,W,H); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); gl.clearBufferfv(gl.COLOR,1,[0,0,0,0]); gl.bindFramebuffer(gl.FRAMEBUFFER,this.Bfbo[i]); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); }
+    for(let i=0;i<2;i++){ gl.bindFramebuffer(gl.FRAMEBUFFER,this.SDfbo[i]); gl.viewport(0,0,W,H); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); gl.clearBufferfv(gl.COLOR,1,[0,0,0,0]); gl.bindFramebuffer(gl.FRAMEBUFFER,this.Bfbo[i]); gl.clearBufferfv(gl.COLOR,1,[0,0,0,0]); gl.clearBufferfv(gl.COLOR,0,[0,0,0,0]); }
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
     this.probeBuf=new Float32Array(64*4); this.probeBuf2=new Float32Array(64*4); this.pts=new Float32Array(128);
     this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[1]}); this.draw(this.Wfbo[0],W,H); this.use(this.P.wallsInit,{uMask:this.Mstatic,uWf:this.Wf[0]}); this.draw(this.Wfbo[1],W,H);
@@ -75,13 +75,13 @@ const SIM={
     gl.uniform4f(pr.u.uInject,inject?inject.x:-999,inject?inject.y:-999,inject?inject.r:0,0); gl.uniform4f(pr.u.uInjectAmt,inject?inject.fuel:0,inject?inject.heat:0,inject?inject.smoke:0,inject?inject.life:0);
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
     // body
-    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform4fv(pr.u.uSpot,bd.spot||[0,0,0,0]); gl.uniform1f(pr.u.uFriend,bd.friend||0); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs);
+    pr=this.P.bodyVel; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uFC:this.F[this.cur].c,uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform4fv(pr.u.uSpot,bd.spot||[0,0,0,0]); gl.uniform1f(pr.u.uFriend,bd.friend||0); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs);
     gl.uniform1f(pr.u.uGrip,bd.grip===undefined?1:bd.grip); gl.uniform1f(pr.u.uInertia,bd.inertia||0); gl.uniform2f(pr.u.uIVel,bd.ivx||0,bd.ivy||0); gl.uniform1f(pr.u.uDense,bd.dense||0.9);
     const ap=bd.app||[0,0,0]; gl.uniform3f(pr.u.uApp,ap[0],ap[1],ap[2]); gl.uniform1f(pr.u.uJet,bd.jet===undefined?1.8:bd.jet); const sa=bd.splitAxis||[1,0]; gl.uniform2f(pr.u.uSplitAxis,sa[0],sa[1]); gl.uniform1f(pr.u.uSplitStr,bd.splitStr||0); gl.uniform1f(pr.u.uSplitApp,bd.splitApp||0);
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uSwim,bd.swim); gl.uniform1f(pr.u.uCoh,bd.coh); gl.uniform1f(pr.u.uRnear,bd.rnear);
     this.draw(this.BVfbo,this.W,this.H);
     pr=this.P.body; const bo=1-this.bcur;
-    this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c});
+    this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uBV:this.BV,uS:this.S[this.scur],uFC:this.F[this.cur].c}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uDirs,this.dirs);
     gl.uniform2f(pr.u.uCentroid,bd.centroid[0],bd.centroid[1]); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform4fv(pr.u.uAlcove,bd.alcove||[0,0,0,0]); gl.uniform4fv(pr.u.uPick,bd.pick||[0,0,0,0]); gl.uniform1f(pr.u.uPayInit,bd.payInit||0); gl.uniform1f(pr.u.uNpcGrow,bd.npcGrow||0);
     gl.uniform1f(pr.u.uRnear,bd.rnear); gl.uniform1f(pr.u.uRfar,bd.rfar); gl.uniform1f(pr.u.uGrow,bd.grow); gl.uniform1f(pr.u.uDroneR,bd.droneR||5);
     const ib=bd.injectB; gl.uniform4f(pr.u.uInjectB,ib?ib[0]:-999,ib?ib[1]:-999,ib?ib[2]:0,ib?ib[3]:0);
@@ -97,7 +97,7 @@ const SIM={
   },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
-    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uS:this.S[this.scur]}); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
+    const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);
     for(let i=1;i<this.levels.length;i++){ pr=this.P.reduceN; const L=this.levels[i-1]; this.use(pr,{uMask:this.Mdyn,uL0:L.ts[0],uL1:L.ts[1],uL2:L.ts[2],uL3:L.ts[3]}); gl.uniform2i(pr.u.uLRes,L.w,L.h); this.draw(this.levels[i].f,this.levels[i].w,this.levels[i].h); }
   },
   // sample fields at up to 64 points and reduce the body; results are read back asynchronously
@@ -138,7 +138,7 @@ const SIM={
     const gl=this.gl; let pr;
     // bloom: extract emissive at half resolution, blur horizontally then vertically
     this.ensureBloom(sw,sh); const bw=this.bloomW, bh=this.bloomH;
-    pr=this.P.bloomExtract; this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uB:this.B[this.bcur]}); gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); this.draw(this.bloomF[0],bw,bh);
+    pr=this.P.bloomExtract; this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uB:this.B[this.bcur],uQ:this.Q[this.bcur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2f(pr.u.uCam,cam[0],cam[1]); gl.uniform1f(pr.u.uZoom,zoom); gl.uniform2f(pr.u.uScreen,sw,sh); this.draw(this.bloomF[0],bw,bh);
     pr=this.P.blur; gl.useProgram(pr.p); gl.uniform2f(pr.u.uTexel,1/bw,1/bh);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.bloomT[0]); gl.uniform1i(pr.u.uT,0); gl.uniform2f(pr.u.uDir,1,0); this.draw(this.bloomF[1],bw,bh);
     gl.bindTexture(gl.TEXTURE_2D,this.bloomT[1]); gl.uniform2f(pr.u.uDir,0,1); this.draw(this.bloomF[0],bw,bh);
