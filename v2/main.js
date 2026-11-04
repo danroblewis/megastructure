@@ -395,7 +395,15 @@
       while(qh<q.length&&qh<40000){ const i=q[qh++]; if(st.pathSet.has(i)&&i!==start){ found=i; break; } const x=i%W_, y=(i/W_)|0; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; const j=ny*W_+nx; if(solidC(nx,ny)||prev.has(j)) continue; prev.set(j,i); q.push(j); } }
       if(found>=0){ bi=st.pathSet.get(found); const route=[]; for(let i=found;i!==-1&&i!==undefined;i=prev.get(i)) route.push(i); route.reverse(); let step=route[Math.min(route.length-1,12)]; for(let k=route.length-1;k>0;k--){ const x=route[k]%W_, y=(route[k]/W_)|0; if(los(x+0.5,y+0.5)){ step=route[k]; break; } } st.detour=[step%W_+0.5,((step/W_)|0)+0.5]; } else { st.detour=null; bi=st.i; }
     } else st.detour=null;
-    st.i=bi; let wp=P[bi]; if(!st.detour){ for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; break; } } } else wp=st.detour;
+    st.i=bi; let wp=P[bi];
+    if(!st.detour){ let found=false; for(let k=Math.min(P.length-1,bi+40);k>bi;k-=2){ if(los(P[k][0],P[k][1])){ wp=P[k]; found=true; break; } }
+      if(!found){ // nothing ahead fits the body's width: a thin ray will do for a few cells, else walk a breadth-first detour to a point further along
+        const thin=(x,y)=>{ const dx=x-px, dy=y-py; const n=Math.ceil(Math.hypot(dx,dy)); for(let k=1;k<=n;k++){ if(solidC(px+dx*k/n,py+dy*k/n)) return false; } return true; };
+        for(let k=Math.min(P.length-1,bi+16);k>bi;k-=2){ if(thin(P[k][0],P[k][1])){ wp=P[k]; found=true; break; } }
+        if(!found){ const tgt=P[Math.min(P.length-1,bi+30)]; const start=(py|0)*W_+(px|0), goal=(tgt[1]|0)*W_+(tgt[0]|0); const prev=new Map([[start,-1]]); const q=[start]; let qh=0, ok=false;
+          while(qh<q.length&&qh<60000){ const i=q[qh++]; if(i===goal){ ok=true; break; } const x=i%W_, y=(i/W_)|0; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; const j=ny*W_+nx; if(solidC(nx,ny)||prev.has(j)) continue; prev.set(j,i); q.push(j); } }
+          if(ok){ const route=[]; for(let i=goal;i!==-1&&i!==undefined;i=prev.get(i)) route.push(i); route.reverse(); let step=route[Math.min(route.length-1,10)]; for(let k=route.length-1;k>0;k--){ const x=route[k]%W_, y=(route[k]/W_)|0; if(thin(x+0.5,y+0.5)){ step=route[k]; break; } } wp=[step%W_+0.5,((step/W_)|0)+0.5]; } } } }
+    else wp=st.detour;
     st.wp=wp; return {d:_unit(wp[0]-px,wp[1]-py),bi,wp}; }
   // another wisp (roadmap 13): it waits before the first dead alcove, withering slowly outside the cold, until you repair
   // the alcove; then it goes on along the route, resting in each live cold room, until the exit. it is centre slot 2.
