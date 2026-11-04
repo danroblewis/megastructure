@@ -168,3 +168,23 @@ repair, resting in live cold rooms, leaving at the exit. Verified headless: pick
 ore), repair (<400 ticks with a loaded body), orb charge, wisp release and travel (route index 1310 in 1000 ticks).
 Open: the wisp and you exchange cells when you overlap (nearest-centre assignment); whether that reads as integration or
 as theft needs play. Helping the wisp beyond the repair (towing, sheltering) is not built.
+
+---
+
+## Identity experiments, wave 1 — results 2026-11-04 (branches ident-N-<name>; sections with full tables are on each branch)
+
+Scenario: `enmesh` (press into the other wisp 4 s, hold 5 s, pull away 6 s). The baseline passes straight through the other
+wisp (dist 12 at t=90, 74 by t=240), exchanges ~35 cells symmetrically at contact which reverse, and ends crushed on the box
+wall; `enmesh2` (gentler) is used from wave 2. Criteria: overlap normal; no taking; loss allowed; learning together.
+
+| model | boundary | no taking | steerability | learning together | verdict |
+|---|---|---|---|---|---|
+| coherence (1) | none beyond distance | yes | kept (100%) | no (q is habit, not history) | baseline in disguise; a stronger soft-membership version merged centres and dragged the other wisp 190 cells (codependence) |
+| familiarity (2) | lasting entanglement (pair stays ~20 apart for the hold), but q says how settled a cell is, not whose | yes (both ~160 after) | 2/3–4/5 alone, 2/3 of that entangled | no | fresh matter is fragile by design, and every spawn is fresh: a fresh body in a current is lost |
+| commitment (3) | yes: the push ends on top of the other wisp, not through it | yes (160/161) | 80% entangled, ~60% everywhere (1 s adoption, 2.5 s status ramp) | no (q diverges after parting) | a boundary at the price of sluggishness; tearing/holding outcomes blunted by the same lag |
+| held (8) | pending | | | | |
+| survival (10) | no new physics (identical to baseline) | measured: ~30 of its cells leave with you, ~20 of yours stay, all fade within 30 ticks | 100% | histories converge in contact, diverge after | provenance legible; ledger distinguishes faded from taken; chamber ledger pending |
+
+Take-aways so far: distance alone already gives "no taking" (exchanged cells fade); what the models add is *not passing
+through* (commitment, familiarity) at a cost in responsiveness; none yet produces learning-together; soft membership that
+can merge centres must be ruled out in the reduction (it is codependence by the numbers).
