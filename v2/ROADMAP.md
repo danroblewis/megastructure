@@ -215,3 +215,16 @@ with the same problem. So the friend needs a problem of its own that it can over
 story as it happens, and a way for the player to help that is not doing it for them. Never a lesson that leaving a bad
 entanglement kills the other: the friend now regrows and returns. Experiments 3 (commitment, rejected as prescriptive)
 and 11 (statuses: diffusion, moratorium, achievement, negative identity as emergent stability) are the Marcia side.
+
+**The word, and the caption (2026-11-04, main):** the state is *enmeshment*, Minuchin's term from family-systems therapy for
+boundaries gone diffuse between two people (Bowen calls the same thing fusion); it is not codependency, which is a
+pattern of behaviour around someone else's problem. The game shows it like "dispersed": the caption `enmeshed`. What it
+detects is cells changing hands: the two centres cannot tell you on their own (each is the mean of its own half of the
+shared blob, so they sit about a body radius apart even when the matter is fully mixed), and a friend following beside
+you must not read as enmeshed. So the caption fires when mass moves between the two wisps faster than growth explains
+(1.2 cells a tick) while they are in contact, or when one body is deep inside the other (centres within 0.6 of the two
+radii), and clears with hysteresis within about a second of the exchange stopping. A low two-note tone marks the onset.
+Detection only: nothing is enforced, you simply steer less while it lasts. The menu's "view: clear" (V on a keyboard,
+`#dbg=5` in the lab) draws one square per cell with no light or blending, blue for yours, green for the friend's, red on
+the border cells, with the two centres and the halfway line; it showed that the display pass had never bound the
+allegiance texture, so the ownership tint had been reading an unrelated texture (fixed, sim.js).

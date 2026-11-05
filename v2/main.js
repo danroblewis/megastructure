@@ -92,12 +92,12 @@
       this.psg(this.roar.g.gain,Math.min(0.05,Math.max(0,heat-0.2)*0.15),t,0.4); this.psg(this.hiss.g.gain,Math.min(0.02,Math.max(0,heat-0.5)*0.1),t,0.4); } };
 
   // ---------- input ----------
-  const keys={}; let sparkQ=false, puffQ=false, debug=0, muted=false;
+  const keys={}; let sparkQ=false, puffQ=false, debug=+HASH.view||0, muted=false;
   window.addEventListener('error',e=>{ AUDIO.panic(e.error||e.message); }); window.addEventListener('unhandledrejection',e=>{ AUDIO.panic(e.reason); });
   // audio unlock: the first gesture of any kind starts the context; coming back to the tab resumes it
   for(const ev of ['touchstart','touchend','pointerdown','pointerup','mousedown','mouseup','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&AUDIO.ctx&&AUDIO.ctx.state!=='running') AUDIO.ctx.resume().catch(()=>{}); });
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%5; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&player.won&&player.winT>120) setMap(MAPI+1); else if(e.code==='KeyR'&&player.dead) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%6; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&player.won&&player.winT>120) setMap(MAPI+1); else if(e.code==='KeyR'&&player.dead) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
@@ -189,7 +189,7 @@
   const probePts=new Float32Array(128), droneArr=new Float32Array(32);
   // sound sources of the structure: patches of vent (2), drain (3), burner (5) and cooler (6) cells, 24 cells across
   window.__eval=(js)=>eval(js);   // remote debugging: a direct eval inside this closure sees player, selves, bd, world, AUDIO, SIM ...
-  window.__state=()=>({frame:SIM.frame,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
+  window.__state=()=>({frame:SIM.frame,enmeshed:!!player.enmeshed,dt:+dtAvg.toFixed(1),steps,mass:+player.mass.toFixed(1),x:player.x|0,y:player.y|0,dead:player.dead,stamina:player.stamina&&+player.stamina.toFixed(2),dissoc:player.dissoc,elong:SIM.red&&+(SIM.red.elong||0).toFixed(2),spread:SIM.red&&+(SIM.red.spread||0).toFixed(1),nC:SIM.nC,scheme:SCHEME.name,coarse:COARSE,small,
     audio:AUDIO.ctx?{state:AUDIO.ctx.state,t:+AUDIO.ctx.currentTime.toFixed(1),vA:AUDIO.vA&&[+AUDIO.vA.o.frequency.value.toFixed(1),+AUDIO.vA.g.gain.value.toFixed(4)],vB:AUDIO.vB&&[+AUDIO.vB.o.frequency.value.toFixed(1),+AUDIO.vB.g.gain.value.toFixed(4)],pipes:AUDIO.pipes&&AUDIO.pipes.map(v=>[+v.o.frequency.value.toFixed(0),+v.g.gain.value.toFixed(4)]),wind:AUDIO.wind&&+AUDIO.wind.g.gain.value.toFixed(4),live:AUDIO.live&&AUDIO.live.size,created:AUDIO.created,ended:AUDIO.ended,peak:AUDIO.lastPeak,act:+(AUDIO.act||0).toFixed(2),panics:AUDIO.panics||0,music:AUDIO.music,muted:AUDIO.muted}:null,
     glerr:SIM.gl.getError()});
   const SRCS=(()=>{ const B=24, bw=Math.ceil(world.W/B), acc=new Map(); const ty=world.type; for(let y=0;y<world.H;y+=2) for(let x=0;x<world.W;x+=2){ const k=ty[y*world.W+x]; if(k!==2&&k!==3&&k!==5&&k!==6) continue; const key=k*1e6+((y/B)|0)*bw+((x/B)|0); let a=acc.get(key); if(!a){ a={k,n:0,x:0,y:0}; acc.set(key,a); } a.n++; a.x+=x; a.y+=y; }
@@ -242,6 +242,19 @@
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
     if(alive && SCHEME.tick){ const cx=ctxNow(); cx.inp=inp; cx.contract=contract; SCHEME.tick(cx); }
     npcTick();
+    /* enmeshment (Minuchin): the two wisps' matter has become one blob with two labels, and cells are changing hands. the centres
+       cannot tell you this on their own (each is the mean of its own half, so they sit about a body radius apart even when fully
+       mixed); so: the bodies overlap (centres closer than 0.6 of the two radii, yours from the spread, the friend's scaled by mass)
+       for a second, or mass is moving between you faster than growth can explain (1.2 cells a tick) while you are in contact.
+       a friend following beside you (centres about a body apart, nothing changing hands) must not read as enmeshed.
+       clears with hysteresis so the caption does not flicker. detection only: nothing is enforced, you simply steer less */
+    { const s2=selves[2]; const o=NPC&&s2.live&&s2.npc&&!player.dead&&player.mass>4*MK&&s2.mass>4*MK; const red=SIM.red||{};
+      const r1=Math.max(BODY.rnear*0.5,(red.spread||BODY.rnear*0.5)*1.4), r2=r1*Math.sqrt(Math.max(0.1,s2.mass)/Math.max(0.1,player.mass)), rr=r1+r2;
+      const diff=player.mass-s2.mass; player.xfer=0.9*(player.xfer||0)+0.1*Math.abs(diff-(player.lastDiff===undefined?diff:player.lastDiff))/MK; player.lastDiff=diff;
+      const overlap=o&&NPC.dist<(player.enmeshed?0.8:0.6)*rr, swapping=o&&NPC.dist<2.0*rr&&player.xfer>1.2, apart=!o||player.xfer<0.4&&NPC.dist>(player.enmeshed?0.8:0.6)*rr;   // a friend following beside you is not enmeshed: only cells changing hands, or one body deep inside the other, count
+      player.enmeshT=(overlap||swapping)?Math.min(120,(player.enmeshT||0)+(swapping?3:1)):apart?Math.max(0,(player.enmeshT||0)-2):(player.enmeshT||0);   // capped so the caption clears within a second of parting
+      if(!player.enmeshed&&player.enmeshT>60){ player.enmeshed=true; player.enmeshN=(player.enmeshN||0)+1; try{ AUDIO.tone(220,165,1.2,'sine',0.04); }catch(e){ AUDIO.panic(e); } }
+      else if(player.enmeshed&&player.enmeshT<20){ player.enmeshed=false; } }
     // stamina: holding against a current is work. flow at the centroid vs the direction you are pushing.
     { if(player.stamina===undefined){ player.stamina=1; player.dissoc=0; }
       const fx=pb[0], fy=pb[1], fl=Math.hypot(fx,fy); const dl=Math.hypot(bd.dir[0],bd.dir[1]);
@@ -362,8 +375,8 @@
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.25)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
       if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,170*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
-        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*5+12*s,10*s); c.fill();
-        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:`map ${MAPI+1} of ${MAPS.length}   ▸ next`,act:()=>setMap(MAPI+1)},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
+        c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*6+12*s,10*s); c.fill();
+        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:'view: '+(debug===5?'clear (cells, whose, border)':'normal'),act:()=>{ debug=debug===5?0:5; }},{l:`map ${MAPI+1} of ${MAPS.length}   ▸ next`,act:()=>setMap(MAPI+1)},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         for(const n of (MENU.showSchemes?MENU.names:[])){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
       c.textBaseline='top'; }
     // target point: a soft animated marker where you asked the body to go
@@ -378,10 +391,16 @@
         c.save(); c.translate(ax,ay); c.rotate(ang); c.fillStyle= tgt===world.exit?'rgba(255,220,80,0.9)':'rgba(120,255,160,0.85)'; c.beginPath(); c.moveTo(9*s,0); c.lineTo(-6*s,6*s); c.lineTo(-3*s,0); c.lineTo(-6*s,-6*s); c.closePath(); c.fill(); c.restore();
         c.font=`${Math.round(10*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.7)'; c.fillText(`${Math.round(d)}`,ax+10*s,ay-16*s); }
     }
+    if(debug===5){   // clear view: the two centres and the line halfway between them, which is where allegiance by nearness changes hands
+      const ax=(player.x-camX)*zoom, ay=(player.y-camY)*zoom; c.lineWidth=1.5*s; c.strokeStyle='rgba(255,255,255,0.85)'; c.beginPath(); c.arc(ax,ay,5*s,0,6.2832); c.stroke();
+      const o=selves[2]; if(NPC&&o.live&&o.npc){ const bx=(o.x-camX)*zoom, by=(o.y-camY)*zoom; c.strokeStyle='rgba(120,255,100,0.85)'; c.beginPath(); c.arc(bx,by,5*s,0,6.2832); c.stroke();
+        const mx=(ax+bx)/2, my=(ay+by)/2, dx=bx-ax, dy=by-ay, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L; c.strokeStyle='rgba(255,90,90,0.55)'; c.setLineDash([4*s,4*s]); c.beginPath(); c.moveTo(mx-nx*400*s,my-ny*400*s); c.lineTo(mx+nx*400*s,my+ny*400*s); c.stroke(); c.setLineDash([]);
+        c.font=`${Math.round(10*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.75)'; c.fillText(`you ${Math.round(player.mass/MK)} · friend ${Math.round(o.mass/MK)} · apart ${Math.round(NPC.dist)}${player.enmeshed?' · enmeshed':''}`,ax+8*s,ay-8*s); } }
     let msg=null;
     if(player.won) msg= player.winT<240?`map ${MAPI+1} cleared`:`map ${MAPI+1} cleared · ${player.deaths} deaths · tap or R for map ${(MAPI+1)%MAPS.length+1}`;
     else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
     else if(player.hintT>0) msg=player.hint;
+    else if(player.enmeshed) msg='enmeshed';
     else if(SIM.frame<600) msg= `map ${MAPI+1} of ${MAPS.length}`;
     else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
@@ -456,6 +475,7 @@
         const j=world.jet; let n=0; for(let x=j.x0+2;x<W-22&&n<63;x+=24){ for(const dy of [-12,0,12]){ probePts[n*2]=x; probePts[n*2+1]=j.y+dy; n++; } }
         SIM.probe(probePts,n); const [pb,pb2]=SIM.collect(); let s=0; const prof=[]; for(let k=0;k<n;k++){ s+=pb2[k*4+3]; if(k%3===1) prof.push([probePts[k*2]|0,+pb[k*4].toFixed(2)]); } return {inJet:s*24*(j.half*2)/3,prof}; } };
     const rows=LAB.run(HASH.lab,ctx,tick); SIM.gl.finish();
+    { const vw=sw/zoom, vh=sh/zoom; camX=Math.max(0,Math.min(W-vw,player.x-vw/2)); camY=Math.max(0,Math.min(H-vh,player.y-vh/2)); SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1); SIM.gl.finish(); }   // one frame for screenshots (#dbg=5 is the clear view)
     document.title='LAB '+JSON.stringify({scenario:HASH.lab,rows});
   } else
   // headless test mode: run N ticks synchronously, render once, report

@@ -462,6 +462,14 @@ void main(){
   bool solid=cov>=0.5; if(solid && !solidAt(p)){ p=ivec2(floor(wc-0.5+vec2(cov>=0.5?0.5:0.0))); if(!solidAt(p)){ ivec2 q0=ivec2(floor(wc-0.5)); p=solidAt(q0)?q0:solidAt(q0+ivec2(1,0))?q0+ivec2(1,0):solidAt(q0+ivec2(0,1))?q0+ivec2(0,1):q0+ivec2(1,1); } wf=texelFetch(uWf,wrapP(p),0); }
   float light=texture(uLight,(wc)/vec2(uRes)).r; float lit=0.045+min(1.6,light*1.6);
   if(uDebug==4){ o=vec4(vec3(min(1.0,light)),1.0); return; }
+  if(uDebug==5){   // clear view: one cell one square, no light, no bloom, no blending: density as brightness, whose as colour (yours pale blue, the other wisp green, a past life dark blue), the border in red where allegiance crosses a half
+    if(solidAt(p)){ o=vec4(vec3(0.22),1.0); return; }
+    vec4 b=texelFetch(uB,wrapP(p),0); vec4 q=texelFetch(uQ,wrapP(p),0); float sf=b.x; vec3 bg=vec3(0.04,0.045,0.06)+vec3(0.25,0.08,0.0)*min(1.0,max(s.y,0.0)*2.0);
+    if(sf<=0.002){ o=vec4(bg,1.0); return; }
+    float k=min(1.0,pow(sf/0.9,0.7)); float w=clamp(q.w,0.0,1.0); vec3 theirs= uNpcK>0? vec3(0.45,1.0,0.4): vec3(0.35,0.45,0.9); vec3 cc=mix(theirs,vec3(0.55,0.8,1.0),w);
+    bool edge=false; for(int kk=0;kk<4;kk++){ ivec2 n=p+ivec2(kk==0?1:kk==1?-1:0,kk==2?1:kk==3?-1:0); if(texelFetch(uB,wrapP(n),0).x>0.002 && (texelFetch(uQ,wrapP(n),0).w>0.5)!=(w>0.5)) edge=true; }
+    if(edge) cc=vec3(1.0,0.3,0.3);
+    o=vec4(mix(bg,cc,0.25+0.75*k),1.0); return; }
   if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
   if(uDebug==2){ col=vec3(s.x,max(s.y,0.0),s.w); if(s.y<0.0) col.b+= -s.y; if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
   if(uDebug==3){ col=vec3(wf.x,wf.y,wf.z); o=vec4(col,1.0); return; }
