@@ -299,3 +299,15 @@ cold room, rests fifteen seconds, moves on; curious (pale green) paths toward yo
 Limit: two settled wisps at a time (three centres, sixteen reduction floats). Test hook: `#pile=x,y` plants a second body
 on tick 10; the trace carries `S<k><p|t1|t2><mass>@x,y`. The user: "This works... very interesting!"; speed raised from 0.6
 to 0.9 of yours.
+
+**Rewritten the same evening, fully in the field** (the user: "I want them to have unique identities, unique wills! I want to
+have a bunch of unique guys whisping around the map"). The limit of two came from centres and reduction channels, so the
+centres went: q.w is now a wisp *number* per cell (0 you, 1.. a wisp of its own); numbers never convert each other; only
+loose matter of yours (no will reaching it) is gathered, by a wisp whose cells touch it (contagion, a few substeps) or by
+a seed. A wisp of its own has no centre and no CPU mind: every cell feels an appetite drawn from a hash of its number
+(weights on the heat, fuel and glow gradients and on riding the flow), plus a wander when nothing is near, and wears a
+pale hue from the same hash. Cohesion is per number (another wisp's matter reads as empty), so wisps pass without
+pulling into each other. Regrowth for all of them is `uGrowOther`, capped together at four bodies' worth. Seeding is the
+one CPU act: a pile of yours out of reach five seconds gets a fresh number at its far edge (`uSeed`), which floods the
+loose pile. If your steered body collapses while a loose pile of yours sits far off, your core jumps to it. The count of
+wisps is bounded only by matter.

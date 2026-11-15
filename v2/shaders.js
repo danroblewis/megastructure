@@ -30,37 +30,39 @@ uniform float uWill, uStray;   // PARAMS.will: intention travels through the mat
 uniform vec4 uSpot;            // an attended point in the world: x y strength active (shared by the will injection in the body pass and the steering in bodyVel)
 uniform float uRnear, uRfar;   // body radii, shared
 uniform float uAuto;           // PARAMS.auto: a part left behind long enough settles into a wisp of its own, with a will and a temperament
-uniform float uGrowK[3];       // regrowth of each centre's wisp (0 for you: yours is uGrow)
-uniform int uTemper[3];        // temperament of each centre's wisp: 0 none (you, or a pile not yet settled), 1 healer (seeks cold rooms and rests), 2 curious (follows you at a distance)
+uniform float uGrowOther;      // regrowth of every wisp that is not you, capped on the CPU by all of them together
+uniform vec4 uSeed;            // x y radius number: for one frame, loose matter of yours inside the circle becomes wisp <number> (radius 0: none)
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
 // which centre is nearest among the ones that are not you (1 or 2), or 0 if there are none
 int nearestOther(vec2 pp){ int k=0; float bd=1e9; for(int j=1;j<3;j++){ if(j<uCN){ float d=distance(pp,uC[j]); if(d<bd){ bd=d; k=j; } } } return k; }
 // the centre a cell belongs to: yours while q.w says so, else the nearest other. ownership has memory (see identUpdate)
-int ownerK(vec4 q, vec2 pp){ return q.w>0.5 ? 0 : nearestOther(pp); }
+int idOf(vec4 q){ return int(floor(q.w+0.5)); }   // q.w is the cell's wisp number: 0 you, 1.. a wisp of its own. numbers never convert each other
+int ownerK(vec4 q, vec2 pp){ return idOf(q)==0 ? 0 : -1; }   // the only centre is yours; a wisp of its own has none
+uint idHash(int id, uint salt){ uint h=uint(id)*2654435761u+salt*40503u+12345u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15; return h; }
+vec3 idHue(int id){ float hh=float(idHash(id,1u)&1023u)/1024.0; vec3 c=clamp(abs(fract(vec3(hh)+vec3(0.0,0.667,0.333))*6.0-3.0)-1.0,0.0,1.0); return mix(vec3(1.0),c,0.55); }   // a pale hue of its own
+
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
-  // kk is the nearest centre; dc the distance to the cell's OWNER centre; drive the owner's drive (uDirs[owner])
-  if(uWill<0.5){ q.w=mix(q.w, kk==0?1.0:0.0, 0.02); q.xy=mix(q.xy,vel*8.0,0.03); q.z=mix(q.z,1.0,0.005); return q; }
-  // the will: q.xy is the point this cell has heard it should go to, q.z how connected it is to its core.
-  // intention enters only at a core (within half rnear of a centre) and travels cell to cell through that wisp's own
-  // matter, a hop every few substeps with a little lost per hop; it fades where nothing renews it. the body is whatever the
-  // will can reach. matter the will reaches keeps its allegiance; only unreached matter changes hands by nearness, so no
-  // wisp can take another's connected body, and any wisp can gather loose matter.
-  float conn=smoothstep(0.1,0.4,q.z);
-  q.w=mix(q.w, kk==0?1.0:0.0, 0.02*(1.0-conn));
-  bool mineSide=q.w>0.5; vec2 pp=vec2(p)+0.5; int own= mineSide? 0 : nearestOther(pp);
-  float z=q.z*0.985; float best=0.0; vec2 bg=q.xy;
-  for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); if((qn.w>0.5)==mineSide && qn.z>best){ best=qn.z; bg=qn.xy; } }
+  // q.w the cell's wisp number (0 you); for yours, q.xy the point it has heard it should go to and q.z how connected it is to your core.
+  // dc is the distance to your centre, drive your plain drive (uDirs[0]).
+  if(uWill<0.5){ q.xy=mix(q.xy,vel*8.0,0.03); q.z=mix(q.z,1.0,0.005); return q; }
+  int id=idOf(q); vec2 pp=vec2(p)+0.5;
+  if(id>0){ q.z=0.0; q.xy=pp; return q; }   // a wisp of its own hears no will: its cells each feel an appetite (bodyVel), and they keep their number for good
+  // the will: intention enters only at your core (within half rnear of your centre) and travels cell to cell through your own
+  // matter, a hop every few substeps with a little lost per hop; it fades where nothing renews it. you are whatever the will reaches.
+  float z=q.z*0.985; float best=0.0; vec2 bg=q.xy; int grab=0;
+  for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); int idn=idOf(qn); if(idn==0){ if(qn.z>best){ best=qn.z; bg=qn.xy; } } else grab=idn; }
   uint h=uint(p.x)*1664525u+uint(p.y)*1013904223u+uFrame*69069u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15;
   if((h&3u)==0u && best*0.985>z){ z=best*0.985; q.xy=bg; }
-  bool hasWill= own==0 || (uAuto>0.5 && uTemper[own]>0);   // you always; a pile only once it has settled into a wisp of its own
-  float core= hasWill? 1.0-smoothstep(uRnear*0.5,uRnear,dc) : 0.0;
-  if(core>0.0){ z=max(z,core); float dl=length(drive);
-    if(own==0 && uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[own]+drive/dl*40.0,core); }   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot, a settled wisp's own mind) as a point forty cells that way
-  q.z=z; return q; }
+  float core=1.0-smoothstep(uRnear*0.5,uRnear,dc);
+  if(core>0.0){ z=max(z,core); float dl=length(drive); if(uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[0]+drive/dl*40.0,core); }   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot) as a point forty cells that way
+  // loose matter (yours, out of the will's reach) is gathered: by a wisp whose cells touch it, or by a seed that makes a new wisp of it
+  if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<3u){ q.w=float(grab); q.z=0.0; q.xy=pp; return q; }
+    if(uSeed.z>0.0 && distance(pp,uSeed.xy)<uSeed.z){ q.w=uSeed.w; q.z=0.0; q.xy=pp; return q; } }
+  q.z=z; q.w=0.0; return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
-float identWeight(int k, int nearestK, vec4 q, vec2 pp){ if(k!=ownerK(q,pp)) return 0.0; return (uWill>0.5 && k==0)? smoothstep(0.03,0.2,q.z) : 1.0; }   // with the will on, only matter the will reaches counts as you: strays do not move the centroid or the camera
+float identWeight(int k, int nearestK, vec4 q, vec2 pp){ if(k!=0 || idOf(q)!=0) return 0.0; return uWill>0.5? smoothstep(0.03,0.2,q.z) : 1.0; }   // with the will on, only matter the will reaches counts as you: strays do not move the centroid or the camera
 // the drive a cell actually follows, given the drive of its centre
 vec2 identDrive(int ki, vec4 q, vec2 drive, float self){ return drive; }
 // the cohesion a cell actually feels, given the gradient climb and homing computed for it
@@ -211,7 +213,7 @@ void main(){
 // ---------------- body: the player as a cohesive cloud of matter ----------------
 // pass 1: velocity of the body matter in each cell (gas drag + swimming + cohesion + homing)
 SH.bodyVel = SH.head + `
-uniform sampler2D uB, uFC, uS;
+uniform sampler2D uB, uFC, uS, uLight;
 uniform vec2 uDir, uCentroid; uniform float uAdv, uSwim, uCoh;
 uniform vec2 uDirs[3];
 uniform float uGrip, uInertia; uniform vec2 uIVel;   // how much the gas grips the self; the self's own coasting velocity
@@ -225,15 +227,15 @@ float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw;
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
 // self n cells along d, or this cell's own value if a wall lies on the way (so gradients never pull across a wall)
-float selfThru(ivec2 p, ivec2 d, int n, float h0){ for(int k=1;k<=n;k++){ ivec2 q=p+d*k; if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return h0; } return texelFetch(uB,p+d*n,0).x; }
+float selfThru(ivec2 p, ivec2 d, int n, float h0, int id){ for(int k=1;k<=n;k++){ ivec2 q=p+d*k; if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return h0; } ivec2 q=p+d*n; return idOf(texelFetch(uQ,q,0))==id? texelFetch(uB,q,0).x : 0.0; }   // cohesion is per wisp: another wisp's matter reads as empty
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
   if(solidAt(p)){ o=vec4(0.0); return; }
   vec2 u=texelFetch(uFC,p,0).zw;
   // the gradient does not see through walls: a tap whose line crosses solid reads as this cell, so two halves split by a thin girder do not cling to each other across it
-  float h0=texelFetch(uB,p,0).x;
-  float gx=(selfThru(p,ivec2(1,0),1,h0)-selfThru(p,ivec2(-1,0),1,h0))*0.5+(selfThru(p,ivec2(1,0),3,h0)-selfThru(p,ivec2(-1,0),3,h0))/6.0;
-  float gy=(selfThru(p,ivec2(0,1),1,h0)-selfThru(p,ivec2(0,-1),1,h0))*0.5+(selfThru(p,ivec2(0,1),3,h0)-selfThru(p,ivec2(0,-1),3,h0))/6.0;
+  float h0=texelFetch(uB,p,0).x; vec4 qme=texelFetch(uQ,p,0); int idc=idOf(qme);
+  float gx=(selfThru(p,ivec2(1,0),1,h0,idc)-selfThru(p,ivec2(-1,0),1,h0,idc))*0.5+(selfThru(p,ivec2(1,0),3,h0,idc)-selfThru(p,ivec2(-1,0),3,h0,idc))/6.0;
+  float gy=(selfThru(p,ivec2(0,1),1,h0,idc)-selfThru(p,ivec2(0,-1),1,h0,idc))*0.5+(selfThru(p,ivec2(0,1),3,h0,idc)-selfThru(p,ivec2(0,-1),3,h0,idc))/6.0;
   // cohesion toward denser matter while below the preferred density; repulsion once over it
   float here=texelFetch(uB,p,0).x;
   float calm=calmAt(p);
@@ -244,25 +246,29 @@ void main(){
   // no homing through a wall: if the straight line to the centre crosses solid, this cell only follows its local gradient
   if(dc>uRnear){ for(int k=1;k<=6;k++){ vec2 q=vec2(p)+0.5+toC*(float(k)/6.0); if(solidAt(ivec2(floor(q)))){ home=vec2(0.0); break; } } }
   if(uStray>0.5 && dc>uRfar) home=vec2(0.0);   // a part left behind does not crawl back across rooms on its own; you go and get it
+  if(idc>0) home=vec2(0.0);   // a wisp of its own has no centre to home to
   home*=max(0.0,1.0-here);
-  int ki=ownerK(texelFetch(uQ,p,0),vec2(p)+0.5);
-  vec2 drive= (ki>0 && uStray>0.5)? vec2(0.0) : uDirs[ki];   // with strays, a part left behind has no drive of its own: it lies in the flow until you come for it
+  int ki=ownerK(qme,vec2(p)+0.5);
+  vec2 drive= ki==0? uDirs[0] : vec2(0.0);
   if(uWill>0.5 && ki==0){ vec4 qw=texelFetch(uQ,p,0); vec2 to=qw.xy-(vec2(p)+0.5); float dl=length(to);   // each cell steers toward the point it has heard of, as strongly as it is connected; a cell that has heard nothing waits
     float str= uSpot.w>0.0? uSpot.z : min(1.0,length(uDirs[0]));   // how hard: the pad's strength, or the plain direction's
     drive= (str>0.01 && qw.z>0.02 && dl>0.5)? to/dl*str*min(1.0,qw.z*1.5)*smoothstep(1.5,9.0,dl) : vec2(0.0); }
-  else if(uAuto>0.5 && ki>0 && uTemper[ki]>0){ vec4 qw=texelFetch(uQ,p,0); vec2 to=qw.xy-(vec2(p)+0.5); float dl=length(to); float str=min(1.0,length(uDirs[ki]));
-    drive= (str>0.01 && qw.z>0.02 && dl>0.5)? to/dl*str*min(1.0,qw.z*1.5)*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // a settled wisp steers as you do, by what its core has told its cells
   else if(ki==0 && uSpot.w>0.0){ vec2 to=uSpot.xy-(vec2(p)+0.5); float dl=length(to); drive= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // every cell its own angle; cells that arrive settle
-  if(ki>0 && uStray<0.5){ // a past life keeps a habit of its last intention and seeks the cold
-    float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
-    vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
   float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
-  vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92; else if(uAuto>0.5 && uTemper[ki]>0) carry=carry*uGrip;
+  vec2 carry=u*uAdv*jet; if(ki==0) carry=carry*uGrip+uIVel*uInertia*0.92; else carry=carry*uGrip;
   vec2 coh=g+home; float dl=length(drive); if(dl>0.05){ vec2 dd=drive/dl; float along=dot(coh,dd); if(along<0.0) coh-=along*dd*0.85; }   // cohesion does not fight locomotion
   float pw=clamp(-texelFetch(uB,p,0).w/max(0.02,here),0.0,1.0);   // power charge fraction of this cell
   vec4 qq=texelFetch(uQ,p,0); drive=identDrive(ki,qq,drive,here); coh=identCohere(qq,coh,here);   // identity model hooks
-  float hurtC= ki==0? texelFetch(uB,p,0).z : 0.0;   // hurt matter answers weakly: a red part lags, and in a current it is the part you lose unless you heal it
+  float hurtC=texelFetch(uB,p,0).z;   // hurt matter answers weakly: a red part lags, and in a current it is the part you lose unless you heal it
   vec2 v=carry*(1.0-0.7*pw)+drive*uSwim*(1.0+1.6*pw)*(1.0-0.6*hurtC)+coh;
+  if(idc>0 && uAuto>0.5){ // a wisp of its own: its will is an appetite every cell feels, drawn from its number, so each wisp is a different creature
+    vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
+    vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x);
+    vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
+    float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
+    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; float gl2=length(ga); vec2 dirv;
+    if(gl2>0.0004) dirv=ga/gl2; else { float a=float((idHash(idc,7u)+uFrame/60u*2654435761u)&1023u)/1024.0*6.2832; dirv=vec2(cos(a),sin(a))*0.5; }   // nothing to smell: wander
+    v+=dirv*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4; }   // some ride the currents more than others
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
@@ -320,15 +326,15 @@ void main(){
   // near ore: any ore cell within a 9x9 window (the attention point lets cells settle a few cells short of a bar, so reach must be generous)
   for(int dy=-4;dy<=4&&!ore;dy++) for(int dx=-4;dx<=4;dx++){ if(mtype(maskAt(p+ivec2(dx,dy)))==M_ORE){ ore=true; break; } }
   float st=max(self,0.0);
-  vec2 nd=nearestD(vec2(p)+0.5); int kkNear=int(nd.y+0.5); vec4 q0=texelFetch(uQ,p,0); int kk= s0<=0.003? kkNear : ownerK(q0,vec2(p)+0.5); float dc=distance(vec2(p)+0.5,uC[kk]); bool ghost=kk>0;
+  vec2 nd=nearestD(vec2(p)+0.5); int kkNear=int(nd.y+0.5); vec4 q0=texelFetch(uQ,p,0); int kk= s0<=0.003? kkNear : ownerK(q0,vec2(p)+0.5); bool ghost=kk<0; if(kk<0) kk=0; float dc=distance(vec2(p)+0.5,uC[0]);   // ghost: a wisp of its own (not you)
   float avg=0.0; float nn=0.0; for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(fluidAt(q)){ avg+=texelFetch(uB,q,0).x; nn+=1.0; } } if(nn>0.0) avg/=nn;
   vec4 sp=texelFetch(uS,p,0);
   float before=self;
-  if(dc>uRfar){ if(uStray<0.5) self*=0.988; }                   // stragglers wither over a few seconds, unless parts may be left behind (PARAMS.stray)
-  else if(dc<uRnear){ float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
-    if(ghost){ if(calm<0.4 && uStray<0.5) self*=0.986; if(uAuto>0.5 && kk<3 && uGrowK[kk]>0.0) self+=uGrowK[kk]*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // a settled wisp keeps itself together as you do                              // a past life fades unless it rests in a cold still pocket (with strays it keeps, see the metabolism below)
-    else self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }                          // close cells reinforce; cold still pockets condense you
-  self*= (uStray>0.5 && (ghost || (kk==0 && dc>uRfar)))? 0.99995 : 0.9995;   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds
+  { float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
+    if(ghost) self+=uGrowOther*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                 // a wisp of its own keeps itself together wherever it is
+    else if(dc>uRfar){ if(uStray<0.5) self*=0.988; }                                   // stragglers wither over a few seconds, unless parts may be left behind (PARAMS.stray)
+    else if(dc<uRnear) self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }            // close cells reinforce; cold still pockets condense you
+  self*= (uStray>0.5 && !ghost && dc>uRfar)? 0.99995 : 0.9995;   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds
   float hurtIn=0.0;   // the fraction of this cell lost to things that hurt: fire, the organism, blades. heat alone, carried or endured, is not hurt
   if(sp.y>0.35){ float d=min(0.3,(sp.y-0.35)*0.18); self*=1.0-d; hurtIn+=d; }
   { float eat=max(sp.w-0.08,0.0)*0.04; self-=eat; hurtIn+=eat/max(self+eat,0.05); }   // the organism feeds on you
@@ -352,7 +358,7 @@ void main(){
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
   q=identUpdate(q,self,v0b,dc,kkNear,sp,dr,p);
   if(s0<=0.003 && self>0.0){ // a new cell belongs to whoever grew it: the allegiance of the neighbours that fed it (not the nearest centre, which let one wisp's growth feed the other without limit)
-    float ws=0.0, ss=0.0; vec3 w3=vec3(0.0); for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; vec4 qn=texelFetch(uQ,qq,0); ws+=qn.w*sn; w3+=qn.xyz*sn; ss+=sn; } q.w= ss>0.0? ws/ss : (kkNear==0?1.0:0.0); if(ss>0.0) q.xyz=w3/ss; }   // and the will its neighbours carry
+    float bs=0.0, ss=0.0; vec3 w3=vec3(0.0); float wid=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; vec4 qn=texelFetch(uQ,qq,0); if(sn>bs){ bs=sn; wid=qn.w; } w3+=qn.xyz*sn; ss+=sn; } q.w=wid; if(ss>0.0) q.xyz=w3/ss; }   // a new cell takes the number of the neighbour that fed it most, and the will its neighbours carry
   if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
@@ -434,13 +440,10 @@ layout(location=0) out vec4 o0; layout(location=1) out vec4 o1; layout(location=
 void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2=vec4(0.0),a3=vec4(0.0);
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
     float px=float(q.x)+0.5, py=float(q.y)+0.5; vec2 pp=vec2(px,py);
-    int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } }
     vec4 qq=texelFetch(uQ,q,0);
-    a0.w+=s*(1.0-identWeight(0,k,qq,pp));   // every cell that is not your connected body (strays, past lives), so growth can be capped by all the matter there is. (this channel used to be burning; hurt is per cell now, and packing both into one float leaked the fraction into 'burning' and painted the body red)
-    for(int j=0;j<3;j++){ if(j>=uCN) break; float w=s*identWeight(j,k,qq,pp); if(w<=0.0) continue;   // membership of this cell in centre j, by the identity model
-      if(j==0){ a0.xyz+=vec3(w,w*px,w*py); a1.xyz+=vec3(w*px*px,w*py*py,w*px*py); }
-      else if(j==1){ a1.w+=w; a2.xy+=vec2(w*px,w*py); }
-      else { a2.z+=w; a2.w+=w*px; a3.x+=w*py; } }
+    if(idOf(qq)>0){ a2.z+=s; continue; }   // wisps of their own: their mass together, nothing else (they have no centre)
+    float w=s*identWeight(0,0,qq,pp);   // your connected body
+    a0.xyz+=vec3(w,w*px,w*py); a1.xyz+=vec3(w*px*px,w*py*py,w*px*py); a0.w+=s-w;   // and, in w, your loose matter: parts left behind
     float d0=distance(pp,uC[0]); if(s>0.15 && d0>a3.y){ a3.yzw=vec3(d0,px,py); } }
   o0=a0; o1=a1; o2=a2; o3=a3; }`;
 SH.reduceN = SH.head + `
@@ -497,8 +500,8 @@ void main(){
     if(solidAt(p)){ o=vec4(vec3(0.22),1.0); return; }
     vec4 b=texelFetch(uB,wrapP(p),0); vec4 q=texelFetch(uQ,wrapP(p),0); float sf=b.x; vec3 bg=vec3(0.04,0.045,0.06)+vec3(0.25,0.08,0.0)*min(1.0,max(s.y,0.0)*2.0);
     if(sf<=0.002){ o=vec4(bg,1.0); return; }
-    float k=min(1.0,pow(sf/0.9,0.7)); float w=clamp(q.w,0.0,1.0); vec3 theirs=vec3(0.35,0.45,0.9); vec3 cc=mix(theirs,vec3(0.55,0.8,1.0),w);
-    bool edge=false; for(int kk=0;kk<4;kk++){ ivec2 n=p+ivec2(kk==0?1:kk==1?-1:0,kk==2?1:kk==3?-1:0); if(texelFetch(uB,wrapP(n),0).x>0.002 && (texelFetch(uQ,wrapP(n),0).w>0.5)!=(w>0.5)) edge=true; }
+    float k=min(1.0,pow(sf/0.9,0.7)); int idv=idOf(q); float w= idv==0?1.0:0.0; vec3 cc= idv==0? vec3(0.55,0.8,1.0) : idHue(idv);
+    bool edge=false; for(int kk=0;kk<4;kk++){ ivec2 n=p+ivec2(kk==0?1:kk==1?-1:0,kk==2?1:kk==3?-1:0); if(texelFetch(uB,wrapP(n),0).x>0.002 && idOf(texelFetch(uQ,wrapP(n),0))!=idv) edge=true; }
     if(edge) cc=vec3(1.0,0.3,0.3);
     o=vec4(mix(bg,cc,0.25+0.75*k),1.0); return; }
   if(uDebug==1){ vec2 u=c.zw; col=mix(vec3(0.05),hsv(atan(u.y,u.x)/6.2832+0.5,1.0,1.0),clamp(length(u)*5.0,0.0,1.0)); if(solid) col=vec3(0.2); o=vec4(col,1.0); return; }
@@ -551,10 +554,8 @@ void main(){
   float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
     { float d0=distance(wc,uC[0]); float dk=1e9; int gk=0; for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(wc,uC[j]); if(dj<dk){ dk=dj; gk=j; } } }
-      if(gk>0 && uAuto>0.5 && uTemper[gk]>0){ float wgt=1.0-clamp(texture(uQ,uv).w,0.0,1.0); vec3 tc= uTemper[gk]==1? vec3(0.7,1.0,1.0) : vec3(0.78,1.0,0.7); bc=mix(bc,tc,0.5*wgt); }   // a wisp of its own: pale cyan if it seeks the cold, pale green if it is curious about you
-      if(gk>0 && uStray<0.5){ float wgt=1.0-clamp(texture(uQ,uv).w,0.0,1.0);   // (with strays, a part left behind is only dimmer, not another colour)   // ownership as the cells remember it, so nothing flickers when wisps entangle
-        bc=mix(bc,mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8,wgt); k*=1.0-0.15*wgt; } }   // another wisp is green; your past lives are blue
-    if(uWill>0.5){ vec4 qr=texture(uQ,uv); if(qr.w>0.5) k*=mix(0.5,1.0,smoothstep(0.0,0.3,qr.z)); }   // matter the will does not reach is dimmer: a part left behind
+      if(idOf(texture(uQ,uv))>0){ bc=mix(bc,idHue(idOf(texture(uQ,uv))),0.5); } }   // a wisp of its own wears a pale hue of its own
+    if(uWill>0.5){ vec4 qr=texture(uQ,uv); if(idOf(qr)==0) k*=mix(0.5,1.0,smoothstep(0.0,0.3,qr.z)); }   // matter your will does not reach is dimmer: a part left behind
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);
     bc=identTint(texture(uQ,uv),bc,self);
     { float pay=texture(uB,uv).w; float pf=clamp(abs(pay)/max(0.05,self),0.0,1.0); if(pay>0.0) bc=mix(bc,vec3(1.0,0.78,0.3),0.75*pf); else if(pay<0.0) bc=mix(bc,vec3(0.55,1.0,0.95),0.75*pf); }   // what the cells carry: ore is gold, a charge is bright
