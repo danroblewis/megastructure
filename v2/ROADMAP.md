@@ -280,3 +280,6 @@ unless I go pick them up... accumulation and maybe size management."
   waits on them). Companions, if they return, will grow out of parts left behind.
 - Lab with the will: `commit` with a plain direction first went nowhere (the direction was ignored under the will; fixed
   by injecting it as a point ahead). The baseline `commit` carries the body ~300 cells in the jet.
+- **The spark is removed** (the user: "I don't want to remove them, I just want to evade them. I know we had a 'spark'
+  before, and it sucked"): no hot puff, no second-finger or key for it, hints updated. The organism's counter is the
+  world: it dies in heat, so a burner room is a refuge; a colonised part can be shed.

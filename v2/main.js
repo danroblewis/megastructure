@@ -98,16 +98,16 @@
       this.psg(this.roar.g.gain,Math.min(0.05,Math.max(0,heat-0.2)*0.15),t,0.4); this.psg(this.hiss.g.gain,Math.min(0.02,Math.max(0,heat-0.5)*0.1),t,0.4); } };
 
   // ---------- input ----------
-  const keys={}; let sparkQ=false, puffQ=false, debug=+HASH.view||0, muted=false;
+  const keys={}; let puffQ=false, debug=+HASH.view||0, muted=false;
   window.addEventListener('error',e=>{ AUDIO.panic(e.error||e.message); }); window.addEventListener('unhandledrejection',e=>{ AUDIO.panic(e.reason); });
   // audio unlock: the first gesture of any kind starts the context; coming back to the tab resumes it
   for(const ev of ['touchstart','touchend','pointerdown','pointerup','mousedown','mouseup','click','keydown']) window.addEventListener(ev,()=>AUDIO.unlock(),{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&AUDIO.ctx&&AUDIO.ctx.state!=='running') AUDIO.ctx.resume().catch(()=>{}); });
-  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyX') sparkQ=true; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%6; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&player.won&&player.winT>120) setMap(MAPI+1); else if(e.code==='KeyR'&&player.dead) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
+  window.addEventListener('keydown',e=>{ AUDIO.init(); if(e.code==='Tab'||e.code==='Backquote'){ MENU.open=!MENU.open; e.preventDefault(); return; } if(e.repeat) return; keys[e.code]=true; if(/^(Arrow|Key[WASD])/.test(e.code)) target.x=null; if(e.code==='KeyC'||e.code==='ShiftLeft') puffQ=true; if(e.code==='KeyV') debug=(debug+1)%6; if(e.code==='KeyM') AUDIO.muted=!AUDIO.muted; if(e.code==='KeyN') AUDIO.setMusic(!AUDIO.music); if(e.code==='KeyR'&&player.won&&player.winT>120) setMap(MAPI+1); else if(e.code==='KeyR'&&player.dead) restart(); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
   window.addEventListener('keyup',e=>{ keys[e.code]=false; });
   const touches=new Map();
   // touch / mouse: wherever you touch or drag becomes the target point on the map. It stays set when you let go.
-  // second finger tap = spark; holding one finger still = contract
+  // holding one finger still = contract; a second finger does nothing now (the old spark was removed at the user's request)
   const target={x:null,y:null,set:0};
   const DEAD=10;
   const PAD=(isTouch||!!HASH.pad)&&!HASH.nopad;   // touch screens: the finger is a relative pad (see SCHEMES.attention), the body rides high
@@ -116,7 +116,7 @@
     if(menuHit(e.clientX,e.clientY)){ e.preventDefault(); return; }
     { const ev={t:performance.now(),x:camX+e.clientX*dpr/zoom,y:camY+e.clientY*dpr/zoom,sx:e.clientX,sy:e.clientY,id:e.pointerId,up:0,dur:0}; touchLog.push(ev); if(touchLog.length>400) touchLog.shift(); if(SCHEME.onDown) SCHEME.onDown(ctxNow(),ev); }
     if(SCHEME.useTarget===false){ touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0}); e.preventDefault(); return; }
-    if(touches.size>=1){ sparkQ=true; } else setTarget(e.clientX,e.clientY);
+    if(touches.size<1) setTarget(e.clientX,e.clientY);
     touches.set(e.pointerId,{x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:false,primary:touches.size===0});
     if(player.won&&player.winT>120) setMap(MAPI+1); else if(player.dead) restart(); e.preventDefault(); });
   const hover={x:0,y:0,set:false};
@@ -130,7 +130,7 @@
     if(SCHEME.useTarget!==false){ for(const t of touches.values()){ if(t.primary&&!t.moved&&performance.now()-t.t>300) puff=true; } }   // hold still to tighten: only where a touch is not itself the input
     if(target.x!==null&&tx===0&&ty===0){ const dx=target.x-player.x, dy=target.y-player.y, d=Math.hypot(dx,dy); if(d>2.5){ const k=Math.min(1,0.35+d/30); tx=dx/d*k; ty=dy/d*k; } }
     const n=Math.hypot(tx,ty); if(n>1){ tx/=n; ty/=n; }
-    return {tx,ty,spark:sparkQ,puff}; }
+    return {tx,ty,puff}; }
 
   // ---------- player (a cloud of matter inside the simulation) & entities ----------
   const MK=1/(COARSE*COARSE); const BODY={massMax:170*MK, rnear:12/COARSE, rfar:30/COARSE, swim:0.16, push:0.0, coh:2.4, spawnR:8/COARSE};
@@ -145,7 +145,7 @@
     const p=MENU.pill; if(p&&cx>=p.x&&cx<=p.x+p.w&&cy>=p.y&&cy<=p.y+p.h){ MENU.open=!MENU.open; return true; }
     if(MENU.open){ for(const r of MENU.rows){ if(r.act&&cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ r.act(); return true; } if(cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h){ location.href=location.pathname+'?scheme='+r.name+(HASH.hud?'&hud=1':''); return true; } } MENU.open=false; return true; }
     return false; }
-  const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,sparkCd:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
+  const player={x:0,y:0,mass:0,hp:1,hurt:0,dead:false,deadT:0,won:false,winT:0,facing:1,cores:0,deaths:0,kills:0,checkpoint:null,cpIndex:0,respawnT:0,burning:0,vx:0,vy:0,px:0,py:0};
   let cores=[], drones=[];
   let pendingInjectB=null;
   const dirS=[0,0];
@@ -204,7 +204,7 @@
   const bd={dir:[0,0],push:0,swim:0,coh:BODY.coh,centroid:[0,0],rnear:BODY.rnear,rfar:BODY.rfar,grow:0,injectB:null,drones:droneArr,nDrones:0,droneR:5};
   if(HASH.pay) bd.payInit=+HASH.pay;   // test hook: injected cells carry this much ore
   function tick(){
-    const inp=readInput(); sparkQ=false;
+    const inp=readInput();
     // probe at the centroid, visible cores and drones
     let n=0; const list=[];
     probePts[0]=player.x; probePts[1]=player.y; n=1;
@@ -218,7 +218,7 @@
     const [pb,pb2,red]=SIM.collect();
     if(!alc){ let sum=0; for(let k=1;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const sp=BODY.rnear*0.5; player.carried=sum*sp*sp; }   // ore carried, from the dense grid round the body
     if(!alc){ let org=0; for(let k=1;k<64;k++) org+=Math.max(0,pb2[k*4+2]-0.08)*pb2[k*4+3]; const sp=BODY.rnear*0.5; player.infected=org*sp*sp;   // organism inside the body, cells' worth
-      if(player.infected>1.5*MK&&!player.hintedOrg&&player.hintT<=0){ player.hintedOrg=true; player.hint='the organism feeds on you · a spark burns it off and gives you back'; player.hintT=360; } }
+      if(player.infected>1.5*MK&&!player.hintedOrg&&player.hintT<=0){ player.hintedOrg=true; player.hint='the organism feeds on you · it hunts your glow · get clear of it, or into heat'; player.hintT=360; } }
     if(alc&&player.alc===alc){ let sum=0; for(let k=40;k<64;k++) sum+=Math.max(0,pb2[k*4+1]); const inside=sum*((alc.w+12)*(alc.h+12))/24; const dep=inside*0.04*steps; alc.repair=(alc.repair||0)+dep; player.depositing=dep>0.02*MK;
       if(player.depositing&&SIM.frame%20===0&&AUDIO.ctx&&AUDIO.pluck) AUDIO.pluck((AUDIO.root||110)*4,0.012,0,0.4,'sine');
       if(alc.repair>=REPAIR_NEED) repairAlcove(alc); } else player.depositing=false;
@@ -261,8 +261,6 @@
     if(inp.tx!==0) player.facing=inp.tx>0?1:-1;
     inject=null;
     if(alive){
-      if(player.sparkCd>0) player.sparkCd--;
-      if(inp.spark&&player.sparkCd===0){ player.sparkCd=24; inject={x:player.x+player.facing*14,y:player.y,r:5,fuel:0.25,heat:1.4,smoke:0.1,life:0}; AUDIO.noise(0.25,0.2,1500); AUDIO.tone(800,200,0.12,'square',0.05); shake=Math.max(shake,1); }
     }
     // --- cores & drones ---
     let k=1;
@@ -393,7 +391,7 @@
     else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
     else if(player.hintT>0) msg=player.hint;
     else if(SIM.frame<600) msg= `map ${MAPI+1} of ${MAPS.length}`;
-    else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together · second finger: spark' : 'click the map to set where you want to go · hold C to pull yourself together · space: spark · V: views';
+    else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together' : 'click the map to set where you want to go · hold C to pull yourself together · V: views';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
@@ -459,7 +457,7 @@
     let bestX=0, stuck=0;
     if(HASH.delay) pendingInjectB=null;   // test hook: the body is born later, into a world that has already run
     for(let i=0;i<N;i++){ if(HASH.delay&&i===+HASH.delay){ pendingInjectB=[player.x,player.y,BODY.spawnR,1.0]; } if(HASH.touch&&i===5){ const [tx,ty]=HASH.touch.split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,HASH.touchHold!=='0'); } if(HASH.tapEvery&&i%+HASH.tapEvery===0){ const [tx,ty]=(HASH.touch||'60,0').split(',').map(Number); fakeTouch(player.x+tx,player.y+ty,false); } if(i===6) player.tgt6=target.x; if(i===20) player.tgt20=target.x;
-      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; sparkQ=true; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}o${(player.infected||0).toFixed(1)}d${player.deaths}h${(player.hurt||0).toFixed(2)}b${(SIM.red.burning||0).toFixed(1)}s${(SIM.red.stray||0).toFixed(0)}`+(HASH.watch?HASH.watch.split(';').map(pt=>{ const [wx,wy]=pt.split(',').map(Number); const v=SIM.readS(wx,wy); return `W${v[1].toFixed(2)}/${v[3].toFixed(2)}/${v[0].toFixed(2)}`; }).join(''):'')+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}u${SIM.probeBuf[0].toFixed(2)},${SIM.probeBuf[1].toFixed(2)}w${BOT.wp?BOT.wp[0]|0:'-'},${BOT.wp?BOT.wp[1]|0:'-'}st${(player.stamina||0).toFixed(2)}e${(SIM.red.elong||0).toFixed(1)}`:'')); }
+      if(HASH.ax){ keys.KeyD=true; if(player.x>bestX+2){ bestX=player.x; stuck=0; } else stuck++; player.maxX=bestX; keys.KeyW=stuck>40&&((stuck/120)|0)%2===0; keys.KeyS=stuck>40&&((stuck/120)|0)%2===1; if(stuck>600){ keys.KeyA=true; keys.KeyD=false; if(stuck>700) stuck=0; } else keys.KeyA=false; } if(ig&&i===+HASH.ignite){ player.x=ig.x-20; player.y=ig.y+10; player.facing=1; inject={x:ig.x,y:ig.y,r:6,fuel:0,heat:1.5,smoke:0,life:0}; SIM.step(PARAMS,inject,bd); } tick(); if(HASH.trace&&i%+HASH.trace===0) trace.push(`${i}:${player.mass.toFixed(0)}@${player.x.toFixed(0)},${player.y.toFixed(0)}o${(player.infected||0).toFixed(1)}d${player.deaths}h${(player.hurt||0).toFixed(2)}b${(SIM.red.burning||0).toFixed(1)}s${(SIM.red.stray||0).toFixed(0)}`+(HASH.watch?HASH.watch.split(';').map(pt=>{ const [wx,wy]=pt.split(',').map(Number); const v=SIM.readS(wx,wy); return `W${v[1].toFixed(2)}/${v[3].toFixed(2)}/${v[0].toFixed(2)}`; }).join(''):'')+(BOT.on?`#${BOT.i}c${player.cpIndex+1}d${player.deaths}u${SIM.probeBuf[0].toFixed(2)},${SIM.probeBuf[1].toFixed(2)}w${BOT.wp?BOT.wp[0]|0:'-'},${BOT.wp?BOT.wp[1]|0:'-'}st${(player.stamina||0).toFixed(2)}e${(SIM.red.elong||0).toFixed(1)}`:'')); }
     SIM.gl.finish(); const ms=performance.now()-t0;
     const vw=sw/zoom, vh=sh/zoom; camX=(+HASH.cx||player.x)-vw/2; camY=(+HASH.cy||player.y)-vh/2; camX=Math.max(0,Math.min(W-vw,camX)); camY=Math.max(0,Math.min(H-vh,camY));
     SIM.render([camX,camY],zoom,sw,sh,+HASH.dbg||0,[player.x,player.y,BODY.rnear,1],ents,0,0,1);
