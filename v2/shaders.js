@@ -33,6 +33,7 @@ uniform float uAuto;           // PARAMS.auto: a part left behind long enough se
 uniform float uGrowOther;      // regrowth of every wisp that is not you, capped on the CPU by all of them together
 uniform vec4 uSeed;            // x y radius number: for one frame, matter inside the circle becomes wisp <number> (radius 0: none)
 uniform float uSeedFrom;       // 0: the seed takes loose matter of yours; N>0: it renumbers matter of wisp N (a piece that split off and kept the number)
+uniform sampler2D uGrowTex;    // per-number growth factor (2048 x 1): 1 for a small wisp, 0 at a full body's mass, from the CPU's two-second census of the id map
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
@@ -353,7 +354,7 @@ void main(){
   vec4 sp=texelFetch(uS,p,0);
   float before=self;
   { float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
-    if(ghost) self+=uGrowOther*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                 // a wisp of its own keeps itself together wherever it is
+    if(ghost) self+=uGrowOther*texelFetch(uGrowTex,ivec2(clamp(idOf(q0),0,2047),0),0).r*(1.0+2.5*calm)*avg*max(0.0,1.0-self);   // a wisp of its own keeps itself together wherever it is, up to a body's worth each
     else if(dc>uRfar){ if(uStray<0.5) self*=0.988; else self+=uGrow*0.5*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // stragglers wither in seconds, unless parts may be left behind: then a pile keeps itself together at half your rate (within your cap), instead of evaporating at its edges
     else if(dc<uRnear) self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }            // close cells reinforce; cold still pockets condense you
   self*= (uStray>0.5 && !ghost && dc>uRfar)? 0.99995 : ghost? 0.9998 : 0.9995;   // a wisp of its own burns slower than you: it has no cold rooms of its own to count on   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds

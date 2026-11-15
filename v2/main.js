@@ -178,6 +178,7 @@
           while(stack.length){ const k=stack.pop(); const m=M[k*4+1]; mass+=m; const bx=k%IW, by=(k/IW)|0; sx+=m*(bx+0.5)*bs; sy+=m*(by+0.5)*bs; cells.push(k);
             for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){ const nx=bx+dx, ny=by+dy; if(nx<0||ny<0||nx>=IW||ny>=IH) continue; const n=ny*IW+nx; if(seen[n]||(M[n*4]|0)!==id||M[n*4+1]<0.5) continue; seen[n]=1; stack.push(n); } }
           const cx=sx/mass, cy=sy/mass; let r=0; for(const k of cells){ const d=Math.hypot((k%IW+0.5)*bs-cx,((k/IW|0)+0.5)*bs-cy); if(d>r) r=d; } (comps[id]=comps[id]||[]).push({mass,cx,cy,r:r+bs}); }
+        { const g=new Float32Array(2048*4).fill(1); for(const id in comps){ let m=0; for(const c of comps[id]) m+=c.mass; const k=(+id)&2047; g[k*4]=Math.max(0,1-m/(BODY.massMax*0.9)); } SIM.setGrow(g); }   // each wisp grows to about a body's worth and no further
         player.renum=player.renum||[]; for(const id in comps){ const cs=comps[id]; if(cs.length<2) continue; cs.sort((a,b)=>b.mass-a.mass); for(let i=1;i<cs.length;i++){ if(cs[i].mass>2*MK) player.renum.push({from:+id,x:cs[i].cx,y:cs[i].cy,r:cs[i].r}); } }
       }catch(e){ if(window.REPORT) REPORT('idmap',String(e)); } }
     if(player.renum&&player.renum.length){ const q=player.renum.shift(); player.nextId=(player.nextId||0)+1; bd.seed=[q.x,q.y,q.r,player.nextId]; bd.seedFrom=q.from; }
@@ -408,12 +409,8 @@
     if(debug===5){   // clear view: the two centres and the line halfway between them, which is where allegiance by nearness changes hands
       const ax=(player.x-camX)*zoom, ay=(player.y-camY)*zoom; c.lineWidth=1.5*s; c.strokeStyle='rgba(255,255,255,0.85)'; c.beginPath(); c.arc(ax,ay,5*s,0,6.2832); c.stroke();
       c.font=`${Math.round(10*s)}px -apple-system,Helvetica,Arial,sans-serif`; c.fillStyle='rgba(255,255,255,0.75)'; c.fillText(`you ${Math.round(player.mass/MK)} · left behind ${Math.round(Math.max(0,SIM.red.stray||0)/MK)}`,ax+8*s,ay-8*s); }
-    let msg=null;
-    if(player.won) msg= player.winT<240?`map ${MAPI+1} cleared`:`map ${MAPI+1} cleared · ${player.deaths} deaths · tap or R for map ${(MAPI+1)%MAPS.length+1}`;
-    else if(player.dead) msg= player.deadT>120? '' : 'dispersed';
-    else if(player.hintT>0) msg=player.hint;
-    else if(SIM.frame<600) msg= `map ${MAPI+1} of ${MAPS.length}`;
-    else if(SIM.frame<700) msg= isTouch? 'touch the map to set where you want to go · hold still to pull yourself together' : 'click the map to set where you want to go · hold C to pull yourself together · V: views';
+    let msg=null;   /* the only words the game puts on the screen: 'dispersed'. no hints, no map names, no control tips (the user: learning it is part of the fun) */
+    if(player.dead) msg= player.deadT>120? '' : 'dispersed';
     if(msg&&msg.length){ const f2=Math.round(15*s); c.font=`${f2}px -apple-system,Helvetica,Arial,sans-serif`; let lines=[msg]; if(c.measureText(msg).width>sw-pad*6) lines=msg.split(' · '); let my=sh*0.3;
       for(const ln of lines){ const mw=c.measureText(ln).width, mx=(sw-mw)/2; c.fillStyle='rgba(0,0,0,0.45)'; c.fillRect(mx-pad*2,my-pad,mw+pad*4,f2+pad*2); c.fillStyle='#fff'; c.fillText(ln,mx,my); my+=f2+pad*3; } }
   }
