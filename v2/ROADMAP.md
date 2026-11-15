@@ -283,3 +283,19 @@ unless I go pick them up... accumulation and maybe size management."
 - **The spark is removed** (the user: "I don't want to remove them, I just want to evade them. I know we had a 'spark'
   before, and it sucked"): no hot puff, no second-finger or key for it, hints updated. The organism's counter is the
   world: it dies in heat, so a burner room is a refuge; a colonised part can be shed.
+
+## 17. Wisps of their own — 2026-11-15, main
+
+The user, on seeing a pile become "another whisp" under the old past-life machinery: "Oh I liked that. I wanted more of
+that... give those piles their own autonomy somehow... clusters of particles that have established their own unique
+identity to do their own things." Built (`PARAMS.auto`, `PARAMS.autoSpeed`): a pile out of your reach for five seconds
+and big enough settles into a wisp of its own. The will is now per owner in the shader (injected at any centre's core,
+hopping only through matter of the same allegiance); matter a will reaches keeps its allegiance, only unreached matter
+changes hands by nearness, so no wisp can take another's connected body and any wisp gathers loose matter. A settled
+wisp regrows near its core with its own budget (the total cap grows by 0.6 massMax per settled wisp), steers by the same
+will from a plain direction its mind gives it, and is tinted by temperament: healer (pale cyan) paths to the nearest live
+cold room, rests fifteen seconds, moves on; curious (pale green) paths toward you and stops two far radii away. The mind
+(settling, temperament, pathfinding with the bot's followPath) is CPU; the identity (who the will reaches) is the fluid.
+Limit: two settled wisps at a time (three centres, sixteen reduction floats). Test hook: `#pile=x,y` plants a second body
+on tick 10; the trace carries `S<k><p|t1|t2><mass>@x,y`. The user: "This works... very interesting!"; speed raised from 0.6
+to 0.9 of yours.
