@@ -277,13 +277,14 @@ void main(){
     vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat: a survival instinct
     float gl2=length(ga);
     float a=float((idHash(idc,7u)+uFrame/90u*2654435761u)&1023u)/1024.0*6.2832; vec2 want=ga/(gl2+0.0006)+vec2(cos(a),sin(a))*0.35; float wl=length(want); if(wl>1.0) want/=wl;   // a smooth blend of what it smells and a slow wander, so it never dithers
+    want*=clamp(1.3-h0,0.0,1.0);   // a cell already packed tight stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost)
     v+=want*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4;   // some ride the currents more than others
     { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
       float zc=qme.z; float zl=0.0,zr=0.0,zu=0.0,zd=0.0; ivec2 ql=clamp(p-ivec2(2,0),ivec2(0),uRes-1), qr=clamp(p+ivec2(2,0),ivec2(0),uRes-1), qu=clamp(p-ivec2(0,2),ivec2(0),uRes-1), qd=clamp(p+ivec2(0,2),ivec2(0),uRes-1);
       vec4 a=texelFetch(uQ,ql,0); if(idOf(a)==idc) zl=a.z; a=texelFetch(uQ,qr,0); if(idOf(a)==idc) zr=a.z; a=texelFetch(uQ,qu,0); if(idOf(a)==idc) zu=a.z; a=texelFetch(uQ,qd,0); if(idOf(a)==idc) zd=a.z;
       vec2 gz=vec2(zr-zl,zd-zu); float gl3=length(gz); if(gl3>0.001) v+=gz/gl3*0.08*(1.0-0.6*zc)*max(0.0,1.0-h0); }   // and eases off as the cell gets dense, as your homing does, so a small wisp does not crush itself onto its core (mass above the density clamp is lost)
     { vec2 nrm=vec2(0.0); if(solidAt(p+ivec2(1,0))) nrm.x+=1.0; if(solidAt(p-ivec2(1,0))) nrm.x-=1.0; if(solidAt(p+ivec2(0,1))) nrm.y+=1.0; if(solidAt(p-ivec2(0,1))) nrm.y-=1.0;
-      float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0) v-=vn*nrm; } } }   // it slides along a wall instead of smearing itself on it
+      float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0){ v-=vn*nrm; float sgn=(idHash(idc,9u)&1u)==0u?1.0:-1.0; v+=vec2(-nrm.y,nrm.x)*sgn*0.5*uSwim; } } } }   // it slides along a wall instead of smearing itself on it, and when pushed into one it crawls along it (each wisp its own way round), so none stays pinned
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
