@@ -332,7 +332,7 @@ void main(){
   float before=self;
   { float calm=smoothstep(0.08,0.35,-sp.y)*(1.0-smoothstep(0.01,0.04,length(texelFetch(uFC,p,0).zw)));
     if(ghost) self+=uGrowOther*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                 // a wisp of its own keeps itself together wherever it is
-    else if(dc>uRfar){ if(uStray<0.5) self*=0.988; }                                   // stragglers wither over a few seconds, unless parts may be left behind (PARAMS.stray)
+    else if(dc>uRfar){ if(uStray<0.5) self*=0.988; else self+=uGrow*0.5*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // stragglers wither in seconds, unless parts may be left behind: then a pile keeps itself together at half your rate (within your cap), instead of evaporating at its edges
     else if(dc<uRnear) self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }            // close cells reinforce; cold still pockets condense you
   self*= (uStray>0.5 && !ghost && dc>uRfar)? 0.99995 : 0.9995;   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds
   float hurtIn=0.0;   // the fraction of this cell lost to things that hurt: fire, the organism, blades. heat alone, carried or endured, is not hurt
@@ -441,7 +441,7 @@ void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
     float px=float(q.x)+0.5, py=float(q.y)+0.5; vec2 pp=vec2(px,py);
     vec4 qq=texelFetch(uQ,q,0);
-    if(idOf(qq)>0){ a2.z+=s; continue; }   // wisps of their own: their mass together, nothing else (they have no centre)
+    if(idOf(qq)>0){ a2.z+=s; a2.w+=s*px; a3.x+=s*py; continue; }   // wisps of their own: their mass together and where it is on average (for tests and the hud; they have no centre)
     float w=s*identWeight(0,0,qq,pp);   // your connected body
     a0.xyz+=vec3(w,w*px,w*py); a1.xyz+=vec3(w*px*px,w*py*py,w*px*py); a0.w+=s-w;   // and, in w, your loose matter: parts left behind
     float d0=distance(pp,uC[0]); if(s>0.15 && d0>a3.y){ a3.yzw=vec3(d0,px,py); } }
