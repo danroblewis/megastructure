@@ -228,3 +228,18 @@ Detection only: nothing is enforced, you simply steer less while it lasts. The m
 `#dbg=5` in the lab) draws one square per cell with no light or blending, blue for yours, green for the friend's, red on
 the border cells, with the two centres and the halfway line; it showed that the display pass had never bound the
 allegiance texture, so the ownership tint had been reading an unrelated texture (fixed, sim.js).
+
+## 15. The organism hunts — 2026-11-15, main
+
+The user: heat and cold are not dangers (you can sit in either for fun); the purple is the one real danger and it is the
+best thing in the game, but it does not trigger reliably: you get attacked once, then you can wrap around the spore block
+safely; a quivering patch of purple hurts on touch. Measured on the phone grid of map 1: a bare spore strip (eight of the
+ten on that map have no fuel panel nearby) held a compact body at a stalemate, a fresh thin spawn beside it was eaten in
+under a second, and the one strip beside fuel ate the body in five seconds. Changes: the organism now hunts up the
+gradient of the light grid (your glow) when it is not touching you, so it senses you across a room; in your light it
+starves three times slower, so a tendril reaches about fifty cells; every spore strip's halo gets enough fuel to keep a
+living colony; `player.infected` reads organism inside the body from the dense probe grid, with a one-time hint on first
+infection (a spark burns it off and gives you back). With these, a still body twenty-five cells from a bare strip was
+found and eaten within two seconds. Open puzzle, seen in every run old and new: the body that respawns at the same spot
+four seconds later is never touched again. Test hooks: `#delay=N` births the body N ticks into the world; the trace
+carries `o<infected>d<deaths>`.

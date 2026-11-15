@@ -113,7 +113,7 @@ void main(){
 
 // ---------------- species: advect, diffuse, react ----------------
 SH.species = SH.head + `
-uniform sampler2D uS, uFC, uDye, uB, uSrc;   // uSrc: baked source influence (burner, cooler, fuel, spore)
+uniform sampler2D uS, uFC, uDye, uB, uSrc, uLight;   // uSrc: baked source influence (burner, cooler, fuel, spore); uLight: the glow of bodies, which the organism hunts by
 uniform float uAdv, uIgn, uBurnRate, uCool, uLifeF, uLifeK, uDiff;
 uniform vec4 uInject; uniform vec4 uInjectAmt; // player injection: xy pos, z radius ; amounts fuel heat smoke life
 layout(location=0) out vec4 oS; layout(location=1) out vec4 oDye;
@@ -141,9 +141,14 @@ void main(){
   vec2 u=texelFetch(uFC,p,0).zw;
   vec2 back=vec2(p)+0.5-u*uAdv;
   vec4 s=sampleS(back);
-  { // the organism creeps up the gradient of self, hunting you through the gas
+  float glow=0.0;
+  { // the organism hunts: up the gradient of self when it is touching you, and from further away up the gradient of your glow (the light grid)
     float sl=texelFetch(uB,wrapP(p-ivec2(2,0)),0).x, sr=texelFetch(uB,wrapP(p+ivec2(2,0)),0).x, su=texelFetch(uB,wrapP(p-ivec2(0,2)),0).x, sd=texelFetch(uB,wrapP(p+ivec2(0,2)),0).x;
-    vec2 gs=vec2(sr-sl,sd-su); float gl=length(gs); if(gl>0.002){ vec2 drift=gs/gl*min(0.25,gl*6.0); float Lw=sampleS(back-drift).w; s.w=max(s.w,Lw); } }
+    vec2 gs=vec2(sr-sl,sd-su);
+    vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); glow=texture(uLight,lc).r;
+    vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
+    vec2 g= length(gs)>0.002? gs*6.0 : gL*40.0; float gl=length(g);
+    if(gl>0.002){ vec2 drift=g/gl*min(0.25,gl); float Lw=sampleS(back-drift).w; s.w=max(s.w,Lw); } }
   vec4 d=sampleD(back);
   // diffusion
   vec4 nb=vec4(0.0); float n=0.0;
@@ -154,14 +159,14 @@ void main(){
   if(src.r>0.0){ s.y=max(s.y,1.0); }
   if(src.g>0.0){ s.y=min(s.y,-0.6); }
   if(src.b>0.0){ s.x=min(1.0,s.x+0.12); }
-  if(src.a>0.0){ s.w=max(s.w,0.5); s.x=min(1.0,s.x+0.05); }
+  if(src.a>0.0){ s.w=max(s.w,0.5); s.x=min(1.0,s.x+0.12); }   // enough fuel that every spore strip keeps a living colony, not just the ones beside a fuel panel
   // combustion
   float burn=s.x*smoothstep(uIgn,uIgn+0.25,s.y)*uBurnRate;
   s.x-=burn; s.y+=burn*2.2; s.z+=burn*1.5;
   // organism: eats fuel (Gray-Scott style), dies in heat
   float L=s.w, Fu=s.x;
   float growth=L*L*Fu;
-  s.w+=growth*uLifeF - L*uLifeK*0.5;
+  s.w+=growth*uLifeF - L*uLifeK*0.5*mix(1.0,0.35,min(1.0,glow*4.0));   // in your light it starves three times slower: a tendril can reach you from fifty cells
   s.x-=growth*uLifeF*0.9;
   if(s.y>0.35) s.w-=(s.y-0.35)*0.6;
   // the body burns into smoke, and feeds the organism a little

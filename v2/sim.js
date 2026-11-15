@@ -70,7 +70,7 @@ const SIM={
     gl.uniform2f(pr.u.uDir,bd.dir[0],bd.dir[1]); gl.uniform1f(pr.u.uPush,bd.push); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); gl.uniform2fv(pr.u.uDirs,this.dirs); gl.uniform1f(pr.u.uRadial,bd.radial||0);
     this.draw(this.Ffbo[o],this.W,this.H); this.cur=o;
     pr=this.P.species; const so=1-this.scur;
-    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uSrc:this.Src});
+    this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uSrc:this.Src,uLight:this.L[this.lcur]});
     gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uIgn,P.ign); gl.uniform1f(pr.u.uBurnRate,P.burnRate); gl.uniform1f(pr.u.uCool,P.cool); gl.uniform1f(pr.u.uLifeF,P.lifeF); gl.uniform1f(pr.u.uLifeK,P.lifeK); gl.uniform1f(pr.u.uDiff,P.diff);
     gl.uniform4f(pr.u.uInject,inject?inject.x:-999,inject?inject.y:-999,inject?inject.r:0,0); gl.uniform4f(pr.u.uInjectAmt,inject?inject.fuel:0,inject?inject.heat:0,inject?inject.smoke:0,inject?inject.life:0);
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
