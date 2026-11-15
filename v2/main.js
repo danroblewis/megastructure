@@ -19,7 +19,8 @@
     hunt:0.5,
     will:HASH.will===undefined?1:+HASH.will,     /* 1: your intention enters at the core and travels through your matter; parts the will cannot reach go quiet. 0: every cell hears you at once (the old hive mind). #will=0 to compare */
     stray:HASH.stray===undefined?1:+HASH.stray,
-    auto:HASH.auto===undefined?1:+HASH.auto};   /* 1: a part left out of your reach for five seconds becomes a wisp of its own, with a number, a hue and an appetite of its own; wisps keep their matter for good and gather loose matter. 0: piles stay piles. #auto=0 to compare */   /* 1: a part left out of your reach for five seconds, if it is big enough, settles into a wisp of its own: it keeps its matter, grows, and follows a temperament (a healer seeks cold rooms and rests; a curious one follows you at a distance). 0: piles stay piles. #auto=0 to compare */  /* 1: cells beyond rfar persist as parts left behind, dim, drifting, counted against your growth until you collect them. 0: they wither in seconds */   /* the organism's reach: how much slower it starves inside your light than in the dark (1 = no help, 0.25 = four times slower, reaches across a room). 0.5 is the dial the user settled on: fun to run from, not inevitable */
+    auto:HASH.auto===undefined?1:+HASH.auto,
+    crowd:HASH.crowd===undefined?6:+HASH.crowd};   /* wisps of their own seeded in rooms away from the spawn when the level starts, so the structure is lived in whether or not you shed. #crowd=0 for none */   /* 1: a part left out of your reach for five seconds becomes a wisp of its own, with a number, a hue and an appetite of its own; wisps keep their matter for good and gather loose matter. 0: piles stay piles. #auto=0 to compare */   /* 1: a part left out of your reach for five seconds, if it is big enough, settles into a wisp of its own: it keeps its matter, grows, and follows a temperament (a healer seeks cold rooms and rests; a curious one follows you at a distance). 0: piles stay piles. #auto=0 to compare */  /* 1: cells beyond rfar persist as parts left behind, dim, drifting, counted against your growth until you collect them. 0: they wither in seconds */   /* the organism's reach: how much slower it starves inside your light than in the dark (1 = no help, 0.25 = four times slower, reaches across a room). 0.5 is the dial the user settled on: fun to run from, not inevitable */
   let zoom=2.5, sw=0,sh=0,dpr=1;
   function resize(){ dpr=Math.min(small?1.5:2,window.devicePixelRatio||1); const vw=window.innerWidth, vh=window.innerHeight; sw=Math.floor(vw*dpr); sh=Math.floor(vh*dpr); canvas.width=sw; canvas.height=sh; hud.width=sw; hud.height=sh; for(const el of [canvas,hud]){ el.style.width=vw+'px'; el.style.height=vh+'px'; } zoom=(small?1.5:Math.max(1.25,Math.min(3,Math.min(vw/1100,vh/650))))*COARSE*dpr; }   // CSS px per full-resolution cell: phones 1.5; desktops sized so the view is about 1100 cells wide or 650 tall, whatever the pixel density
   window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>setTimeout(resize,300)); if(window.visualViewport) window.visualViewport.addEventListener('resize',resize); resize();
@@ -151,6 +152,11 @@
   let pendingInjectB=null;
   const dirS=[0,0];
   // selves: up to three fragments tracked by the reduction. index 0 is "you"; the others are ghosts.
+  // the crowd: wisps of their own placed in rooms away from the spawn, one injected per frame after the first second, each seeded with a fresh number the frame after
+  const CROWD=(()=>{ const out=[]; if(HASH.lab||!(PARAMS.crowd>0)||!world.rooms) return out; const R=(()=>{ let s=((MAP.seed*9301+49297)%233280); return ()=>{ s=(s*9301+49297)%233280; return s/233280; }; })();
+    const rooms=world.rooms.filter(r=>r.i>0&&Math.hypot(r.cx-world.spawn.x,r.cy-world.spawn.y)>120); for(let t=0;t<rooms.length*6&&out.length<PARAMS.crowd;t++){ const r=rooms[(t*7+((R()*rooms.length)|0))%rooms.length]; const x=Math.round(r.x0+8+R()*Math.max(1,r.x1-r.x0-16)), y=Math.round(r.y0+8+R()*Math.max(1,r.y1-r.y0-16)); let ok=true; for(let dy=-5;dy<=5&&ok;dy++) for(let dx=-5;dx<=5;dx++){ const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=W||yy>=H||world.type[yy*W+xx]!==0){ ok=false; break; } } if(ok&&!out.some(o=>Math.hypot(o.x-x,o.y-y)<60)) out.push({x,y}); }
+    return out; })();
+  let crowdSeed=null;
   const selves=[{x:0,y:0,mass:0,live:true,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0}];
   function pushCentres(){ let n=0; for(let i=0;i<3;i++){ if(selves[i].live){ SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:[0,0]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; n++; } } SIM.nC=Math.max(1,n); }
   const TR=[];   // last 24 ticks of self bookkeeping, attached to camera-jump reports
@@ -164,7 +170,9 @@
     if(player.lowT>=45&&player.switchLock===0&&!player.dead&&red.far&&red.far.d>BODY.rfar*0.9&&(SIM.red.stray||0)>20*MK){ player.switchLock=240; player.lowT=0; player.x=red.far.x; player.y=red.far.y; selves[0].x=player.x; selves[0].y=player.y; player.camSnap=true; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); }
     // a pile of yours that stays out of reach for five seconds becomes a wisp of its own: a fresh number is seeded at its far edge and floods the loose pile
     bd.seed=null;
-    if(PARAMS.auto&&red.far&&red.far.d>BODY.rfar*0.9&&Math.hypot(red.far.x-player.x,red.far.y-player.y)>BODY.rfar*0.9){ player.farN=(player.farN||0)+1;
+    if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after a crowd body is injected, its loose matter takes its number
+    else if(CROWD.length&&SIM.frame>60&&!pendingInjectB&&!player.dead){ const c=CROWD.shift(); pendingInjectB=[c.x,c.y,BODY.spawnR*1.2,1.0]; player.nextId=(player.nextId||0)+1; crowdSeed=[c.x,c.y,BODY.spawnR*2.5,player.nextId]; }
+    if(!bd.seed&&PARAMS.auto&&red.far&&red.far.d>BODY.rfar*0.9&&Math.hypot(red.far.x-player.x,red.far.y-player.y)>BODY.rfar*0.9){ player.farN=(player.farN||0)+1;
       if(player.farN>300){ player.farN=0; player.nextId=(player.nextId||0)+1; bd.seed=[red.far.x,red.far.y,BODY.rnear*1.5,player.nextId]; AUDIO.tone(330,440,0.5,'sine',0.04); player.hint='a part of you is its own now'; player.hintT=300; } }
     else player.farN=0;
     pushCentres();

@@ -48,7 +48,15 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   // dc is the distance to your centre, drive your plain drive (uDirs[0]).
   if(uWill<0.5){ q.xy=mix(q.xy,vel*8.0,0.03); q.z=mix(q.z,1.0,0.005); return q; }
   int id=idOf(q); vec2 pp=vec2(p)+0.5;
-  if(id>0){ q.z=0.0; q.xy=pp; return q; }   // a wisp of its own hears no will: its cells each feel an appetite (bodyVel), and they keep their number for good
+  if(id>0){ // a wisp of its own hears no will: its cells each feel an appetite (bodyVel). but it has a body: a connection spreads from its dense
+    // cells through matter of the same number (q.z), and a fragment that stays out of reach of any dense core for four seconds becomes a
+    // wisp of its own with a fresh number (q.x counts the orphaned substeps). that is how they split by accident and make new ones.
+    float z=q.z*0.985; float best=0.0;
+    for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); if(idOf(qn)==id) best=max(best,qn.z); }
+    z=max(z,best*0.97); if(self>0.7) z=1.0;
+    float orphan= z<0.1? q.x+1.0 : 0.0;
+    if(uAuto>0.5 && orphan>600.0){ q.w=float(1000+int(idHash(id,uFrame/600u)%900u)); orphan=0.0; }   // every orphan of this number in the same ten-second window takes the same new number, so a fragment leaves as one
+    q.x=orphan; q.y=0.0; q.z=z; return q; }
   // the will: intention enters only at your core (within half rnear of your centre) and travels cell to cell through your own
   // matter, a hop every few substeps with a little lost per hop; it fades where nothing renews it. you are whatever the will reaches.
   float z=q.z*0.985; float best=0.0; vec2 bg=q.xy; int grab=0;
@@ -58,8 +66,8 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   float core=1.0-smoothstep(uRnear*0.5,uRnear,dc);
   if(core>0.0){ z=max(z,core); float dl=length(drive); if(uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[0]+drive/dl*40.0,core); }   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot) as a point forty cells that way
   // loose matter (yours, out of the will's reach) is gathered: by a wisp whose cells touch it, or by a seed that makes a new wisp of it
-  if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<3u){ q.w=float(grab); q.z=0.0; q.xy=pp; return q; }
-    if(uSeed.z>0.0 && distance(pp,uSeed.xy)<uSeed.z){ q.w=uSeed.w; q.z=0.0; q.xy=pp; return q; } }
+  if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<3u){ q=vec4(0.0,0.0,0.0,float(grab)); return q; }
+    if(uSeed.z>0.0 && distance(pp,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); return q; } }
   q.z=z; q.w=0.0; return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ if(k!=0 || idOf(q)!=0) return 0.0; return uWill>0.5? smoothstep(0.03,0.2,q.z) : 1.0; }   // with the will on, only matter the will reaches counts as you: strays do not move the centroid or the camera
@@ -266,9 +274,11 @@ void main(){
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x);
     vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
-    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; float gl2=length(ga); vec2 dirv;
-    if(gl2>0.0004) dirv=ga/gl2; else { float a=float((idHash(idc,7u)+uFrame/60u*2654435761u)&1023u)/1024.0*6.2832; dirv=vec2(cos(a),sin(a))*0.5; }   // nothing to smell: wander
-    v+=dirv*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4; }   // some ride the currents more than others
+    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; float gl2=length(ga);
+    float a=float((idHash(idc,7u)+uFrame/90u*2654435761u)&1023u)/1024.0*6.2832; vec2 want=ga/(gl2+0.0006)+vec2(cos(a),sin(a))*0.35; float wl=length(want); if(wl>1.0) want/=wl;   // a smooth blend of what it smells and a slow wander, so it never dithers
+    v+=want*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4;   // some ride the currents more than others
+    { vec2 nrm=vec2(0.0); if(solidAt(p+ivec2(1,0))) nrm.x+=1.0; if(solidAt(p-ivec2(1,0))) nrm.x-=1.0; if(solidAt(p+ivec2(0,1))) nrm.y+=1.0; if(solidAt(p-ivec2(0,1))) nrm.y-=1.0;
+      float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0) v-=vn*nrm; } } }   // it slides along a wall instead of smearing itself on it
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x), gc=-gh;
