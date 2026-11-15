@@ -240,12 +240,12 @@ void main(){
   if(uStray>0.5 && dc>uRfar) home=vec2(0.0);   // a part left behind does not crawl back across rooms on its own; you go and get it
   home*=max(0.0,1.0-here);
   int ki=ownerK(texelFetch(uQ,p,0),vec2(p)+0.5);
-  vec2 drive=uDirs[ki];
+  vec2 drive= (ki>0 && uStray>0.5)? vec2(0.0) : uDirs[ki];   // with strays, a part left behind has no drive of its own: it lies in the flow until you come for it
   if(uWill>0.5 && ki==0){ vec4 qw=texelFetch(uQ,p,0); vec2 to=qw.xy-(vec2(p)+0.5); float dl=length(to);   // each cell steers toward the point it has heard of, as strongly as it is connected; a cell that has heard nothing waits
     float str= uSpot.w>0.0? uSpot.z : min(1.0,length(uDirs[0]));   // how hard: the pad's strength, or the plain direction's
     drive= (str>0.01 && qw.z>0.02 && dl>0.5)? to/dl*str*min(1.0,qw.z*1.5)*smoothstep(1.5,9.0,dl) : vec2(0.0); }
   else if(ki==0 && uSpot.w>0.0){ vec2 to=uSpot.xy-(vec2(p)+0.5); float dl=length(to); drive= dl>0.5? to/dl*uSpot.z*smoothstep(1.5,9.0,dl) : vec2(0.0); }   // every cell its own angle; cells that arrive settle
-  if(ki>0){ // a past life keeps a habit of its last intention and seeks the cold
+  if(ki>0 && uStray<0.5){ // a past life keeps a habit of its last intention and seeks the cold
     float tl=texelFetch(uS,wrapP(p-ivec2(3,0)),0).y, tr=texelFetch(uS,wrapP(p+ivec2(3,0)),0).y, tu=texelFetch(uS,wrapP(p-ivec2(0,3)),0).y, td=texelFetch(uS,wrapP(p+ivec2(0,3)),0).y;
     vec2 gt=vec2(tr-tl,td-tu); float gl=length(gt); if(gl>0.001) drive-=gt/gl*min(0.5,gl*3.0); }
   float jet=1.0+uJet*smoothstep(0.10,0.20,length(u));
@@ -543,7 +543,7 @@ void main(){
   float self=texture(uB,uv).x;
   if(self>0.0){ float k=min(1.0,pow(self/0.9,0.7)); vec3 bc=mix(vec3(0.5,0.78,1.0),vec3(1.0,1.0,1.0),k*k);
     { float d0=distance(wc,uC[0]); float dk=1e9; int gk=0; for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(wc,uC[j]); if(dj<dk){ dk=dj; gk=j; } } }
-      if(gk>0){ float wgt=1.0-clamp(texture(uQ,uv).w,0.0,1.0);   // ownership as the cells remember it, so nothing flickers when wisps entangle
+      if(gk>0 && uStray<0.5){ float wgt=1.0-clamp(texture(uQ,uv).w,0.0,1.0);   // (with strays, a part left behind is only dimmer, not another colour)   // ownership as the cells remember it, so nothing flickers when wisps entangle
         bc=mix(bc,mix(bc,vec3(0.45,0.6,0.9),0.5)*0.8,wgt); k*=1.0-0.15*wgt; } }   // another wisp is green; your past lives are blue
     if(uWill>0.5){ vec4 qr=texture(uQ,uv); if(qr.w>0.5) k*=mix(0.5,1.0,smoothstep(0.0,0.3,qr.z)); }   // matter the will does not reach is dimmer: a part left behind
     if(uTint.a>0.0) bc=mix(bc,uTint.rgb,uTint.a);

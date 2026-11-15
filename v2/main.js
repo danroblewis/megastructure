@@ -157,7 +157,8 @@
     const cl=red.clusters; if(!cl||cl.length<3) return;
     if(window.REPORT){ TR.push({f:SIM.frame,nc:SIM.nC,cen:Array.from(SIM.centres).map(v=>v|0),cl:cl.map(c=>[+c.mass.toFixed(1),c.cx|0,c.cy|0]),s:selves.map(s=>[s.live?1:0,+s.mass.toFixed(1),s.x|0,s.y|0]),far:red.far&&[red.far.d|0,red.far.x|0,red.far.y|0],px:player.x|0,py:player.y|0}); if(TR.length>24) TR.shift(); }
     let k=0; const live=[]; for(let i=0;i<3;i++){ if(selves[i].live){ const c=cl[k++]; selves[i].mass=c.mass; if(c.mass>0.5){ selves[i].x=c.cx; selves[i].y=c.cy; } live.push(selves[i]); } }
-    for(const s of live){ if(s===selves[0]) continue; s.age=(s.age||0)+1; if(s.mass<6*MK&&s.age>30){ s.lowN=(s.lowN||0)+1; if(s.lowN>30){ s.live=false; s.lowN=0; } } else s.lowN=0; }
+    for(const s of live){ if(s===selves[0]) continue; if(PARAMS.stray&&Math.hypot(s.x-player.x,s.y-player.y)<BODY.rnear*1.5){ s.live=false; continue; }   // a past life you come back for dissolves: its cells are nearest you again, flip back within a third of a second, and the will reaches them
+      s.age=(s.age||0)+1; if(s.mass<6*MK&&s.age>30){ s.lowN=(s.lowN||0)+1; if(s.lowN>30){ s.live=false; s.lowN=0; } } else s.lowN=0; }
     // you stay you. only when you have been below the living threshold for most of a second, and a part left behind is clearly alive, does it take over; then it locks for four seconds so the view never flips back and forth
     player.lowT=selves[0].mass<22*MK?(player.lowT||0)+1:0; player.switchLock=Math.max(0,(player.switchLock||0)-1);
     if(player.lowT>=45&&player.switchLock===0&&!player.dead){ let best=null; for(let i=1;i<3;i++){ if(selves[i].live&&selves[i].mass>30*MK&&(!best||selves[i].mass>best.mass)) best=selves[i]; }
