@@ -323,3 +323,12 @@ quarter in five seconds. A dense half that splits off is its own core, so the fi
 places; an id map (one texel per 8x8 block: densest number, its mass) is read back every two seconds and every piece but
 the heaviest is renumbered through `uSeed`/`uSeedFrom`. No caption or tone when a part becomes its own: "learning it is
 part of the fun".
+
+**Night:** wisps of their own steer as you do: their dense core sets a point forty cells ahead along a heading that holds
+ten seconds and turns smoothly into the next (from the number and the clock), the point travels through the wisp with the
+connection, every cell steers toward the point it has heard; appetites bend it; a quarter rest each window; the packed
+brake only above normal density. A direction-push (the first design) only meandered fifteen cells in twenty seconds; with
+the point, legs of twenty to thirty cells, about four cells a second. The census had never run (scheduled with a modulo on
+the substep counter, which is always even on a phone); on elapsed substeps it works: per-wisp growth factors (a texture,
+one slot per number) hold each wisp near a body's worth, and split pieces are renumbered. Four wisps start in the first
+room (`PARAMS.near`). Measured: ten wisps held 231 to 242 total mass over forty seconds while wandering.
