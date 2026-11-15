@@ -281,7 +281,7 @@ void main(){
     { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
       float zc=qme.z; float zl=0.0,zr=0.0,zu=0.0,zd=0.0; ivec2 ql=clamp(p-ivec2(2,0),ivec2(0),uRes-1), qr=clamp(p+ivec2(2,0),ivec2(0),uRes-1), qu=clamp(p-ivec2(0,2),ivec2(0),uRes-1), qd=clamp(p+ivec2(0,2),ivec2(0),uRes-1);
       vec4 a=texelFetch(uQ,ql,0); if(idOf(a)==idc) zl=a.z; a=texelFetch(uQ,qr,0); if(idOf(a)==idc) zr=a.z; a=texelFetch(uQ,qu,0); if(idOf(a)==idc) zu=a.z; a=texelFetch(uQ,qd,0); if(idOf(a)==idc) zd=a.z;
-      vec2 gz=vec2(zr-zl,zd-zu); float gl3=length(gz); if(gl3>0.001) v+=gz/gl3*0.08*(1.0-0.6*zc); }
+      vec2 gz=vec2(zr-zl,zd-zu); float gl3=length(gz); if(gl3>0.001) v+=gz/gl3*0.08*(1.0-0.6*zc)*max(0.0,1.0-h0); }   // and eases off as the cell gets dense, as your homing does, so a small wisp does not crush itself onto its core (mass above the density clamp is lost)
     { vec2 nrm=vec2(0.0); if(solidAt(p+ivec2(1,0))) nrm.x+=1.0; if(solidAt(p-ivec2(1,0))) nrm.x-=1.0; if(solidAt(p+ivec2(0,1))) nrm.y+=1.0; if(solidAt(p-ivec2(0,1))) nrm.y-=1.0;
       float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0) v-=vn*nrm; } } }   // it slides along a wall instead of smearing itself on it
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
