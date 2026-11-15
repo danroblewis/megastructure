@@ -53,7 +53,7 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
     // wisp of its own with a fresh number (q.x counts the orphaned substeps). that is how they split by accident and make new ones.
     float z=q.z*0.985; float best=0.0;
     for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); if(idOf(qn)==id) best=max(best,qn.z); }
-    z=max(z,best*0.97); if(self>0.7) z=1.0;
+    z=max(z,best*0.97); if(self>0.5) z=1.0;
     float orphan= z<0.1? q.x+1.0 : 0.0;
     if(uAuto>0.5 && orphan>600.0){ q.w=float(1000+int(idHash(id,uFrame/600u)%900u)); orphan=0.0; }   // every orphan of this number in the same ten-second window takes the same new number, so a fragment leaves as one
     q.x=orphan; q.y=0.0; q.z=z; return q; }
@@ -274,9 +274,14 @@ void main(){
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x);
     vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
-    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; float gl2=length(ga);
+    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat: a survival instinct
+    float gl2=length(ga);
     float a=float((idHash(idc,7u)+uFrame/90u*2654435761u)&1023u)/1024.0*6.2832; vec2 want=ga/(gl2+0.0006)+vec2(cos(a),sin(a))*0.35; float wl=length(want); if(wl>1.0) want/=wl;   // a smooth blend of what it smells and a slow wander, so it never dithers
     v+=want*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4;   // some ride the currents more than others
+    { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
+      float zc=qme.z; float zl=0.0,zr=0.0,zu=0.0,zd=0.0; ivec2 ql=clamp(p-ivec2(2,0),ivec2(0),uRes-1), qr=clamp(p+ivec2(2,0),ivec2(0),uRes-1), qu=clamp(p-ivec2(0,2),ivec2(0),uRes-1), qd=clamp(p+ivec2(0,2),ivec2(0),uRes-1);
+      vec4 a=texelFetch(uQ,ql,0); if(idOf(a)==idc) zl=a.z; a=texelFetch(uQ,qr,0); if(idOf(a)==idc) zr=a.z; a=texelFetch(uQ,qu,0); if(idOf(a)==idc) zu=a.z; a=texelFetch(uQ,qd,0); if(idOf(a)==idc) zd=a.z;
+      vec2 gz=vec2(zr-zl,zd-zu); float gl3=length(gz); if(gl3>0.001) v+=gz/gl3*0.08*(1.0-0.6*zc); }
     { vec2 nrm=vec2(0.0); if(solidAt(p+ivec2(1,0))) nrm.x+=1.0; if(solidAt(p-ivec2(1,0))) nrm.x-=1.0; if(solidAt(p+ivec2(0,1))) nrm.y+=1.0; if(solidAt(p-ivec2(0,1))) nrm.y-=1.0;
       float nl=length(nrm); if(nl>0.0){ nrm/=nl; float vn=dot(v,nrm); if(vn>0.0) v-=vn*nrm; } } }   // it slides along a wall instead of smearing itself on it
   if(ki==0 && (abs(uApp.x)+abs(uApp.y)+abs(uApp.z))>0.0){ // chase chemistry
@@ -344,7 +349,7 @@ void main(){
     if(ghost) self+=uGrowOther*(1.0+2.5*calm)*avg*max(0.0,1.0-self);                 // a wisp of its own keeps itself together wherever it is
     else if(dc>uRfar){ if(uStray<0.5) self*=0.988; else self+=uGrow*0.5*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }   // stragglers wither in seconds, unless parts may be left behind: then a pile keeps itself together at half your rate (within your cap), instead of evaporating at its edges
     else if(dc<uRnear) self+=uGrow*(1.0+2.5*calm)*avg*max(0.0,1.0-self); }            // close cells reinforce; cold still pockets condense you
-  self*= (uStray>0.5 && !ghost && dc>uRfar)? 0.99995 : 0.9995;   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds
+  self*= (uStray>0.5 && !ghost && dc>uRfar)? 0.99995 : ghost? 0.9998 : 0.9995;   // a wisp of its own burns slower than you: it has no cold rooms of its own to count on   // metabolism: the connected body pays it back by regrowing near the core; a part left behind cannot, so it pays a twentieth and lingers for minutes (half-life about a minute and a half) instead of fading in seconds
   float hurtIn=0.0;   // the fraction of this cell lost to things that hurt: fire, the organism, blades. heat alone, carried or endured, is not hurt
   if(sp.y>0.35){ float d=min(0.3,(sp.y-0.35)*0.18); self*=1.0-d; hurtIn+=d; }
   { float eat=max(sp.w-0.08,0.0)*0.04; self-=eat; hurtIn+=eat/max(self+eat,0.05); }   // the organism feeds on you

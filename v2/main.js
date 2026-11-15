@@ -255,7 +255,7 @@
     bd.push=alive?BODY.push:0; bd.swim=contract?BODY.swim*0.4:(alive?BODY.swim:0); bd.coh=contract?BODY.coh*2.6:BODY.coh*(1.0+1.2*(1-effort));
     bd.centroid[0]=player.x; bd.centroid[1]=player.y;
     bd.total=Math.max(0,1-(SIM.red.total!==undefined?SIM.red.total:SIM.red.mass)/(BODY.massMax*1.15));   // all the matter of yours there is, parts left behind included: shed and you stay smaller until you collect them
-    bd.growOther=0.035*Math.max(0,1-(SIM.red.other||0)/(BODY.massMax*4));   // wisps of their own regrow too, capped by all of them together at four bodies' worth   // growth of any wisp is also capped by the total mass of all of them, so allegiance drifting across bodies cannot create matter without end
+    bd.growOther=0.06*Math.max(0,1-(SIM.red.other||0)/(BODY.massMax*6));   // wisps of their own regrow nearly as fast as you, capped by all of them together at six bodies' worth   // growth of any wisp is also capped by the total mass of all of them, so allegiance drifting across bodies cannot create matter without end
     bd.grow=alive?0.07*Math.max(0,1-player.mass/BODY.massMax)*bd.total:0;
     bd.nDrones=nd; bd.injectB=pendingInjectB; pendingInjectB=null;
     bd.app=[0,0,0]; bd.splitStr=0; bd.splitApp=0; bd.radial=0; bd.grip=1.45; bd.tint=[0,0,0,0]; bd.expo=0; bd.inertia=0; bd.ivx=player.vx/Math.max(1,steps); bd.ivy=player.vy/Math.max(1,steps); bd.dense=0.9;
