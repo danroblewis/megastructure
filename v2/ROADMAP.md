@@ -311,3 +311,15 @@ pulling into each other. Regrowth for all of them is `uGrowOther`, capped togeth
 one CPU act: a pile of yours out of reach five seconds gets a fresh number at its far edge (`uSeed`), which floods the
 loose pile. If your steered body collapses while a loose pile of yours sits far off, your core jumps to it. The count of
 wisps is bounded only by matter.
+
+**Same evening, later:** the crowd (`PARAMS.crowd`, ten per level placed sixty cells or more from the spawn) is born with its
+own number in the same frame it appears (before, each body was yours for one frame, and the user saw the camera fly off to
+join one at the start). Survival for wisps of their own: they home toward their dense core through the connection field
+(its gradient points at the core, no centre needed), regrow at nearly your rate (`growOther` 0.06, shared cap six bodies),
+burn slower (0.9998), flee heat hot enough to burn them, slide and crawl along walls instead of pinning, stop pushing when
+packed (mass above the density clamp is lost), and only well-connected cells push while a quarter of them rest each
+window. Measured: six wisps held 228 to 238 total mass over thirty seconds while wandering, where the first build lost a
+quarter in five seconds. A dense half that splits off is its own core, so the field cannot see that one number is in two
+places; an id map (one texel per 8x8 block: densest number, its mass) is read back every two seconds and every piece but
+the heaviest is renumbered through `uSeed`/`uSeedFrom`. No caption or tone when a part becomes its own: "learning it is
+part of the fun".
