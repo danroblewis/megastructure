@@ -427,8 +427,8 @@ void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*4; vec4 a0=vec4(0.0),a1=vec4(0.0),a2
   for(int y=0;y<4;y++) for(int x=0;x<4;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue;
     float px=float(q.x)+0.5, py=float(q.y)+0.5; vec2 pp=vec2(px,py);
     int k=0; float bd=distance(pp,uC[0]); for(int j=1;j<3;j++){ if(j<uCN){ float dj=distance(pp,uC[j]); if(dj<bd){ bd=dj; k=j; } } }
-    float h=max(texelFetch(uS,q,0).y,0.0); vec4 qq=texelFetch(uQ,q,0);
-    a0.w+=s*h + (uStray>0.5? 4096.0*s*(1.0-identWeight(0,k,qq,pp)) : 0.0);   // burn, plus (packed above 4096) every cell that is not your connected body: strays, past lives, the other wisp, so growth can be capped by all the matter there is
+    vec4 qq=texelFetch(uQ,q,0);
+    a0.w+=s*(1.0-identWeight(0,k,qq,pp));   // every cell that is not your connected body (strays, past lives), so growth can be capped by all the matter there is. (this channel used to be burning; hurt is per cell now, and packing both into one float leaked the fraction into 'burning' and painted the body red)
     for(int j=0;j<3;j++){ if(j>=uCN) break; float w=s*identWeight(j,k,qq,pp); if(w<=0.0) continue;   // membership of this cell in centre j, by the identity model
       if(j==0){ a0.xyz+=vec3(w,w*px,w*py); a1.xyz+=vec3(w*px*px,w*py*py,w*px*py); }
       else if(j==1){ a1.w+=w; a2.xy+=vec2(w*px,w*py); }

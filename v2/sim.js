@@ -130,7 +130,7 @@ const SIM={
     let spread=0, elong=1, angle=0;
     if(m0>0.5){ const cx=mx0/m0, cy=my0/m0; const vx=Math.max(0,xx/m0-cx*cx), vy=Math.max(0,yy/m0-cy*cy), cv=xy/m0-cx*cy;
       spread=Math.sqrt(vx+vy); const tr=vx+vy, det=vx*vy-cv*cv; const disc=Math.sqrt(Math.max(0,tr*tr/4-det)); const l1=tr/2+disc, l2=Math.max(1e-6,tr/2-disc); elong=Math.min(12,Math.sqrt(l1/l2)); angle=0.5*Math.atan2(2*cv,vx-vy); }
-    const strayM=Math.floor(burn/4096); burn-=strayM*4096; this.red={mass:m0+m1+m2,total:m0+strayM,stray:strayM-m1-m2,cx:clusters[0].cx,cy:clusters[0].cy,burning:burn,spread,elong,angle,clusters,far:far[0]>0?{d:far[0],x:far[1],y:far[2]}:null}; this.pending=false;
+    const strayM=burn; this.red={mass:m0+m1+m2,total:m0+strayM,stray:Math.max(0,strayM-m1-m2),cx:clusters[0].cx,cy:clusters[0].cy,burning:0,spread,elong,angle,clusters,far:far[0]>0?{d:far[0],x:far[1],y:far[2]}:null}; this.pending=false;
     return [this.probeBuf,this.probeBuf2,this.red];
   },
   ensureBloom(sw,sh){ const gl=this.gl, w=Math.max(1,sw>>1), h=Math.max(1,sh>>1); if(this.bloomW===w&&this.bloomH===h) return;
