@@ -250,3 +250,33 @@ twenty-five cells, and beside the first-room test strip). The reach is a named d
 starves inside your light than in the dark; 0.5 after play-testing: "fun to run away from", not inevitable; 0.15 was too
 much). Test hooks: `#spore=1` puts a strip in the wall beside the spawn; `#delay=N` births the body N ticks in;
 `#watch=x,y;x,y` reads heat/organism/fuel at cells into the trace, which carries `o<infected>d<deaths>`.
+
+## 16. The will, parts left behind, per-cell hurt; the friend removed — 2026-11-15, main
+
+The user, after the identity battery: "I want the inputs to not affect all of the cells at the same time... it feels fake
+when I... choose to make them all go someplace so quickly. I would think that my level of influence over my 'self' would
+be communicated, and, at times, disagreed with, and I would lose some parts of myself, or need to reconvene with them."
+And: "what it would be like if I left parts of me all over the place... those particles would lay around doing whatever
+unless I go pick them up... accumulation and maybe size management."
+
+- **The will** (`PARAMS.will`, q.xy the point a cell has heard it should go to, q.z its connection): your intention enters
+  only at the core (within half rnear of the centroid) and travels cell to cell through your own matter, a hop every few
+  substeps with a little lost per hop, fading where nothing renews it. Each cell steers toward the point it has heard of,
+  as strongly as it is connected. A plain direction (keys, the lab, the bot) is heard as a point forty cells that way.
+  The reduction weights cells by connection, so the centroid and the camera follow the connected body only. The user,
+  first play: "Holy fuck yes. That whispiness, it pushes off little mini-whisps of itself when it flings around curved
+  fast flow paths. This is beautiful."
+- **Parts left behind** (`PARAMS.stray`): cells beyond rfar no longer wither; they keep local cohesion, hear no will, do not
+  home, glow dim, pay a twentieth of the metabolism (half-life about a minute and a half), and count against growth
+  (`red.total` = connected + everything else, packed above 4096 in the burn channel of the reduction). Past lives keep
+  the same way. Collecting is getting close enough for the will to reach them.
+- **Hurt per cell**: uB.z (was exposure) is now what the matter has suffered: fire, the organism feeding, blades, as the
+  fraction of the cell lost. It rides with the matter, heals slowly, fast in cold still air, is diluted by regrowth;
+  hurt cells swim weaker (a red part lags and is the part you lose in a current unless you heal it). The body-wide red
+  flash is gone. The user: "do I heal my red parts, or do I abandon them?"
+- **The friend and enmeshment are removed** at the user's request ("it doesnt work, it is bad, bad feels... we are
+  building something better"): the NPC wisp, friendship, the enmeshed caption and detector, the pair camera, the friend
+  tint, `uNpcK/uFriend/uNpcGrow`, the enmesh lab scenarios. Dead alcoves and ore repair remain (the friend no longer
+  waits on them). Companions, if they return, will grow out of parts left behind.
+- Lab with the will: `commit` with a plain direction first went nowhere (the direction was ignored under the will; fixed
+  by injecting it as a point ahead). The baseline `commit` carries the body ~300 cells in the jet.
