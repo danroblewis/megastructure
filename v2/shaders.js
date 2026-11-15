@@ -278,7 +278,11 @@ void main(){
     float gl2=length(ga);
     float a=float((idHash(idc,7u)+uFrame/90u*2654435761u)&1023u)/1024.0*6.2832; vec2 want=ga/(gl2+0.0006)+vec2(cos(a),sin(a))*0.35; float wl=length(want); if(wl>1.0) want/=wl;   // a smooth blend of what it smells and a slow wander, so it never dithers
     want*=clamp(1.3-h0,0.0,1.0);   // a cell already packed tight stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost)
-    v+=want*uSwim*0.9*(1.0-0.6*hurtC)+u*wFlow*0.4;   // some ride the currents more than others
+    // self-preservation: only cells well connected to the wisp's dense core push (the core leads, stragglers home instead of spreading);
+    // every seven seconds or so a quarter of the wisps rest for a window and regrow, as you do when you sit still; a hurt wisp rests more
+    bool resting= (idHash(idc,11u)+uFrame/840u*2246822519u)%4u==0u;
+    want*=qme.z*(resting?0.0:1.0)*(1.0-0.7*hurtC);
+    v+=want*uSwim*0.7+u*wFlow*0.4;   // some ride the currents more than others
     { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
       float zc=qme.z; float zl=0.0,zr=0.0,zu=0.0,zd=0.0; ivec2 ql=clamp(p-ivec2(2,0),ivec2(0),uRes-1), qr=clamp(p+ivec2(2,0),ivec2(0),uRes-1), qu=clamp(p-ivec2(0,2),ivec2(0),uRes-1), qd=clamp(p+ivec2(0,2),ivec2(0),uRes-1);
       vec4 a=texelFetch(uQ,ql,0); if(idOf(a)==idc) zl=a.z; a=texelFetch(uQ,qr,0); if(idOf(a)==idc) zr=a.z; a=texelFetch(uQ,qu,0); if(idOf(a)==idc) zu=a.z; a=texelFetch(uQ,qd,0); if(idOf(a)==idc) zd=a.z;
