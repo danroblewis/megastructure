@@ -282,7 +282,7 @@ void main(){
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
     vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat
     float gl2=length(ga);
-    vec2 want=goalDir*0.9+ga/(gl2+0.0006)*0.35; float wl=length(want); if(wl>1.0) want/=wl;
+    vec2 want=goalDir*0.9+ga/(gl2+0.0006)*0.7; float wl=length(want); if(wl>1.0) want/=wl;   // a strong smell (your glow, a burner, fuel) bends the way hard: a curious wisp follows you, a shy one keeps away
     want*=clamp((1.45-h0)/0.4,0.0,1.0);   // a cell packed well above normal density stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost)
     bool resting= (idHash(idc,11u)+uFrame/840u*2246822519u)%4u==0u;   // every seven seconds or so a quarter of the wisps rest for a window and regrow; a hurt wisp rests more
     want*=qme.z*(resting?0.0:1.0)*(1.0-0.7*hurtC);

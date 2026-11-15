@@ -182,7 +182,11 @@
             for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){ const nx=bx+dx, ny=by+dy; if(nx<0||ny<0||nx>=IW||ny>=IH) continue; const n=ny*IW+nx; if(seen[n]||(M[n*4]|0)!==id||M[n*4+1]<0.5) continue; seen[n]=1; stack.push(n); } }
           const cx=sx/mass, cy=sy/mass; let r=0; for(const k of cells){ const d=Math.hypot((k%IW+0.5)*bs-cx,((k/IW|0)+0.5)*bs-cy); if(d>r) r=d; } (comps[id]=comps[id]||[]).push({mass,cx,cy,r:r+bs}); }
         { const g=new Float32Array(2048*4).fill(1); let nid=0; for(const id in comps){ let m=0; for(const c of comps[id]) m+=c.mass; const k=(+id)&2047; g[k*4]=Math.max(0,1-m/(BODY.massMax*0.9)); nid++; if(+id===1) player.census={m:+m.toFixed(1),g:+g[k*4].toFixed(2)}; } player.censusN=nid; SIM.setGrow(g); let nz=0,mx=0,tot=0; for(let j=0;j<IW*IH;j++){ if(M[j*4]>0) nz++; if(M[j*4+1]>mx) mx=M[j*4+1]; tot+=M[j*4+2]; } player.censusRaw=nz+'/'+mx.toFixed(1)+'/'+tot.toFixed(0); }   // each wisp grows to about a body's worth and no further
-        player.renum=player.renum||[]; for(const id in comps){ const cs=comps[id]; if(cs.length<2) continue; cs.sort((a,b)=>b.mass-a.mass); for(let i=1;i<cs.length;i++){ if(cs[i].mass>2*MK) player.renum.push({from:+id,x:cs[i].cx,y:cs[i].cy,r:cs[i].r}); } }
+        // a piece is renumbered only when it is clearly apart (twenty cells or more between centres, a few cells of mass) and has been so at two
+        // censuses in a row; the block grid reads a thin neck as a break, and a fresh number would mean a fresh heading and hue every two seconds
+        player.renum=player.renum||[]; const apartNow={}; for(const id in comps){ const cs=comps[id]; if(cs.length<2) continue; cs.sort((a,b)=>b.mass-a.mass); const main=cs[0];
+          for(let i=1;i<cs.length;i++){ const c=cs[i]; if(c.mass<6*MK||Math.hypot(c.cx-main.cx,c.cy-main.cy)<20) continue; const key=id+':'+(Math.round(c.cx/16))+':'+(Math.round(c.cy/16)); apartNow[key]=1; if(player.apartPrev&&player.apartPrev[key]) player.renum.push({from:+id,x:c.cx,y:c.cy,r:c.r}); } }
+        player.apartPrev=apartNow;
       }catch(e){ player.censusErr=String(e).slice(0,80); if(window.REPORT) REPORT('idmap',String(e)); } }
     if(player.renum&&player.renum.length){ const q=player.renum.shift(); player.nextId=(player.nextId||0)+1; bd.seed=[q.x,q.y,q.r,player.nextId]; bd.seedFrom=q.from; }
     else if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after, the seed is held one more frame so every cell of the new body has taken its number
