@@ -114,7 +114,7 @@ void main(){
 // ---------------- species: advect, diffuse, react ----------------
 SH.species = SH.head + `
 uniform sampler2D uS, uFC, uDye, uB, uSrc, uLight;   // uSrc: baked source influence (burner, cooler, fuel, spore); uLight: the glow of bodies, which the organism hunts by
-uniform float uAdv, uIgn, uBurnRate, uCool, uLifeF, uLifeK, uDiff;
+uniform float uAdv, uIgn, uBurnRate, uCool, uLifeF, uLifeK, uDiff, uHunt;   // uHunt: PARAMS.hunt, the organism's starvation inside your light relative to the dark
 uniform vec4 uInject; uniform vec4 uInjectAmt; // player injection: xy pos, z radius ; amounts fuel heat smoke life
 layout(location=0) out vec4 oS; layout(location=1) out vec4 oDye;
 vec4 sampleS(vec2 pos){ // bilinear with wall clamping
@@ -166,7 +166,7 @@ void main(){
   // organism: eats fuel (Gray-Scott style), dies in heat
   float L=s.w, Fu=s.x;
   float growth=L*L*Fu;
-  s.w+=growth*uLifeF - L*uLifeK*0.5*mix(1.0,0.35,min(1.0,glow*4.0));   // in your light it starves three times slower: a tendril can reach you from fifty cells
+  s.w+=growth*uLifeF - L*uLifeK*0.5*mix(1.0,uHunt,min(1.0,glow*4.0));   // starvation, eased inside your light by the hunt dial
   s.x-=growth*uLifeF*0.9;
   if(s.y>0.35) s.w-=(s.y-0.35)*0.6;
   // the body burns into smoke, and feeds the organism a little
@@ -344,7 +344,7 @@ void main(){ ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p)); bool s=soli
   float kind=face&&vn(vec2(p)/31.0+3.0)>0.8 ? 0.5 : 0.0;           // old frost crusts here and there
   o=vec4(phi,soot,0.0,kind); }`;
 SH.walls = SH.head + `
-uniform sampler2D uS, uFC, uB; out vec4 o;
+uniform sampler2D uS, uFC, uB, uSrc; out vec4 o;
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); vec4 w=texelFetch(uWf,p,0); float phi=w.x, soot=w.y, res=w.z, kind=w.w;
   int t=mtype(maskAt(p));
@@ -363,7 +363,7 @@ void main(){
   if(phi<1.0 && t!=M_VENT && t!=M_DRAIN && t!=M_EXIT && t!=M_CHECK && solidN){
     float cold=max(-s.y,ncold); float cond=max(s.z+s.x,ncond);
     if(cold>0.15 && cond>0.05){ phi+=cold*cond*0.04; kind=mix(kind,0.5,0.05); }   // frost crust
-    float life=max(s.w,nlife); if(life>0.45){ phi+=(life-0.45)*0.012; kind=mix(kind,1.0,0.05); } // tissue
+    float life=max(s.w,nlife); if(life>0.45 && b.x>0.01 && texelFetch(uSrc,p,0).a<=0.0){ phi+=(life-0.45)*0.012; kind=mix(kind,1.0,0.05); } // tissue: the organism builds wall only out of the body it is eating, never over its own spore halo (it used to entomb every colony within a second, which is why a strip attacked once and then went quiet)
   }
   res+=b.y*0.6+b.x*0.0003; res*=0.9994;                   // the trace of lost selves
   soot*=0.99995;

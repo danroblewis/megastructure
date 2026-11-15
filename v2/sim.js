@@ -71,7 +71,7 @@ const SIM={
     this.draw(this.Ffbo[o],this.W,this.H); this.cur=o;
     pr=this.P.species; const so=1-this.scur;
     this.use(pr,{uMask:this.Mdyn,uS:this.S[this.scur],uFC:this.F[this.cur].c,uDye:this.D[this.scur],uB:this.B[this.bcur],uSrc:this.Src,uLight:this.L[this.lcur]});
-    gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uIgn,P.ign); gl.uniform1f(pr.u.uBurnRate,P.burnRate); gl.uniform1f(pr.u.uCool,P.cool); gl.uniform1f(pr.u.uLifeF,P.lifeF); gl.uniform1f(pr.u.uLifeK,P.lifeK); gl.uniform1f(pr.u.uDiff,P.diff);
+    gl.uniform1f(pr.u.uAdv,P.adv); gl.uniform1f(pr.u.uIgn,P.ign); gl.uniform1f(pr.u.uBurnRate,P.burnRate); gl.uniform1f(pr.u.uCool,P.cool); gl.uniform1f(pr.u.uLifeF,P.lifeF); gl.uniform1f(pr.u.uLifeK,P.lifeK); gl.uniform1f(pr.u.uDiff,P.diff); gl.uniform1f(pr.u.uHunt,P.hunt===undefined?0.5:P.hunt);
     gl.uniform4f(pr.u.uInject,inject?inject.x:-999,inject?inject.y:-999,inject?inject.r:0,0); gl.uniform4f(pr.u.uInjectAmt,inject?inject.fuel:0,inject?inject.heat:0,inject?inject.smoke:0,inject?inject.life:0);
     this.draw(this.SDfbo[so],this.W,this.H); this.scur=so;
     // body
@@ -88,13 +88,15 @@ const SIM={
     gl.uniform2fv(pr.u.uDrones,bd.drones); gl.uniform1i(pr.u.uNDrones,bd.nDrones|0);
     this.draw(this.Bfbo[bo],this.W,this.H); this.bcur=bo;
     pr=this.P.walls; const wo=1-this.wcur;
-    this.use(pr,{uMask:this.Mdyn,uWf:this.Wf[this.wcur],uS:this.S[this.scur],uFC:this.F[this.cur].c,uB:this.B[this.bcur]});
+    this.use(pr,{uMask:this.Mdyn,uWf:this.Wf[this.wcur],uS:this.S[this.scur],uFC:this.F[this.cur].c,uB:this.B[this.bcur],uSrc:this.Src});
     this.draw(this.Wfbo[wo],this.W,this.H); this.wcur=wo;
   },
   lightStep(iters){
     const gl=this.gl, pr=this.P.light;
     for(let i=0;i<iters;i++){ const lo=1-this.lcur; this.use(pr,{uMask:this.Mdyn,uL:this.L[this.lcur],uB:this.B[this.bcur],uS:this.S[this.scur]}); gl.uniform2i(pr.u.uLRes,this.LW,this.LH); gl.uniform1i(pr.u.uInit,0); this.draw(this.Lfbo[lo],this.LW,this.LH); this.lcur=lo; }
   },
+  readS(x,y){   // one cell of the species field (fuel, heat, smoke, organism): a synchronous readback for tests
+    const gl=this.gl; const out=new Float32Array(4); gl.bindFramebuffer(gl.FRAMEBUFFER,this.SDfbo[this.scur]); gl.readBuffer(gl.COLOR_ATTACHMENT0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null); gl.readPixels(x|0,y|0,1,1,gl.RGBA,gl.FLOAT,out); gl.bindFramebuffer(gl.FRAMEBUFFER,null); return out; },
   // total mass, centroid and burning amount of the body (synchronous small readback)
   reduceDraw(){
     const gl=this.gl; let pr=this.P.reduce0; this.use(pr,{uMask:this.Mdyn,uB:this.B[this.bcur],uQ:this.Q[this.bcur],uS:this.S[this.scur]}); gl.uniform1i(pr.u.uIdent,this.ident); gl.uniform2fv(pr.u.uC,this.centres); gl.uniform1i(pr.u.uCN,this.nC); gl.uniform1i(pr.u.uNpcK,this.npcK); this.draw(this.levels[0].f,this.levels[0].w,this.levels[0].h);

@@ -240,6 +240,13 @@ gradient of the light grid (your glow) when it is not touching you, so it senses
 starves three times slower, so a tendril reaches about fifty cells; every spore strip's halo gets enough fuel to keep a
 living colony; `player.infected` reads organism inside the body from the dense probe grid, with a one-time hint on first
 infection (a spark burns it off and gives you back). With these, a still body twenty-five cells from a bare strip was
-found and eaten within two seconds. Open puzzle, seen in every run old and new: the body that respawns at the same spot
-four seconds later is never touched again. Test hooks: `#delay=N` births the body N ticks into the world; the trace
-carries `o<infected>d<deaths>`.
+found and eaten within two seconds. The puzzle that followed (a body respawning at the same spot four seconds later
+was never touched again, and a body born five seconds into the world was never hunted at all) was the walls pass:
+its "tissue" rule grows wall wherever dense organism touches a solid cell, and a spore halo is exactly that, so every
+colony entombed itself within a second of the world starting. Heat was not involved (zero at the halo throughout).
+Tissue now grows only out of body the organism is eating and never over a spore halo; with that, the halo holds at full
+density for the whole run and every respawned still body is found and eaten (three deaths in fifteen seconds at
+twenty-five cells, and beside the first-room test strip). The reach is a named dial, `PARAMS.hunt` (how much slower it
+starves inside your light than in the dark; 0.5 after play-testing: "fun to run away from", not inevitable; 0.15 was too
+much). Test hooks: `#spore=1` puts a strip in the wall beside the spawn; `#delay=N` births the body N ticks in;
+`#watch=x,y;x,y` reads heat/organism/fuel at cells into the trace, which carries `o<infected>d<deaths>`.
