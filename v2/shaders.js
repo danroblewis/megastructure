@@ -279,7 +279,11 @@ void main(){
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
     vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat: a survival instinct
     float gl2=length(ga);
-    float a=float((idHash(idc,7u)+uFrame/90u*2654435761u)&1023u)/1024.0*6.2832; vec2 want=ga/(gl2+0.0006)+vec2(cos(a),sin(a))*0.6; float wl=length(want); if(wl>1.0) want/=wl;   // a smooth blend of what it smells and a roaming wander, so it never dithers and never just stands there
+    // a will that lasts: a heading per wisp that holds for ten seconds and turns smoothly into the next (the same for every cell of the
+    // wisp, from its number and the clock), so it sets off across a room and keeps going; what it smells bends the heading rather than replacing it
+    uint win=uFrame/600u; float fw=float(uFrame-win*600u)/600.0; float a0=float((idHash(idc,7u)+win*2654435761u)&1023u)/1024.0*6.2832, a1=float((idHash(idc,7u)+(win+1u)*2654435761u)&1023u)/1024.0*6.2832;
+    float tw=smoothstep(0.7,1.0,fw); vec2 head=normalize(mix(vec2(cos(a0),sin(a0)),vec2(cos(a1),sin(a1)),tw)+vec2(1e-4,0.0));
+    vec2 want=head*0.85+ga/(gl2+0.0006)*0.6; float wl=length(want); if(wl>1.0) want/=wl;
     want*=clamp((1.45-h0)/0.4,0.0,1.0);   // a cell packed well above normal density stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost); at normal density it pushes fully
     // self-preservation: only cells well connected to the wisp's dense core push (the core leads, stragglers home instead of spreading);
     // every seven seconds or so a quarter of the wisps rest for a window and regrow, as you do when you sit still; a hurt wisp rests more
