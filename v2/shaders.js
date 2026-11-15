@@ -43,6 +43,7 @@ int nearestOther(vec2 pp){ int k=0; float bd=1e9; for(int j=1;j<3;j++){ if(j<uCN
 int idOf(vec4 q){ return int(floor(q.w+0.5)); }   // q.w is the cell's wisp number: 0 you, 1.. a wisp of its own. numbers never convert each other
 int ownerK(vec4 q, vec2 pp){ return idOf(q)==0 ? 0 : -1; }   // the only centre is yours; a wisp of its own has none
 uint idHash(int id, uint salt){ uint h=uint(id)*2654435761u+salt*40503u+12345u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15; return h; }
+vec2 headingOf(int id){ uint win=uFrame/600u; float fw=float(uFrame-win*600u)/600.0; float a0=float((idHash(id,7u)+win*2654435761u)&1023u)/1024.0*6.2832, a1=float((idHash(id,7u)+(win+1u)*2654435761u)&1023u)/1024.0*6.2832; float tw=smoothstep(0.7,1.0,fw); return normalize(mix(vec2(cos(a0),sin(a0)),vec2(cos(a1),sin(a1)),tw)+vec2(1e-4,0.0)); }   // a wisp's heading: a leg of ten seconds, turning smoothly into the next
 vec3 idHue(int id){ float hh=float(idHash(id,1u)&1023u)/1024.0; vec3 c=clamp(abs(fract(vec3(hh)+vec3(0.0,0.667,0.333))*6.0-3.0)-1.0,0.0,1.0); return mix(vec3(1.0),c,0.55); }   // a pale hue of its own
 
 vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 drive, ivec2 p){
@@ -50,16 +51,16 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   // dc is the distance to your centre, drive your plain drive (uDirs[0]).
   if(uWill<0.5){ q.xy=mix(q.xy,vel*8.0,0.03); q.z=mix(q.z,1.0,0.005); return q; }
   int id=idOf(q); vec2 pp=vec2(p)+0.5;
-  if(id>0){ // a wisp of its own hears no will: its cells each feel an appetite (bodyVel). but it has a body: a connection spreads from its dense
-    if(uSeed.z>0.0 && uSeedFrom>0.5 && id==int(uSeedFrom+0.5) && distance(pp,uSeed.xy)<uSeed.z){ return vec4(0.0,0.0,0.0,uSeed.w); }   // renumbered: a piece of this wisp that split off (the CPU noticed one number in two places)
-    // cells through matter of the same number (q.z), and a fragment that stays out of reach of any dense core for four seconds becomes a
-    // wisp of its own with a fresh number (q.x counts the orphaned substeps). that is how they split by accident and make new ones.
-    float z=q.z*0.985; float best=0.0;
-    for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); if(idOf(qn)==id) best=max(best,qn.z); }
-    z=max(z,best*0.97); if(self>0.5) z=1.0;
-    float orphan= z<0.1? q.x+1.0 : 0.0;
-    if(uAuto>0.5 && orphan>600.0){ q.w=float(1000+int(idHash(id,uFrame/600u)%900u)); orphan=0.0; }   // every orphan of this number in the same ten-second window takes the same new number, so a fragment leaves as one
-    q.x=orphan; q.y=0.0; q.z=z; return q; }
+  if(id>0){ // a wisp of its own has a will of the same kind as yours: its dense cells are its core, they set a point forty cells ahead along the wisp's
+    // heading, the point travels cell to cell through the wisp (q.xy) with the connection (q.z), and every cell steers toward the point it has
+    // heard. (a split that keeps its number is caught by the CPU's two-second census, which renumbers every piece but the heaviest)
+    if(uSeed.z>0.0 && uSeedFrom>0.5 && id==int(uSeedFrom+0.5) && distance(pp,uSeed.xy)<uSeed.z){ return vec4(pp,0.0,uSeed.w); }
+    float z=q.z*0.985; float best=0.0; vec2 bg=q.xy;
+    for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); if(idOf(qn)==id && qn.z>best){ best=qn.z; bg=qn.xy; } }
+    uint h=uint(p.x)*1664525u+uint(p.y)*1013904223u+uFrame*69069u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15;
+    if((h&3u)==0u && best*0.97>z){ z=best*0.97; q.xy=bg; }
+    if(self>0.5){ z=1.0; q.xy=pp+headingOf(id)*40.0; }
+    q.z=z; return q; }
   // the will: intention enters only at your core (within half rnear of your centre) and travels cell to cell through your own
   // matter, a hop every few substeps with a little lost per hop; it fades where nothing renews it. you are whatever the will reaches.
   float z=q.z*0.985; float best=0.0; vec2 bg=q.xy; int grab=0;
@@ -272,22 +273,18 @@ void main(){
   vec4 qq=texelFetch(uQ,p,0); drive=identDrive(ki,qq,drive,here); coh=identCohere(qq,coh,here);   // identity model hooks
   float hurtC=texelFetch(uB,p,0).z;   // hurt matter answers weakly: a red part lags, and in a current it is the part you lose unless you heal it
   vec2 v=carry*(1.0-0.7*pw)+drive*uSwim*(1.0+1.6*pw)*(1.0-0.6*hurtC)+coh;
-  if(idc>0 && uAuto>0.5){ // a wisp of its own: its will is an appetite every cell feels, drawn from its number, so each wisp is a different creature
+  if(idc>0 && uAuto>0.5){ // a wisp of its own steers as you do: toward the point its core has told it, each cell at its own angle, settling as it arrives
+    vec2 to=qme.xy-(vec2(p)+0.5); float dl=length(to); vec2 goalDir= dl>0.5? to/dl*smoothstep(1.5,9.0,dl) : vec2(0.0);
+    // its appetites, drawn from its number so each wisp is a different creature, bend the way
     vec4 sl=texelFetch(uS,wrapP(p-ivec2(3,0)),0), sr=texelFetch(uS,wrapP(p+ivec2(3,0)),0), su=texelFetch(uS,wrapP(p-ivec2(0,3)),0), sd=texelFetch(uS,wrapP(p+ivec2(0,3)),0);
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x);
     vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
-    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat: a survival instinct
+    vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat
     float gl2=length(ga);
-    // a will that lasts: a heading per wisp that holds for ten seconds and turns smoothly into the next (the same for every cell of the
-    // wisp, from its number and the clock), so it sets off across a room and keeps going; what it smells bends the heading rather than replacing it
-    uint win=uFrame/600u; float fw=float(uFrame-win*600u)/600.0; float a0=float((idHash(idc,7u)+win*2654435761u)&1023u)/1024.0*6.2832, a1=float((idHash(idc,7u)+(win+1u)*2654435761u)&1023u)/1024.0*6.2832;
-    float tw=smoothstep(0.7,1.0,fw); vec2 head=normalize(mix(vec2(cos(a0),sin(a0)),vec2(cos(a1),sin(a1)),tw)+vec2(1e-4,0.0));
-    vec2 want=head*0.85+ga/(gl2+0.0006)*0.6; float wl=length(want); if(wl>1.0) want/=wl;
-    want*=clamp((1.45-h0)/0.4,0.0,1.0);   // a cell packed well above normal density stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost); at normal density it pushes fully
-    // self-preservation: only cells well connected to the wisp's dense core push (the core leads, stragglers home instead of spreading);
-    // every seven seconds or so a quarter of the wisps rest for a window and regrow, as you do when you sit still; a hurt wisp rests more
-    bool resting= (idHash(idc,11u)+uFrame/840u*2246822519u)%4u==0u;
+    vec2 want=goalDir*0.9+ga/(gl2+0.0006)*0.35; float wl=length(want); if(wl>1.0) want/=wl;
+    want*=clamp((1.45-h0)/0.4,0.0,1.0);   // a cell packed well above normal density stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost)
+    bool resting= (idHash(idc,11u)+uFrame/840u*2246822519u)%4u==0u;   // every seven seconds or so a quarter of the wisps rest for a window and regrow; a hurt wisp rests more
     want*=qme.z*(resting?0.0:1.0)*(1.0-0.7*hurtC);
     v+=want*uSwim*0.85+u*wFlow*0.4;   // some ride the currents more than others
     { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
