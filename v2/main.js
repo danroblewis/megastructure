@@ -173,7 +173,7 @@
     if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after a crowd body is injected, its loose matter takes its number
     else if(CROWD.length&&SIM.frame>60&&!pendingInjectB&&!player.dead){ const c=CROWD.shift(); pendingInjectB=[c.x,c.y,BODY.spawnR*1.2,1.0]; player.nextId=(player.nextId||0)+1; crowdSeed=[c.x,c.y,BODY.spawnR*2.5,player.nextId]; }
     if(!bd.seed&&PARAMS.auto&&red.far&&red.far.d>BODY.rfar*0.9&&Math.hypot(red.far.x-player.x,red.far.y-player.y)>BODY.rfar*0.9){ player.farN=(player.farN||0)+1;
-      if(player.farN>300){ player.farN=0; player.nextId=(player.nextId||0)+1; bd.seed=[red.far.x,red.far.y,BODY.rnear*1.5,player.nextId]; AUDIO.tone(330,440,0.5,'sine',0.04); player.hint='a part of you is its own now'; player.hintT=300; } }
+      if(player.farN>300){ player.farN=0; player.nextId=(player.nextId||0)+1; bd.seed=[red.far.x,red.far.y,BODY.rnear*1.5,player.nextId]; } }   /* no caption and no tone: finding out that a part of you has become its own is part of the fun */
     else player.farN=0;
     pushCentres();
   }
