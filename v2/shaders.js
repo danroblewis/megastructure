@@ -31,7 +31,8 @@ uniform vec4 uSpot;            // an attended point in the world: x y strength a
 uniform float uRnear, uRfar;   // body radii, shared
 uniform float uAuto;           // PARAMS.auto: a part left behind long enough settles into a wisp of its own, with a will and a temperament
 uniform float uGrowOther;      // regrowth of every wisp that is not you, capped on the CPU by all of them together
-uniform vec4 uSeed;            // x y radius number: for one frame, loose matter of yours inside the circle becomes wisp <number> (radius 0: none)
+uniform vec4 uSeed;            // x y radius number: for one frame, matter inside the circle becomes wisp <number> (radius 0: none)
+uniform float uSeedFrom;       // 0: the seed takes loose matter of yours; N>0: it renumbers matter of wisp N (a piece that split off and kept the number)
 // ---- identity model hooks: an experiment branch replaces these bodies (keep the signatures) ----
 // q is updated once per substep in the body pass. vel is the cell's own velocity, dc its distance to its nearest centre, kk that centre's index,
 // sp the species at the cell (x fuel, y heat, z smoke, w organism), drive the intention its centre gave it this substep.
@@ -49,6 +50,7 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   if(uWill<0.5){ q.xy=mix(q.xy,vel*8.0,0.03); q.z=mix(q.z,1.0,0.005); return q; }
   int id=idOf(q); vec2 pp=vec2(p)+0.5;
   if(id>0){ // a wisp of its own hears no will: its cells each feel an appetite (bodyVel). but it has a body: a connection spreads from its dense
+    if(uSeed.z>0.0 && uSeedFrom>0.5 && id==int(uSeedFrom+0.5) && distance(pp,uSeed.xy)<uSeed.z){ return vec4(0.0,0.0,0.0,uSeed.w); }   // renumbered: a piece of this wisp that split off (the CPU noticed one number in two places)
     // cells through matter of the same number (q.z), and a fragment that stays out of reach of any dense core for four seconds becomes a
     // wisp of its own with a fresh number (q.x counts the orphaned substeps). that is how they split by accident and make new ones.
     float z=q.z*0.985; float best=0.0;
@@ -67,7 +69,7 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   if(core>0.0){ z=max(z,core); float dl=length(drive); if(uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[0]+drive/dl*40.0,core); }   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot) as a point forty cells that way
   // loose matter (yours, out of the will's reach) is gathered: by a wisp whose cells touch it, or by a seed that makes a new wisp of it
   if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<3u){ q=vec4(0.0,0.0,0.0,float(grab)); return q; }
-    if(uSeed.z>0.0 && distance(pp,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); return q; } }
+    if(uSeed.z>0.0 && uSeedFrom<0.5 && distance(pp,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); return q; } }
   q.z=z; q.w=0.0; return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
 float identWeight(int k, int nearestK, vec4 q, vec2 pp){ if(k!=0 || idOf(q)!=0) return 0.0; return uWill>0.5? smoothstep(0.03,0.2,q.z) : 1.0; }   // with the will on, only matter the will reaches counts as you: strays do not move the centroid or the camera
@@ -378,7 +380,7 @@ void main(){
   vec4 q=mix(texelFetch(uQ,p,0),texelFetch(uQ,wrapP(from),0),0.5); vec2 dr= kk>=0&&kk<3? uDirs[kk] : vec2(0.0);
   q=identUpdate(q,self,v0b,dc,kkNear,sp,dr,p);
   if(s0<=0.003 && self>0.0){ // a new cell belongs to whoever grew it: the allegiance of the neighbours that fed it (not the nearest centre, which let one wisp's growth feed the other without limit)
-    float bs=0.0, ss=0.0; vec3 w3=vec3(0.0); float wid=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; vec4 qn=texelFetch(uQ,qq,0); if(sn>bs){ bs=sn; wid=qn.w; } w3+=qn.xyz*sn; ss+=sn; } q.w=wid; if(ss>0.0) q.xyz=w3/ss; }   // a new cell takes the number of the neighbour that fed it most, and the will its neighbours carry
+    float bs=0.0, ss=0.0; vec3 w3=vec3(0.0); float wid=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; vec4 qn=texelFetch(uQ,qq,0); if(sn>bs){ bs=sn; wid=qn.w; } w3+=qn.xyz*sn; ss+=sn; } q.w=wid; if(ss>0.0) q.xyz=w3/ss; if(uSeed.z>0.0 && uSeedFrom<0.5 && distance(vec2(p)+0.5,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); } }   // a new cell takes the number of the neighbour that fed it most, and the will its neighbours carry; a seeded body is born with its own number, never yours for even a frame
   if(self<=0.0) q=vec4(0.0);
   o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
 }`;
@@ -483,6 +485,14 @@ SH.machFS = `#version 300 es
 precision highp float; in vec3 vVel; out vec4 o; void main(){ o=vec4(vVel.z/255.0, clamp(vVel.xy*0.5+0.5,0.0,1.0), 1.0); }`;
 
 // ---------------- probe: sample fields at N positions for the CPU ----------------
+// id map: one texel per 8x8 block of cells: the wisp number of the block's densest cell, the mass of that number in the block, the block's total mass.
+// read back by the CPU every couple of seconds to notice a number in two places (a split that kept its number), nothing else
+SH.idmap = SH.head + `
+uniform sampler2D uB; out vec4 o;
+void main(){ ivec2 b=ivec2(gl_FragCoord.xy)*8; float bestS=0.0; int bestId=0; float tot=0.0;
+  for(int y=0;y<8;y++) for(int x=0;x<8;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; float s=texelFetch(uB,q,0).x; if(s<=0.0) continue; tot+=s; int id=idOf(texelFetch(uQ,q,0)); if(id>0 && s>bestS){ bestS=s; bestId=id; } }
+  float m=0.0; if(bestId>0){ for(int y=0;y<8;y++) for(int x=0;x<8;x++){ ivec2 q=b+ivec2(x,y); if(q.x>=uRes.x||q.y>=uRes.y) continue; if(idOf(texelFetch(uQ,q,0))==bestId) m+=texelFetch(uB,q,0).x; } }
+  o=vec4(float(bestId),m,tot,0.0); }`;
 SH.probe = SH.head + `
 uniform sampler2D uFC, uS; uniform vec2 uPts[64]; out vec4 o;
 void main(){ int i=int(gl_FragCoord.x); vec2 pt=uPts[i]; ivec2 p=ivec2(floor(pt)); p=wrapP(p);

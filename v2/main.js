@@ -169,9 +169,20 @@
     player.lowT=selves[0].mass<22*MK?(player.lowT||0)+1:0; player.switchLock=Math.max(0,(player.switchLock||0)-1);
     if(player.lowT>=45&&player.switchLock===0&&!player.dead&&red.far&&red.far.d>BODY.rfar*0.9&&(SIM.red.stray||0)>20*MK){ player.switchLock=240; player.lowT=0; player.x=red.far.x; player.y=red.far.y; selves[0].x=player.x; selves[0].y=player.y; player.camSnap=true; target.x=null; AUDIO.tone(400,600,0.3,'sine',0.05); }
     // a pile of yours that stays out of reach for five seconds becomes a wisp of its own: a fresh number is seeded at its far edge and floods the loose pile
-    bd.seed=null;
-    if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after a crowd body is injected, its loose matter takes its number
-    else if(CROWD.length&&SIM.frame>60&&!pendingInjectB&&!player.dead){ const c=CROWD.shift(); pendingInjectB=[c.x,c.y,BODY.spawnR*1.2,1.0]; player.nextId=(player.nextId||0)+1; crowdSeed=[c.x,c.y,BODY.spawnR*2.5,player.nextId]; }
+    bd.seed=null; bd.seedFrom=0;
+    // one number in two places: every two seconds the id map is read back, connected pieces are counted per number on the
+    // 8-cell block grid, and every piece but the heaviest is queued to be renumbered (one per frame). identity stays in the field;
+    // this only notices that a split kept its number (a dense half is its own core, so the field alone cannot tell)
+    if(PARAMS.auto&&SIM.frame%120===7&&!HASH.lab){ try{ const M=SIM.readIdMap(), IW=SIM.IW, IH=SIM.IH; const seen=new Uint8Array(IW*IH); const comps={}; const bs=8;
+        for(let j=0;j<IW*IH;j++){ const id=M[j*4]|0; if(!id||seen[j]||M[j*4+1]<0.5) continue; const stack=[j]; seen[j]=1; let mass=0,sx=0,sy=0; const cells=[];
+          while(stack.length){ const k=stack.pop(); const m=M[k*4+1]; mass+=m; const bx=k%IW, by=(k/IW)|0; sx+=m*(bx+0.5)*bs; sy+=m*(by+0.5)*bs; cells.push(k);
+            for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){ const nx=bx+dx, ny=by+dy; if(nx<0||ny<0||nx>=IW||ny>=IH) continue; const n=ny*IW+nx; if(seen[n]||(M[n*4]|0)!==id||M[n*4+1]<0.5) continue; seen[n]=1; stack.push(n); } }
+          const cx=sx/mass, cy=sy/mass; let r=0; for(const k of cells){ const d=Math.hypot((k%IW+0.5)*bs-cx,((k/IW|0)+0.5)*bs-cy); if(d>r) r=d; } (comps[id]=comps[id]||[]).push({mass,cx,cy,r:r+bs}); }
+        player.renum=player.renum||[]; for(const id in comps){ const cs=comps[id]; if(cs.length<2) continue; cs.sort((a,b)=>b.mass-a.mass); for(let i=1;i<cs.length;i++){ if(cs[i].mass>2*MK) player.renum.push({from:+id,x:cs[i].cx,y:cs[i].cy,r:cs[i].r}); } }
+      }catch(e){ if(window.REPORT) REPORT('idmap',String(e)); } }
+    if(player.renum&&player.renum.length){ const q=player.renum.shift(); player.nextId=(player.nextId||0)+1; bd.seed=[q.x,q.y,q.r,player.nextId]; bd.seedFrom=q.from; }
+    else if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after, the seed is held one more frame so every cell of the new body has taken its number
+    else if(CROWD.length&&SIM.frame>60&&!pendingInjectB&&!player.dead){ const c=CROWD.shift(); pendingInjectB=[c.x,c.y,BODY.spawnR*0.9,0.9]; player.nextId=(player.nextId||0)+1; bd.seed=[c.x,c.y,BODY.spawnR*2.5,player.nextId];   /* born a little smaller than you and under the shared cap, so a new wisp does not lose half of itself in its first seconds */ crowdSeed=bd.seed; }   // a crowd body is injected and seeded in the same frame: it is born with its own number
     if(!bd.seed&&PARAMS.auto&&red.far&&red.far.d>BODY.rfar*0.9&&Math.hypot(red.far.x-player.x,red.far.y-player.y)>BODY.rfar*0.9){ player.farN=(player.farN||0)+1;
       if(player.farN>300){ player.farN=0; player.nextId=(player.nextId||0)+1; bd.seed=[red.far.x,red.far.y,BODY.rnear*1.5,player.nextId]; } }   /* no caption and no tone: finding out that a part of you has become its own is part of the fun */
     else player.farN=0;
