@@ -65,7 +65,7 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   // the will: intention enters only at your core (within half rnear of your centre) and travels cell to cell through your own
   // matter, a hop every few substeps with a little lost per hop; it fades where nothing renews it. you are whatever the will reaches.
   float z=q.z*0.985; float best=0.0; vec2 bg=q.xy; int grab=0;
-  for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); int idn=idOf(qn); if(idn==0){ if(qn.z>best){ best=qn.z; bg=qn.xy; } } else grab=idn; }
+  for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); int idn=idOf(qn); if(idn==0){ if(qn.z>best){ best=qn.z; bg=qn.xy; } } else if(idn<1901) grab=idn; }   // a friend's copy (numbers 1901 up) never takes your loose matter: standing together must not bleed you
   uint h=uint(p.x)*1664525u+uint(p.y)*1013904223u+uFrame*69069u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15;
   if((h&3u)==0u && best*0.985>z){ z=best*0.985; q.xy=bg; }
   float core=1.0-smoothstep(uRnear*0.5,uRnear*1.2,dc);

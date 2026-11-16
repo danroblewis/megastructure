@@ -60,12 +60,12 @@ async def handle(reader,writer):
             except Exception: continue
             t=m.get('t')
             if t=='hello':
-                name=str(m.get('room','lobby'))[:32]; r=rooms.setdefault(name,{'level':None,'members':{}})
+                name=str(m.get('room','lobby'))[:32]; r=rooms.setdefault(name,{'level':None,'members':{},'epoch':time.time()})
                 if room is not None and room!=name: leave(room,pid)
                 room=name; r['members'][pid]=writer
                 # the room's level: set by the first arrival, and by anyone arriving fresh from clearing a level
                 if r['level'] is None or m.get('fresh') or len(r['members'])==1: r['level']=m.get('level')
-                send(writer,{'t':'welcome','pid':pid,'level':r['level'],'peers':[p for p in r['members'] if p!=pid],'now':time.time()})
+                send(writer,{'t':'welcome','pid':pid,'level':r['level'],'peers':[p for p in r['members'] if p!=pid],'now':time.time(),'epoch':r['epoch']})
                 for p,w in r['members'].items():
                     if p!=pid: send(w,{'t':'join','pid':pid,'level':r['level']})
                 log('join',name,pid,'members',len(r['members']),'level',r['level'])

@@ -16,7 +16,7 @@ export default {
 };
 
 export class Room {
-  constructor(state) { this.state = state; this.level = null; this.next = 1; this.members = new Map(); }
+  constructor(state) { this.state = state; this.level = null; this.next = 1; this.members = new Map(); this.epoch = Date.now() / 1000; }
   async fetch(req) {
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
     server.accept(); const pid = this.next++;
@@ -25,7 +25,7 @@ export class Room {
       if (m.t === 'hello') {
         this.members.set(pid, server);
         if (this.level === null || m.fresh || this.members.size === 1) this.level = m.level || null;
-        this.send(server, { t: 'welcome', pid, level: this.level, peers: [...this.members.keys()].filter((p) => p !== pid), now: Date.now() / 1000 });
+        this.send(server, { t: 'welcome', pid, level: this.level, peers: [...this.members.keys()].filter((p) => p !== pid), now: Date.now() / 1000, epoch: this.epoch });
         for (const [p, w] of this.members) if (p !== pid) this.send(w, { t: 'join', pid, level: this.level });
       } else if (m.t === 's' && this.members.has(pid)) {
         m.pid = pid; const s = JSON.stringify(m);
