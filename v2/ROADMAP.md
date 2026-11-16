@@ -359,3 +359,5 @@ rest); transport now treats another wisp's body as a wall (empty cells stay open
 body pressed against the wisp. Cohesion is also per number, with a push down the gradient of another number's density,
 so bodies meet instead of interpenetrating. A thin-neck false split in the census had given wisps a new heading and hue
 every two seconds; pieces are renumbered only when twenty cells apart at two censuses in a row.
+
+**Level picker (2026-11-15).** The ≡ menu's level row expands into a list of every level by number and name (the four tutorials first, then the structures by seed and size); tapping one saves it and reloads there. Replaces the one-step 'next' row, which needed a reload per step and so never got a saved mid-list player back to the tutorials.
