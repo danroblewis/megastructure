@@ -3,7 +3,7 @@
 const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13,ORB:14};
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const GEN={
-  build(W,H,seed){
+  build(W,H,seed,opts){ const theme=(opts&&opts.theme)||''; const fanMin= theme==='machines'?1:6, doorMin= theme==='machines'?1:3; const noMach= theme==='flow'||theme==='others'||theme==='spore';   // tutorial themes: 'flow' (currents only), 'others' (currents, meant for a crowd), 'spore' (the organism everywhere from the second chamber, burners as refuge), 'machines' (fans, doors, pistons from the first connection)
     const R=mulberry32(seed); const ri=(a,b)=>a+Math.floor(R()*(b-a+1));
     const mask=new Uint8Array(W*H*4);
     const type=new Uint8Array(W*H); type.fill(M.WALL);
@@ -58,8 +58,8 @@ const GEN={
         const fwd=a.i<b.i; const e=fwd?a:b, l=fwd?b:a; const my=fwd?ya:yb; const vx=fwd?a.x1+2:b.x0-2; const dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(vx,Math.round(my+k),M.VENT); setDir(vx,Math.round(my+k),dir,0); }
         const dx=fwd?l.x1:l.x0; for(let k=-6;k<=6;k++) set(dx,Math.round(l.cy+k*2),M.DRAIN); }
-      if(R()<0.65 && a.i>=6 && b.i>=6) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
-      if(R()<0.4 && a.i>=3 && b.i>=3) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
+      if(!noMach && R()<0.65 && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
+      if(!noMach && (R()<0.4||theme==='machines') && a.i>=doorMin && b.i>=doorMin) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
@@ -67,7 +67,7 @@ const GEN={
       { const fwd=a.i<b.i; const l=fwd?b:a; const vy=fwd?a.y1+2:b.y0-2, mx=fwd?xa:xb, dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(Math.round(mx+k),vy,M.VENT); setDir(Math.round(mx+k),vy,0,dir); }
         const dy=fwd?l.y1:l.y0; for(let k=-6;k<=6;k++) set(Math.round(l.cx+k*2),dy,M.DRAIN); }
-      if(a.i>=6 && b.i>=6) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
+      if(!noMach && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
     for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1-AMP-4,x+dh/2,b.y0+AMP+4,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
@@ -84,14 +84,16 @@ const GEN={
       if(R()<0.8){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
       if(R()<0.55){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
       // sources, by progression: the first chambers teach heat and cold; fire comes next; the organism last
-      const role= r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();
-      if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
+      const role= theme==='spore'? (r.i>=1? (r.i%2===0? 0.7 : 0.3) : 0.9) : theme? 0.9 : r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();   // themes: spore every other chamber from the second, burners (fire, a refuge from it) between; the other themes: no sources
+      const sporeOk= theme==='spore'? r.i>=1 : r.i>=6;
+      if(theme&&theme!=='spore'&&role>=0.78){ }   // flow, others, machines: cold rooms only (the alcoves below), nothing else
+      else if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
       else if(role<0.6){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
-      else if(role<0.78 && r.i>=6){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
+      else if(role<0.78 && sporeOk){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
       else { const c2=ri(r.x0+10,r.x1-40); rect(c2,r.y0-3,c2+ri(15,40),r.y0,M.COOLER); const bx=ri(r.x0+10,r.x1-40); rect(bx,r.y1,bx+ri(8,18),r.y1+3,M.BURNER); }
       // machines inside
-      if(r.i<3){ }
-      else if(r.big && r.i>=6){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
+      if(noMach||(r.i<3&&theme!=='machines')){ }
+      else if(r.big && (r.i>=6||theme==='machines')){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
         for(let k=0;k<ri(1,3);k++) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(10,22),len:ri(30,90),speed:0.01+R()*0.02,phase:R()*6.28}); }
       else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=6) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});

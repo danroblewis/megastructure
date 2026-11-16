@@ -67,10 +67,11 @@ vec4 identUpdate(vec4 q, float self, vec2 vel, float dc, int kk, vec4 sp, vec2 d
   for(int k=0;k<4;k++){ ivec2 n=clamp(p+ivec2(k==0?1:k==1?-1:0,k==2?1:k==3?-1:0),ivec2(0),uRes-1); vec4 qn=texelFetch(uQ,n,0); int idn=idOf(qn); if(idn==0){ if(qn.z>best){ best=qn.z; bg=qn.xy; } } else grab=idn; }
   uint h=uint(p.x)*1664525u+uint(p.y)*1013904223u+uFrame*69069u; h^=h>>13; h*=0x5bd1e995u; h^=h>>15;
   if((h&3u)==0u && best*0.985>z){ z=best*0.985; q.xy=bg; }
-  float core=1.0-smoothstep(uRnear*0.5,uRnear,dc);
-  if(core>0.0){ z=max(z,core); float dl=length(drive); if(uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[0]+drive/dl*40.0,core); }   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot) as a point forty cells that way
+  float core=1.0-smoothstep(uRnear*0.5,uRnear*1.2,dc);
+  if(core>0.0){ z=max(z,core); float dl=length(drive); if(uSpot.w>0.0) q.xy=mix(q.xy,uSpot.xy,core); else if(dl>0.05) q.xy=mix(q.xy,uC[0]+drive/dl*40.0,core); }
+  if(self>0.5 && dc<uRfar) z=max(z,0.5);   // your dense matter within reach of your centre always keeps a baseline connection: a body wrapped round an obstacle, or stretched so its centroid falls in a gap, must not lose its will and dissolve into loose cells (that was a third of the body gone in a minute whenever you swam at something)   // what the core hears: your attended point, or a plain direction (keys, the lab, the bot) as a point forty cells that way
   // loose matter (yours, out of the will's reach) is gathered: by a wisp whose cells touch it, or by a seed that makes a new wisp of it
-  if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<3u){ q=vec4(0.0,0.0,0.0,float(grab)); return q; }
+  if(uAuto>0.5 && z<0.1){ if(grab>0 && (h&15u)<((idHash(grab,8u)&7u)==0u?12u:3u)){ q=vec4(0.0,0.0,0.0,float(grab)); return q; }   // a mean wisp takes loose matter four times as fast
     if(uSeed.z>0.0 && uSeedFrom<0.5 && distance(pp,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); return q; } }
   q.z=z; q.w=0.0; return q; }
 // how strongly this cell belongs to centre k (0..1). the baseline is its owner, hard.
@@ -239,6 +240,7 @@ float calmAt(ivec2 p){ vec4 s=texelFetch(uS,p,0); vec2 u=texelFetch(uFC,p,0).zw;
 out vec4 o;
 float selfAt(ivec2 q){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return texelFetch(uB,q,0).x; }
 // self n cells along d, or this cell's own value if a wall lies on the way (so gradients never pull across a wall)
+float otherAt(ivec2 q, int id){ if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return 0.0; return idOf(texelFetch(uQ,q,0))!=id? texelFetch(uB,q,0).x : 0.0; }   // another wisp's matter at q
 float selfThru(ivec2 p, ivec2 d, int n, float h0, int id){ for(int k=1;k<=n;k++){ ivec2 q=p+d*k; if(q.x<0||q.y<0||q.x>=uRes.x||q.y>=uRes.y) return 0.0; if(solidAt(q)) return h0; } ivec2 q=p+d*n; return idOf(texelFetch(uQ,q,0))==id? texelFetch(uB,q,0).x : 0.0; }   // cohesion is per wisp: another wisp's matter reads as empty
 void main(){
   ivec2 p=ivec2(gl_FragCoord.xy); int t=mtype(maskAt(p));
@@ -254,6 +256,9 @@ void main(){
   float shear=0.0; { vec2 u0=u; for(int k=0;k<4;k++){ ivec2 q=wrapP(p+ivec2(k==0?3:k==1?-3:0,k==2?3:k==3?-3:0)); shear=max(shear,length(texelFetch(uFC,q,0).zw-u0)); } }
   float hold=1.0-0.5*smoothstep(0.16,0.32,shear);
   vec2 g=vec2(gx,gy)*uCoh*(1.0+1.5*calm)*(uDense-here)/uDense*hold; float gl=length(g); if(gl>0.09) g*=0.09/gl;
+  { // two wisps do not share cells: matter moves down the gradient of another number's density, so bodies that meet press against each other instead of interpenetrating (and losing what the density clamp discards)
+    float ol=otherAt(p-ivec2(1,0),idc)+otherAt(p-ivec2(2,0),idc)*0.5, orr=otherAt(p+ivec2(1,0),idc)+otherAt(p+ivec2(2,0),idc)*0.5, ou=otherAt(p-ivec2(0,1),idc)+otherAt(p-ivec2(0,2),idc)*0.5, od=otherAt(p+ivec2(0,1),idc)+otherAt(p+ivec2(0,2),idc)*0.5;
+    vec2 go=vec2(orr-ol,od-ou); float gol=length(go); if(gol>0.01) g-=go/gol*min(0.12,gol*0.3); }
   vec2 toC=nearestC(vec2(p)+0.5)-(vec2(p)+0.5); float dc=length(toC); vec2 home= dc>uRnear? toC/dc*min(0.08,(dc-uRnear)*0.01): vec2(0.0);
   // no homing through a wall: if the straight line to the centre crosses solid, this cell only follows its local gradient
   if(dc>uRnear){ for(int k=1;k<=6;k++){ vec2 q=vec2(p)+0.5+toC*(float(k)/6.0); if(solidAt(ivec2(floor(q)))){ home=vec2(0.0); break; } } }
@@ -280,13 +285,14 @@ void main(){
     vec2 gh=vec2(sr.y-sl.y,sd.y-su.y), gf=vec2(sr.x-sl.x,sd.x-su.x);
     vec2 lc=(vec2(p)+0.5)/vec2(uRes), e=3.0/vec2(uRes); vec2 gL=vec2(texture(uLight,lc+vec2(e.x,0.0)).r-texture(uLight,lc-vec2(e.x,0.0)).r, texture(uLight,lc+vec2(0.0,e.y)).r-texture(uLight,lc-vec2(0.0,e.y)).r);
     float wHeat=float(idHash(idc,2u)&255u)/127.5-1.0, wFuel=float(idHash(idc,3u)&255u)/127.5-1.0, wLight=float(idHash(idc,4u)&255u)/127.5-1.0, wFlow=float(idHash(idc,5u)&255u)/255.0;
+    float wSpeed=0.55+0.6*float(idHash(idc,6u)&255u)/255.0; bool mean=(idHash(idc,8u)&7u)==0u; if(mean) wLight=max(wLight,0.8);   // each wisp its own pace (a vector has a magnitude), and one in eight is mean: it comes for your glow and takes what you shed
     vec2 ga=gh*wHeat+gf*wFuel+gL*40.0*wLight; { float hot=texelFetch(uS,p,0).y; if(hot>0.3) ga=-gh*4.0; }   // whatever its appetite, once the air is hot enough to burn it, it flees the heat
     float gl2=length(ga);
     vec2 want=goalDir*0.9+ga/(gl2+0.0006)*0.7; float wl=length(want); if(wl>1.0) want/=wl;   // a strong smell (your glow, a burner, fuel) bends the way hard: a curious wisp follows you, a shy one keeps away
     want*=clamp((1.45-h0)/0.4,0.0,1.0);   // a cell packed well above normal density stops pushing, so a wisp cannot crush itself against a wall or its own core (mass above the density clamp is lost)
     bool resting= (idHash(idc,11u)+uFrame/840u*2246822519u)%4u==0u;   // every seven seconds or so a quarter of the wisps rest for a window and regrow; a hurt wisp rests more
     want*=qme.z*(resting?0.0:1.0)*(1.0-0.7*hurtC);
-    v+=want*uSwim*0.85+u*wFlow*0.4;   // some ride the currents more than others
+    v+=want*uSwim*wSpeed+u*wFlow*0.4;   // some ride the currents more than others
     { // homing without a centre: the connection field (q.z) rises toward the wisp's dense core, so each cell climbs it, more the further out it is. this is what keeps a moving wisp whole
       float zc=qme.z; float zl=0.0,zr=0.0,zu=0.0,zd=0.0; ivec2 ql=clamp(p-ivec2(2,0),ivec2(0),uRes-1), qr=clamp(p+ivec2(2,0),ivec2(0),uRes-1), qu=clamp(p-ivec2(0,2),ivec2(0),uRes-1), qd=clamp(p+ivec2(0,2),ivec2(0),uRes-1);
       vec4 a=texelFetch(uQ,ql,0); if(idOf(a)==idc) zl=a.z; a=texelFetch(uQ,qr,0); if(idOf(a)==idc) zr=a.z; a=texelFetch(uQ,qu,0); if(idOf(a)==idc) zu=a.z; a=texelFetch(uQ,qd,0); if(idOf(a)==idc) zd=a.z;
@@ -337,15 +343,17 @@ void main(){
   // payload: what these cells carry. positive is resource (ore) to deposit in a dead alcove, negative is a power charge.
   // it moves with the cells (same upwind flux and exchange as self), so it cannot spread across the self, and it dies with them.
   float pay=texelFetch(uB,p,0).w; float w0=pay; bool ore=false;
-  vec2 v0=texelFetch(uBV,p,0).xy;
+  vec2 v0=texelFetch(uBV,p,0).xy; int myId=idOf(texelFetch(uQ,p,0));
   const ivec2 E4[4]=ivec2[4](ivec2(1,0),ivec2(-1,0),ivec2(0,1),ivec2(0,-1));
   for(int k=0;k<4;k++){ ivec2 q=p+E4[k]; if(!fluidAt(q)) continue;
     float sq=texelFetch(uB,q,0).x; vec2 vq=texelFetch(uBV,q,0).xy;
+    if(sq>0.05 && s0>0.05 && idOf(texelFetch(uQ,q,0))!=myId) continue;   // transport respects numbers: another wisp's body is a wall to your mass (and yours to its), so meeting bodies press on each other instead of flowing into each other's cells and changing hands; empty and near-empty cells stay open, so bodies grow into space
     float vf=dot(0.5*(v0+vq),vec2(E4[k]));          // velocity across the face, positive = leaving p
-    float flux= vf>0.0? vf*s0 : vf*sq;                // upwind
+    float room=clamp((1.6-(vf>0.0?sq:s0))/0.6,0.0,1.0);   // a full cell accepts no more: converging flows (holding still, two bodies meeting, a body pressed on a wall) pile up against a limit instead of past the clamp, where the excess was discarded. both sides compute the same receiver, so this stays conservative
+    float flux= (vf>0.0? vf*s0 : vf*sq)*room;         // upwind
     self-=flux;
     self+=0.03*(sq-s0);                               // symmetric exchange: conservative diffusion
-    float wq=texelFetch(uB,q,0).w; pay-= vf>0.0? vf*w0 : vf*wq; pay+=0.03*(wq-w0);
+    float wq=texelFetch(uB,q,0).w; pay-= (vf>0.0? vf*w0 : vf*wq)*room; pay+=0.03*(wq-w0);
   }
   // near ore: any ore cell within a 9x9 window (the attention point lets cells settle a few cells short of a bar, so reach must be generous)
   for(int dy=-4;dy<=4&&!ore;dy++) for(int dx=-4;dx<=4;dx++){ if(mtype(maskAt(p+ivec2(dx,dy)))==M_ORE){ ore=true; break; } }
@@ -384,7 +392,7 @@ void main(){
   if(s0<=0.003 && self>0.0){ // a new cell belongs to whoever grew it: the allegiance of the neighbours that fed it (not the nearest centre, which let one wisp's growth feed the other without limit)
     float bs=0.0, ss=0.0; vec3 w3=vec3(0.0); float wid=0.0; for(int k=0;k<4;k++){ ivec2 qq=p+E4[k]; if(!fluidAt(qq)) continue; float sn=texelFetch(uB,qq,0).x; vec4 qn=texelFetch(uQ,qq,0); if(sn>bs){ bs=sn; wid=qn.w; } w3+=qn.xyz*sn; ss+=sn; } q.w=wid; if(ss>0.0) q.xyz=w3/ss; if(uSeed.z>0.0 && uSeedFrom<0.5 && distance(vec2(p)+0.5,uSeed.xy)<uSeed.z){ q=vec4(0.0,0.0,0.0,uSeed.w); } }   // a new cell takes the number of the neighbour that fed it most, and the will its neighbours carry; a seeded body is born with its own number, never yours for even a frame
   if(self<=0.0) q=vec4(0.0);
-  o=vec4(clamp(self,0.0,2.0),lost,clamp(ex,0.0,1.0),pay); oq=q;
+  o=vec4(clamp(self,0.0,4.0),lost,clamp(ex,0.0,1.0),pay); oq=q;   // the clamp was 2.0: converging flows (holding still to contract, or two bodies meeting) piled more than that into a cell in one substep and the excess was discarded. a third of the body went that way every time you held still
 }`;
 // ---------------- walls: solidity, soot, residue, kind ----------------
 SH.wallsInit = SH.head + `

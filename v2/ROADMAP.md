@@ -332,3 +332,30 @@ the point, legs of twenty to thirty cells, about four cells a second. The census
 the substep counter, which is always even on a phone); on elapsed substeps it works: per-wisp growth factors (a texture,
 one slot per number) hold each wisp near a body's worth, and split pieces are renumbered. Four wisps start in the first
 room (`PARAMS.near`). Measured: ten wisps held 231 to 242 total mass over forty seconds while wandering.
+
+## 18. Tutorial levels first; the rooms give you something — 2026-11-15, main
+
+The user: rewrite the level designs; add tutorial levels before level 1 that show what the things are, with an emphasis on
+the dynamic things (the organism, obstacles, other identities, flow) instead of "hiding in cold rooms or fuel rooms,
+because those never worked or did anything"; some rooms should increase your size, heal you or give you a larger centroid
+range. Built: `GEN.build(W,H,seed,opts)` takes a theme; four small maps (1024x512) open the list: `flow` (currents and the
+exit, no sources, no crowd), `others` (four in the crowd and five around the spawn, no sources), `spore` (the organism in
+every other chamber from the second, burners between as refuge), `machines` (fans, doors, pistons from the first
+connection). All four pass the completability check at both grids. Maps carry their own `crowd` and `near`. Gifts, kept
+across levels (`localStorage v2up`): four seconds at rest in a live cold room at near full size makes your body a quarter
+bigger (to twice); four seconds in fuel-rich air lengthens your reach by a sixth (to 1.6x). No words; you see yourself
+grow, and a two-note tone marks it. Wisps of their own: each has its own pace from its number (0.55 to 1.15 of yours),
+and one in eight is mean (comes for your glow, takes loose matter four times as fast). The census renumbers only pieces
+twenty cells or more apart for two censuses in a row (a thin neck read as a break had given a wisp a new heading and hue
+every two seconds, the "jump" the user saw); appetites bend the heading twice as hard, so following and avoiding read.
+
+**Three transport findings from the same night**, each measured with the body on the full grid of map 1 at the one-minute
+mark (normal: ~150 cells). Holding still kept only 100: the density clamp (2.0) discarded what converging flows piled into
+a cell in one substep, a third of the body every time you pulled yourself together; the clamp is 4.0 and inflow is now
+bounded in the flux step itself (a cell at 1.6 accepts no more, computed the same from both sides so it stays
+conservative): holding still keeps 151. Swimming head-on into a newborn wisp left 27: the flux and the diffusion exchange
+were blind to numbers, so at the interface your matter flowed into its cells and became its (and the clamp ate the
+rest); transport now treats another wisp's body as a wall (empty cells stay open), and the same swim leaves 138 with the
+body pressed against the wisp. Cohesion is also per number, with a push down the gradient of another number's density,
+so bodies meet instead of interpenetrating. A thin-neck false split in the census had given wisps a new heading and hue
+every two seconds; pieces are renumbered only when twenty cells apart at two censuses in a row.
