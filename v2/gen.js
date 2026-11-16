@@ -3,7 +3,7 @@
 const M={FLUID:0,WALL:1,VENT:2,DRAIN:3,MOVING:4,BURNER:5,COOLER:6,FUEL:7,SPORE:8,EXIT:9,CHECK:10,GRATE:11,ORE:12,DEAD:13,ORB:14};
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const GEN={
-  build(W,H,seed,opts){ const theme=(opts&&opts.theme)||''; const fanMin= theme==='machines'?1:6, doorMin= theme==='machines'?1:3; const noMach= theme==='flow'||theme==='others'||theme==='spore';   // tutorial themes: 'flow' (currents only), 'others' (currents, meant for a crowd), 'spore' (the organism everywhere from the second chamber, burners as refuge), 'machines' (fans, doors, pistons from the first connection)
+  build(W,H,seed,opts){ const theme=(opts&&opts.theme)||''; const rc=(opts&&opts.recipe)||null;   /* a recipe (GEN.recipe) composes a level from feature weights: endless levels are made this way */ const fanMin= rc?rc.fanMin : theme==='machines'?1:6, doorMin= rc?rc.doorMin : theme==='machines'?1:3; const noMach= !rc&&(theme==='flow'||theme==='others'||theme==='spore'); const wind=rc?rc.wind:1;   // tutorial themes: 'flow' (currents only), 'others' (currents, meant for a crowd), 'spore' (the organism everywhere from the second chamber, burners as refuge), 'machines' (fans, doors, pistons from the first connection)
     const R=mulberry32(seed); const ri=(a,b)=>a+Math.floor(R()*(b-a+1));
     const mask=new Uint8Array(W*H*4);
     const type=new Uint8Array(W*H); type.fill(M.WALL);
@@ -20,7 +20,7 @@ const GEN={
     for(let tier=0;tier<tiers;tier++){
       for(let k=0;k<cols;k++){
         const col=(tier%2===0)?k:cols-1-k;
-        const big=R()<0.25;
+        const big=R()<(rc?rc.big:0.25);
         const w=Math.round(sw*(big?0.9:0.55+R()*0.3)), h=Math.round(shh*(big?0.88:0.45+R()*0.4));
         const sx0=col*sw+12, sx1=(col+1)*sw-12, sy0=tier*shh+14, sy1=(tier+1)*shh-14;
         const x0=Math.round(sx0+R()*(sx1-sx0-w)), y0=Math.round(sy0+R()*(sy1-sy0-h));
@@ -32,7 +32,7 @@ const GEN={
     const noiseTbl=new Float32Array(4096); for(let i=0;i<4096;i++) noiseTbl[i]=R();
     const vnoise=(x,y)=>{ const xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi; const h=(i,j)=>noiseTbl[((i*73+j*151)&4095+4096)&4095]; const sx=fx*fx*(3-2*fx), sy=fy*fy*(3-2*fy);
       return (h(xi,yi)*(1-sx)+h(xi+1,yi)*sx)*(1-sy)+(h(xi,yi+1)*(1-sx)+h(xi+1,yi+1)*sx)*sy; };
-    const AMP=14;
+    const AMP=(rc&&rc.amp)||14;
     for(const r of rooms){
       for(let y=r.y0-AMP-1;y<=r.y1+AMP+1;y++) for(let x=r.x0-AMP-1;x<=r.x1+AMP+1;x++){
         if(x<4||y<4||x>=W-4||y>=H-4) continue;
@@ -58,8 +58,8 @@ const GEN={
         const fwd=a.i<b.i; const e=fwd?a:b, l=fwd?b:a; const my=fwd?ya:yb; const vx=fwd?a.x1+2:b.x0-2; const dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(vx,Math.round(my+k),M.VENT); setDir(vx,Math.round(my+k),dir,0); }
         const dx=fwd?l.x1:l.x0; for(let k=-6;k<=6;k++) set(dx,Math.round(l.cy+k*2),M.DRAIN); }
-      if(!noMach && R()<0.65 && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
-      if(!noMach && (R()<0.4||theme==='machines') && a.i>=doorMin && b.i>=doorMin) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
+      if((rc? R()<0.65*rc.mach : (!noMach && R()<0.65)) && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:mid,y:Math.round((ya+yb)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28});
+      if((rc? R()<0.4*rc.mach : (!noMach && (R()<0.4||theme==='machines'))) && a.i>=doorMin && b.i>=doorMin) machines.push({kind:'door',x:Math.round(a.x1+8),y:ya,w:6,h:ch+2,vertical:true,period:ri(300,700),phase:R()*6.28});
       if(R()<0.7) ductLoop(a,b); };
     const connectV=(a,b)=>{ // a above b (any x relation)
       const ch=ri(24,40); const xa=ri(a.x0+16,a.x1-16), xb=ri(b.x0+16,b.x1-16); const mid=Math.round((a.y1+b.y0)/2);
@@ -67,7 +67,7 @@ const GEN={
       { const fwd=a.i<b.i; const l=fwd?b:a; const vy=fwd?a.y1+2:b.y0-2, mx=fwd?xa:xb, dir=fwd?1:-1;
         for(let k=-ch/2+3;k<=ch/2-3;k++){ set(Math.round(mx+k),vy,M.VENT); setDir(Math.round(mx+k),vy,0,dir); }
         const dy=fwd?l.y1:l.y0; for(let k=-6;k<=6;k++) set(Math.round(l.cx+k*2),dy,M.DRAIN); }
-      if(!noMach && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
+      if((rc? R()<rc.mach : !noMach) && a.i>=fanMin && b.i>=fanMin) machines.push({kind:'fan',x:xa,y:Math.round((a.y1+mid)/2),r:Math.round(ch/2-2),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.025+R()*0.035),phase:R()*6.28}); };
     for(let i=0;i<rooms.length-1;i++){ const a=rooms[i], b=rooms[i+1]; if(a.tier===b.tier){ connectH(a.x0<b.x0?a:b, a.x0<b.x0?b:a); } else { connectV(a.y0<b.y0?a:b, a.y0<b.y0?b:a); } }
     // cross-tier shortcut ducts (loops): vertically adjacent slots
     for(const a of rooms) for(const b of rooms){ if(b.tier===a.tier+1 && b.col===a.col && R()<0.5){ const dh=ri(8,14); const x=ri(Math.max(a.x0,b.x0)+6,Math.min(a.x1,b.x1)-6); if(x>Math.max(a.x0,b.x0)+6){ rect(x-dh/2,a.y1-AMP-4,x+dh/2,b.y0+AMP+4,M.FLUID); const dir=R()<0.5?1:-1; for(let k=-dh/2+1;k<dh/2;k++){ set(Math.round(x+k),dir>0?a.y1+3:b.y0-3,M.VENT); setDir(Math.round(x+k),dir>0?a.y1+3:b.y0-3,0,dir); set(Math.round(x+k),dir>0?b.y0-3:a.y1+3,M.DRAIN); } } } }
@@ -79,23 +79,27 @@ const GEN={
       if(R()<0.5){ const px=ri(r.x0+30,r.x1-30); rect(px-4,r.y0,px+4,r.y1,M.WALL); rect(px-4,r.cy-22,px+4,r.cy+22,M.FLUID); rect(px-4,r.y1-34,px+4,r.y1-6,M.FLUID); if(R()<0.6) rect(px-4,r.y0+6,px+4,r.y0+30,M.FLUID); }
       // side chambers with a core inside
       const nSide=ri(0,2);
-      for(let k=0;k<nSide;k++){ const top=R()<0.5; const cw=ri(30,70), chh=ri(20,50); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0<4||y1>H-4) continue; rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+ri(6,cw-6); rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); cores.push({x:cx0+cw/2,y:(y0+y1)/2}); if(R()<0.5 && r.i>=3){ rect(cx0,top?y0-2:y1,cx0+cw,top?y0:y1+2,(R()<0.5||r.i<6)?M.FUEL:M.SPORE); } }
+      for(let k=0;k<nSide;k++){ const top=R()<0.5; const cw=ri(30,70), chh=ri(20,50); const cx0=ri(r.x0+10,r.x1-10-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0<4||y1>H-4) continue; rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+ri(6,cw-6); rect(dx-4,top?y1:r.y1,dx+4,top?r.y0:y0,M.FLUID); cores.push({x:cx0+cw/2,y:(y0+y1)/2}); if(R()<0.5 && r.i>=3){ rect(cx0,top?y0-2:y1,cx0+cw,top?y0:y1+2,(R()<0.5||r.i<(rc?rc.sporeFrom:6))?M.FUEL:M.SPORE); } }
       // cross vents + opposite drains
-      if(R()<0.8){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
-      if(R()<0.55){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
+      if(R()<0.8*wind){ const side=R()<0.5?-1:1; const vy=ri(r.y0+10,r.y1-10); const len=ri(10,26); for(let k=0;k<len;k++){ const yy=vy+k; if(yy>r.y1-2) break; const xx=side<0?r.x0:r.x1; set(xx,yy,M.VENT); setDir(xx,yy,-side,0); const ox=side<0?r.x1:r.x0; set(ox,Math.min(r.y1,Math.max(r.y0,yy+ri(-12,12))),M.DRAIN); } }
+      if(R()<0.55*wind){ const vx=ri(r.x0+20,r.x1-30), len=ri(8,18); for(let k=0;k<len;k++){ set(vx+k,r.y1,M.VENT); setDir(vx+k,r.y1,0,-1); set(Math.min(r.x1,vx+k+ri(-8,8)),r.y0,M.DRAIN); } }
       // sources, by progression: the first chambers teach heat and cold; fire comes next; the organism last
       const role= theme==='spore'? (r.i>=1? (r.i%2===0? 0.7 : 0.3) : 0.9) : theme? 0.9 : r.i<3 ? 0.9 : r.i<6 ? R()*0.6 : R();   // themes: spore every other chamber from the second, burners (fire, a refuge from it) between; the other themes: no sources
-      const sporeOk= theme==='spore'? r.i>=1 : r.i>=6;
-      if(theme&&theme!=='spore'&&role>=0.78){ }   // flow, others, machines: cold rooms only (the alcoves below), nothing else
-      else if(role<0.4){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
-      else if(role<0.6){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
-      else if(role<0.78 && sporeOk){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
+      const sporeOk= rc? r.i>=rc.sporeFrom : theme==='spore'? r.i>=1 : r.i>=6;
+      let kind;   // what the chamber is about: 'none', 'fire' (burner floor, fuel ceiling), 'fuel', 'spore' (the organism), 'cold' (cooler and a small burner)
+      if(rc){ const ws=[['fire',rc.w.fire],['fuel',rc.w.fuel],['spore',sporeOk?rc.w.spore:0],['cold',rc.w.cold],['none',rc.w.none]]; let tot=0; for(const q of ws) tot+=q[1]; let u=R()*tot; kind='none'; for(const q of ws){ u-=q[1]; if(u<=0){ kind=q[0]; break; } } if(r.i===0) kind='none'; }
+      else kind= (theme&&theme!=='spore'&&role>=0.78)? 'none' : role<0.4? 'fire' : role<0.6? 'fuel' : (role<0.78&&sporeOk)? 'spore' : 'cold';
+      if(kind==='none'){ }   // flow, others, machines: cold rooms only (the alcoves below), nothing else
+      else if(kind==='fire'){ const bx=ri(r.x0+10,r.x1-45), bl=ri(12,34); rect(bx,r.y1,bx+bl,r.y1+3,M.BURNER); rect(bx-12,r.y0-3,bx+bl+12,r.y0,M.FUEL); }
+      else if(kind==='fuel'){ const fx=ri(r.x0+10,r.x1-50); rect(fx,r.y0-3,fx+ri(25,60),r.y0,M.FUEL); if(R()<0.6){ const c2=ri(r.x0+10,r.x1-30); rect(c2,r.y1,c2+ri(12,28),r.y1+3,M.COOLER); } }
+      else if(kind==='spore'){ const sx=ri(r.x0+10,r.x1-30); rect(r.x0-3,r.cy,r.x0,r.cy+ri(12,40),M.SPORE); rect(sx,r.y1,sx+ri(10,24),r.y1+3,M.SPORE); if(R()<0.5) rect(sx+30,r.y0-3,sx+50,r.y0,M.FUEL); }
       else { const c2=ri(r.x0+10,r.x1-40); rect(c2,r.y0-3,c2+ri(15,40),r.y0,M.COOLER); const bx=ri(r.x0+10,r.x1-40); rect(bx,r.y1,bx+ri(8,18),r.y1+3,M.BURNER); }
       // machines inside
-      if(noMach||(r.i<3&&theme!=='machines')){ }
-      else if(r.big && (r.i>=6||theme==='machines')){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
+      const machFrom= rc? rc.machFrom : theme==='machines'? 0 : 3; const machLate= rc? rc.machFrom : theme==='machines'? 0 : 6;
+      if(rc? (r.i<machFrom||R()>rc.mach) : (noMach||r.i<machFrom)){ }
+      else if(r.big && r.i>=machLate){ machines.push({kind:'fan',x:Math.round(r.cx),y:Math.round(r.cy),r:ri(20,34),blades:ri(3,5),omega:(R()<0.5?1:-1)*(0.012+R()*0.02),phase:R()*6.28});
         for(let k=0;k<ri(1,3);k++) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(10,22),len:ri(30,90),speed:0.01+R()*0.02,phase:R()*6.28}); }
-      else if(r.i>=3){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=6) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
+      else if(r.i>=(rc?rc.machFrom:3)){ if(R()<0.4) machines.push({kind:'piston',x:ri(r.x0+20,r.x1-20),y:R()<0.5?r.y0:r.y1,w:ri(8,16),len:ri(25,60),speed:0.015+R()*0.02,phase:R()*6.28}); if(R()<0.3 && r.i>=(rc?rc.machFrom:6)) machines.push({kind:'fan',x:ri(r.x0+30,r.x1-30),y:ri(r.y0+30,r.y1-30),r:ri(10,18),blades:ri(2,4),omega:(R()<0.5?1:-1)*(0.02+R()*0.03),phase:R()*6.28}); }
       const nC=ri(1,3); for(let k=0;k<nC;k++) cores.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)});
       if(r.i>0){ const nD=ri(0,1+(r.big?1:0)); for(let k=0;k<nD;k++) drones.push({x:ri(r.x0+10,r.x1-10),y:ri(r.y0+10,r.y1-10)}); }
       { const top=R()<0.5; const cw=ri(26,40), chh=ri(16,26); const cx0=ri(r.x0+12,r.x1-12-cw); const y0=top?r.y0-10-chh:r.y1+10, y1=y0+chh; if(y0>4&&y1<H-4){ rect(cx0,y0,cx0+cw,y1,M.FLUID); const dx=cx0+cw/2; rect(dx-5,top?y1:r.y1-AMP-4,dx+5,top?r.y0+AMP+4:y0,M.FLUID); const dead=r.i>0&&checkpoints.length%3===1; const CT=dead?M.DEAD:M.COOLER; const rects=[[cx0,top?y0-3:y1,cx0+cw,top?y0:y1+3],[cx0-3,y0,cx0,y1],[cx0+cw,y0,cx0+cw+3,y1]]; for(const q of rects) rect(q[0],q[1],q[2],q[3],CT); if(r.i>0) checkpoints.push({x:cx0+cw/2,y:(y0+y1)/2,w:cw,h:chh,dead,room:r.i,rects}); } }   // the cold room: where you condense, and where you are remembered. every third one is dead and must be repaired with ore
@@ -122,6 +126,18 @@ const GEN={
     for(let i=0;i<W*H;i++){ mask[i*4]=type[i]; mask[i*4+1]=Math.round((dirs[i*2]*0.5+0.5)*255); mask[i*4+2]=Math.round((dirs[i*2+1]*0.5+0.5)*255); mask[i*4+3]=255; }
     return {W,H,mask,src,type,machines,cores,drones,checkpoints,rooms,spawn,exit};
   },
+  // a level composed on the fly: two leanings drawn from five (windy, machines, organism, crowded, fiery) give it a character,
+  // and the stage (how many endless levels have been cleared) scales size, machines and the organism up over about eight levels.
+  // the same stage and seed always give the same level, so a restart after dispersing is the same structure
+  recipe(stage,seed){ const s=Math.max(1,stage|0); const R=mulberry32(((seed|0)*7919+s*104729)|0); const t=Math.min(1,(s-1)/8);
+    const kinds=['windy','machines','organism','crowded','fiery']; const picks=[]; while(picks.length<2){ const k=kinds[Math.floor(R()*kinds.length)]; if(!picks.includes(k)) picks.push(k); } const has=k=>picks.includes(k);
+    return { name:picks.join(' · '), stage:s, picks,
+      W: s<3?1024:s<6?1536:2048, H: s<3?512:s<6?768:1024,
+      mach: has('machines')?0.9:0.15+0.45*t, fanMin: has('machines')?1:4, doorMin: has('machines')?1:2, machFrom: has('machines')?1:3,
+      sporeFrom: has('organism')?1:Math.max(2,5-Math.round(3*t)),
+      w:{ fire: has('fiery')?0.5:0.12, fuel:0.2, spore: has('organism')?0.6:0.08+0.3*t, cold:0.25, none: has('windy')?0.5:0.3 },
+      wind: has('windy')?1.3:0.8, big: has('windy')?0.4:0.25, amp: 12+Math.round(R()*6),
+      crowd: (has('crowded')?12:4)+Math.round(6*t), near: has('crowded')?5:2 }; },
   // the same world at 1/f resolution: structure, machines and markers all scaled; sources and vents survive the coarsening
   downsample(w,f){
     const W=Math.floor(w.W/f), H=Math.floor(w.H/f); const type=new Uint8Array(W*H), mask=new Uint8Array(W*H*4), src=new Uint8Array(W*H*4);

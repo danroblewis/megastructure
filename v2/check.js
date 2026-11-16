@@ -44,8 +44,9 @@ function report(world,r){
 }
 function pathTo(res,W,target){ const pts=[]; let j=target; while(j>=0){ pts.push([j%W,(j/W)|0]); j=res.prev[j]; } return pts.reverse(); }
 if(typeof require!=='undefined'&&require.main===module){
-  const seed=+process.argv[2]||7, W=+process.argv[3]||2048, H=+process.argv[4]||1024, r=+process.argv[5]||3;
-  const world=buildWorld(W,H,seed); const {ok,rows}=report(world,r); console.log(`route widened: ${world.widened} cells carved; ${world.aligned} vent cells turned to blow along the route`);
+  const seed=+process.argv[2]||7, r=+process.argv[5]||3, stage=+process.argv[6]||0, coarse=+process.argv[7]||1;   // node v2/check.js seed W H r [stage] [coarse]: a stage makes the endless recipe for that stage and seed (W/H 0 = the recipe's size)
+  const rc=stage?GEN_.recipe(stage,seed):null; const W=+process.argv[3]||(rc?rc.W:2048), H=+process.argv[4]||(rc?rc.H:1024);
+  const world=buildWorld(W,H,seed,coarse,rc?{recipe:rc}:undefined); if(rc) console.log(`stage ${stage} recipe: ${rc.name} (${rc.W}x${rc.H}, crowd ${rc.crowd}+${rc.near})`); const {ok,rows}=report(world,r); console.log(`route widened: ${world.widened} cells carved; ${world.aligned} vent cells turned to blow along the route`);
   console.log(`seed ${seed} ${W}x${H} body radius ${r}: ${ok?'COMPLETABLE':'NOT COMPLETABLE'}`);
   for(const row of rows) console.log(`  ${row.reachable?'ok  ':'FAIL'} ${row.name.padEnd(14)} path ${row.pathCells}`);
   process.exit(ok?0:1);
