@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>duo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#06070c;color:#dde;font:12px -apple-system,Helvetica,Arial,sans-serif;overflow:hidden}
+  #bar{height:44px;display:flex;align-items:center;gap:14px;padding:0 12px;background:#0d1020;border-bottom:1px solid #223;white-space:nowrap;overflow-x:auto}
+  #bar label{display:flex;align-items:center;gap:4px;color:#9ab}
+  #bar input[type=number]{width:52px;background:#141828;color:#dde;border:1px solid #334;border-radius:4px;padding:2px 4px}
+  #bar select{background:#141828;color:#dde;border:1px solid #334;border-radius:4px;padding:2px 4px}
+  #frames{display:flex;height:calc(100% - 44px)}
+  iframe{flex:1;border:0;border-right:1px solid #223;background:#000}
+  #m{margin-left:auto;font-variant-numeric:tabular-nums;color:#cfe}
+  #m b{color:#fff;font-weight:600}
+  .warn{color:#f9a}
+</style></head>
+<body>
+<div id="bar">
+  <label>goal <select id="mode"><option value="pos">owner's position</option><option value="intent">owner's intent</option><option value="lead">owner's lead</option></select></label>
+  <label><input type="checkbox" id="grow" checked> track mass</label>
+  <label>reseed at <input type="number" id="reseed" min="0" step="10"> cells</label>
+  <label>latency <input type="number" id="lat" min="0" step="50"> ms</label>
+  <label>loss <input type="number" id="loss" min="0" max="100" step="5"> %</label>
+  <label>lead <input type="number" id="lead" min="0" step="0.25"> s</label>
+  <span id="m">waiting for both sims</span>
+</div>
+<div id="frames"><iframe id="A"></iframe><iframe id="B"></iframe></div>
+<script>
+// two simulations of one level, each the authority on its own body only. the relay between them carries a small packet eight times a
+// second (core, goal, velocity, mass, dead) with dialled latency and loss. the frames apply it as a wisp of its own; this page measures
+// how far each copy is from the truth (drift), how hard it moves between packets (snap, what reads as buggy), and how far its mass is off
+const Q=Object.fromEntries(new URLSearchParams(location.search));
+const cfg={mode:Q.mode||'intent',grow:Q.grow!=='0',reseed:Q.reseed===undefined?60:+Q.reseed,lat:Q.lat===undefined?150:+Q.lat,loss:Q.loss===undefined?0:+Q.loss,lead:Q.lead===undefined?0.5:+Q.lead};
+const map=Q.map||1; const seed=Q.seed?'&seed='+Q.seed:''; const stage=Q.stage?'&stage='+Q.stage:'';
+const base='index.html?x=1#duo=1&crowd=0&near=0&map='+map+seed+stage+'&mode='+cfg.mode+'&grow='+(cfg.grow?1:0)+'&reseed='+cfg.reseed+'&lead='+cfg.lead;
+// A is you (full grid) unless abot=1; B is a bot following the level's route (half grid: the deliberate mismatch) unless bbot=0 or bfull=1
+const A=document.getElementById('A'), B=document.getElementById('B');
+A.src=base+'&me=0&peer=1'+(Q.ahalf?'':'&full=1')+(Q.abot?'&bot=1':'');
+B.src=base+'&me=1&peer=0'+(Q.bfull?'&full=1':'')+(Q.bbot==='0'?'':'&bot=1');
+for(const k of ['mode','grow','reseed','lat','loss','lead']){ const el=document.getElementById(k); if(el.type==='checkbox') el.checked=cfg[k]; else el.value=cfg[k];
+  el.addEventListener('change',()=>{ cfg[k]= el.type==='checkbox'? el.checked : el.tagName==='SELECT'? el.value : +el.value; for(const f of [A,B]) f.contentWindow.postMessage({duo:'cfg',mode:cfg.mode,grow:cfg.grow,reseed:cfg.reseed,lead:cfg.lead},'*'); }); }
+const truth=[null,null], copy=[null,null]; const st=[{n:0,drift:0,merr:0,snapMax:0,snapRecent:[],driftMax:0,alive:0},{n:0,drift:0,merr:0,snapMax:0,snapRecent:[],driftMax:0,alive:0}];
+const t0=performance.now(); let dropped=0, sent=0;
+window.addEventListener('message',e=>{ const d=e.data; if(!d||d.duo!=='state') return; const me=d.me|0, other=1-me; truth[me]=d;
+  // metrics for me's copy of other, against other's latest truth
+  const c=d.copy; const prev=copy[me]; copy[me]=c; const s=st[me]; const tr=truth[other];
+  if(tr&&c.m>4){ s.n++; const dr=Math.hypot(c.x-tr.x,c.y-tr.y); s.drift+=dr; s.driftMax=Math.max(s.driftMax,dr); s.merr+=Math.abs(c.m-tr.m); s.alive++;
+    if(prev&&prev.m>4){ const dt=Math.max(0.05,(d.t-s.lastT)/1000); const sn=Math.hypot(c.x-prev.x,c.y-prev.y)/dt; s.snapMax=Math.max(s.snapMax,sn); s.snapRecent.push(sn); if(s.snapRecent.length>80) s.snapRecent.shift(); } }
+  s.lastT=d.t;
+  // relay to the other frame, late and lossy as asked
+  sent++; if(Math.random()*100<cfg.loss){ dropped++; } else { const f= other===0? A : B; setTimeout(()=>{ try{ f.contentWindow.postMessage(Object.assign({},d,{duo:'peer'}),'*'); }catch(e){} },cfg.lat); }
+  show(); });
+function fmt(s){ if(!s.n) return 'no copy yet'; const rec=s.snapRecent.length? Math.max.apply(null,s.snapRecent):0; return `drift <b>${(s.drift/s.n).toFixed(0)}</b> max ${s.driftMax.toFixed(0)} · mass off <b>${(s.merr/s.n).toFixed(0)}</b> · snap now ${rec.toFixed(0)} max <b class="${s.snapMax>60?'warn':''}">${s.snapMax.toFixed(0)}</b> cells/s`; }
+function show(){ const el=document.getElementById('m'); const ta=truth[0], tb=truth[1];
+  el.innerHTML=`A ${ta?ta.m.toFixed(0):'-'} cells${ta&&ta.dead?' <span class=warn>dispersed</span>':''} · B ${tb?tb.m.toFixed(0):'-'}${tb&&tb.dead?' <span class=warn>dispersed</span>':''} &nbsp;|&nbsp; A's copy of B: ${fmt(st[0])} &nbsp;|&nbsp; B's copy of A: ${fmt(st[1])} &nbsp;|&nbsp; lost ${dropped}/${sent}`;
+  const t=((performance.now()-t0)/1000).toFixed(0); document.title=`duo ${t}s A ${ta?ta.m.toFixed(0):'-'}/${ta&&ta.dead?'dead':'ok'} B ${tb?tb.m.toFixed(0):'-'}/${tb&&tb.dead?'dead':'ok'} | A>B drift ${st[0].n?(st[0].drift/st[0].n).toFixed(0):'-'} max ${st[0].driftMax.toFixed(0)} merr ${st[0].n?(st[0].merr/st[0].n).toFixed(0):'-'} snap ${st[0].snapMax.toFixed(0)} | B>A drift ${st[1].n?(st[1].drift/st[1].n).toFixed(0):'-'} max ${st[1].driftMax.toFixed(0)} merr ${st[1].n?(st[1].merr/st[1].n).toFixed(0):'-'} snap ${st[1].snapMax.toFixed(0)} | lost ${dropped}/${sent}`; }
+</script>
+</body></html>

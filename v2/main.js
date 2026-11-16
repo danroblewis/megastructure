@@ -15,9 +15,9 @@
   const TUT_NAMES={flow:'currents',others:'others',spore:'the organism',machines:'machines'};
   const mapName=(i)=>{ const m=MAPS[i]; if(m.dyn) return '∞ endless · stage '+DYN.stage+(MAP.dyn?' · '+MAP.name:''); return m.tut?('tutorial · '+(TUT_NAMES[m.tut.theme]||m.tut.theme)):('structure '+m.seed+' · '+m.w+'×'+m.h); };
   const newDyn=(stage)=>{ try{ localStorage.setItem('v2dyn',JSON.stringify({stage:Math.max(1,stage|0),seed:0})); }catch(e){} };   // the next load of the endless entry draws a fresh seed
-  const nextLevel=()=>{ if(MAP.dyn){ newDyn(DYN.stage+1); setMap(MAPI); } else setMap(MAPI+1); };   // clearing an endless level: the next stage, a new structure
-  const setMap=(i)=>{ try{ localStorage.setItem('v2map',String(((i%MAPS.length)+MAPS.length)%MAPS.length+1)); }catch(e){} location.href=location.pathname+(HASH.hud?'?hud=1':''); };
-  const FULLW=+HASH.w||MAP.w, FULLH=+HASH.h||MAP.h; const DETAIL=(()=>{ try{ return localStorage.getItem('v2detail')||'half'; }catch(e){ return 'half'; } })(); /* half resolution by default everywhere; 'full' is the opt-in */ const COARSE=((small||DETAIL==='half')&&!HASH.w&&!HASH.lab)?2:1;
+  const nextLevel=()=>{ try{ sessionStorage.setItem('v2fresh','1'); sessionStorage.removeItem('v2adopt'); }catch(e){} if(MAP.dyn){ const rl=NET&&NET.roomLevel; if(rl&&rl.dyn&&rl.mapi===MAPI&&rl.dyn.stage===DYN.stage+1){ try{ localStorage.setItem('v2dyn',JSON.stringify(rl.dyn)); }catch(e){} } else newDyn(DYN.stage+1); setMap(MAPI); } else setMap(MAPI+1); };   // in a room, the endless structure a friend already drew for the next stage is taken rather than a new one   // clearing an endless level: the next stage, a new structure
+  const setMap=(i)=>{ try{ localStorage.setItem('v2map',String(((i%MAPS.length)+MAPS.length)%MAPS.length+1)); }catch(e){} const keep=[]; if(HASH.hud) keep.push('hud=1'); if(HASH.room) keep.push('room='+encodeURIComponent(HASH.room)); if(HASH.relay) keep.push('relay='+encodeURIComponent(HASH.relay)); location.href=location.pathname+(keep.length?'?'+keep.join('&'):''); };
+  const FULLW=+HASH.w||MAP.w, FULLH=+HASH.h||MAP.h; const DETAIL=(()=>{ try{ return localStorage.getItem('v2detail')||'half'; }catch(e){ return 'half'; } })(); /* half resolution by default everywhere; 'full' is the opt-in */ const COARSE=((small||DETAIL==='half')&&!HASH.w&&!HASH.lab&&!HASH.full)?2:1;
   const world= HASH.lab? LAB.build(512,256) : CHECK.buildWorld(FULLW,FULLH,+HASH.seed||MAP.seed,COARSE,MAP.tut);
   const W=world.W, H=world.H;
   if(HASH.spore&&!HASH.lab){   // test hook: a spore strip in the wall just left of the spawn (three cells deep, sixteen tall), so the organism can be met at once
@@ -176,6 +176,51 @@
     if(PARAMS.near>0){ const sx=world.spawn.x, sy=world.spawn.y; for(let t=0;t<400&&out.filter(o=>o.near).length<PARAMS.near;t++){ const a=R()*6.2832, d=30+R()*30; const x=Math.round(sx+Math.cos(a)*d), y=Math.round(sy+Math.sin(a)*d); let ok=true; for(let dy=-5;dy<=5&&ok;dy++) for(let dx=-5;dx<=5;dx++){ const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=W||yy>=H||world.type[yy*W+xx]!==0){ ok=false; break; } } if(ok&&!out.some(o=>Math.hypot(o.x-x,o.y-y)<18)) out.unshift({x,y,near:true}); } }
     return out; })();
   let crowdSeed=null;
+  // friends: several simulations of one level that share only what a person can see. each client is the authority on its own body and
+  // nothing else; a small packet eight times a second (core, goal point, velocity, mass, dead) goes through tools/relay.py (?room=NAME)
+  // or, in the v2/duo.html testbed, through the parent page. every other player is a wisp of its own here, with a number of its own,
+  // whose goal is told from outside (uGoalTex) and whose mass is nudged toward the owner's figure through the per-number growth factor.
+  // a copy that drifts far from the truth for three seconds withers and is reborn at the truth; a copy whose owner dispersed withers.
+  // what the cells do between packets is this simulation's own business, so two players never see quite the same thing, and that is the design
+  const DEFAULT_RELAY='wss://duplicate-typing-extraordinary-damages.trycloudflare.com';   /* tools/relay.py behind a quick cloudflared tunnel: the hostname changes when the tunnel restarts. ?relay=wss://... overrides and is remembered */
+  const NET=(()=>{ const room=HASH.room||null; let relay=HASH.relay||null; try{ if(relay) localStorage.setItem('v2relay',relay); else relay=localStorage.getItem('v2relay'); }catch(e){} relay=relay||DEFAULT_RELAY; if(!room&&!HASH.duo) return null;
+    return {room, relay, duo:!!HASH.duo, pid:null, peers:{}, byRid:{}, nRid:0, mode:HASH.mode||'intent', grow:HASH.grow!=='0', reseed:HASH.reseed===undefined?60:+HASH.reseed, lead:HASH.lead===undefined?0.5:+HASH.lead, nextSend:0, sx:null, sy:null, st:0, vx:0, vy:0, ws:null, inject:null, roomLevel:null, status:'', sent:0, got:0,
+      lk: MAP.dyn? 'd'+DYN.stage+':'+DYN.seed : 'm'+MAPI, level:{mapi:MAPI,dyn:MAP.dyn?{stage:DYN.stage,seed:DYN.seed}:null}}; })();
+  function netPeer(pid){ let p=NET.peers[pid]; if(!p){ const rid=1901+(NET.nRid++%140); p=NET.peers[pid]={pid,rid,last:null,seen:0,copyM:0,copyX:0,copyY:0,driftT:0,bornAt:-1e9,bornFrame:-1e9,wither:false,g:undefined,gone:false}; NET.byRid[rid]=p; } return p; }
+  function netState(d){ const p=netPeer(d.pid); p.last=d; p.seen=performance.now(); p.gone=false; NET.got++; }
+  function netSend(obj){ if(NET.duo){ try{ parent.postMessage(Object.assign({duo:'state'},obj),'*'); }catch(e){} } else if(NET.ws&&NET.ws.readyState===1){ NET.ws.send(JSON.stringify(obj)); } }
+  function netConnect(){ if(NET.duo) return; let ws; try{ ws=new WebSocket(NET.relay+(NET.relay.includes('?')?'&':'?')+'room='+encodeURIComponent(NET.room)); }catch(e){ NET.status='bad relay'; return; }   /* the room is also in the URL for the worker relay, which routes a socket to its room before the first message */ NET.ws=ws; NET.status='connecting';
+    ws.onopen=()=>{ NET.status='connected'; NET.retry=0; let fresh=false; try{ fresh=sessionStorage.getItem('v2fresh')==='1'; sessionStorage.removeItem('v2fresh'); }catch(e){} ws.send(JSON.stringify({t:'hello',room:NET.room,level:NET.level,fresh})); };
+    ws.onmessage=e=>{ let m; try{ m=JSON.parse(e.data); }catch(err){ return; } if(m.t==='s'){ if(m.lk===NET.lk) netState(m); } else if(m.t==='welcome'){ NET.pid=m.pid; NET.roomLevel=m.level; netAdopt(m.level); } else if(m.t==='join'){ if(m.level) NET.roomLevel=m.level; } else if(m.t==='leave'){ const p=NET.peers[m.pid]; if(p) p.gone=true; } };
+    ws.onclose=()=>{ NET.status='reconnecting'; NET.retry=(NET.retry||0)+1; setTimeout(netConnect,Math.min(10000,500*Math.pow(2,NET.retry))); }; ws.onerror=()=>{}; }
+  // a friend's link lands you on the room's level: a different listed level, or a different endless structure, is adopted with one reload
+  function netAdopt(lvl){ if(!lvl||NET.duo) return; const same= lvl.mapi===MAPI && (!MAP.dyn || (lvl.dyn&&lvl.dyn.stage===DYN.stage&&lvl.dyn.seed===DYN.seed)); if(same) return; let hops=0; try{ hops=+sessionStorage.getItem('v2adopt')||0; sessionStorage.setItem('v2adopt',String(hops+1)); }catch(e){} if(hops>2) return; if(lvl.dyn){ try{ localStorage.setItem('v2dyn',JSON.stringify(lvl.dyn)); }catch(e){} } setMap(lvl.mapi); }
+  window.NET=NET;   /* for the headless tests */
+  if(NET&&!NET.duo) netConnect();
+  if(NET&&NET.duo) window.addEventListener('message',e=>{ const d=e.data; if(!d||!d.duo) return; if(d.duo==='peer'){ d.pid=d.me; netState(d); } else if(d.duo==='cfg'){ for(const k of ['mode','grow','reseed','lead']) if(d[k]!==undefined) NET[k]=d[k]; } });
+  function netTick(red){ const now=performance.now(); const C=COARSE;
+    // my truth, in full-grid units: core, goal point (the tap target, else forty cells along the held direction, else the core), velocity, mass in cells
+    let gx=player.x, gy=player.y; const dl=Math.hypot(dirS[0],dirS[1]); if(target.x!==null){ gx=target.x; gy=target.y; } else if(dl>0.1){ gx=player.x+dirS[0]/dl*40/C; gy=player.y+dirS[1]/dl*40/C; }
+    if(now>=NET.nextSend){ NET.nextSend=now+125; if(NET.sx!==null){ const dt=Math.max(0.05,(now-NET.st)/1000); NET.vx=(player.x-NET.sx)*C/dt; NET.vy=(player.y-NET.sy)*C/dt; } NET.sx=player.x; NET.sy=player.y; NET.st=now; NET.sent++;
+      const one=Object.values(NET.peers)[0]; netSend({t:'s',me:NET.pid||0,lk:NET.lk,tm:now,x:player.x*C,y:player.y*C,gx:gx*C,gy:gy*C,vx:NET.vx,vy:NET.vy,m:player.mass/MK,dead:player.dead,copy:one?{x:one.copyX*C,y:one.copyY*C,m:one.copyM,wither:one.wither}:null,frame:SIM.frame,coarse:C}); }
+    const single=Object.keys(NET.peers).length===1&&PARAMS.crowd===0&&PARAMS.near===0; let dirty=false;
+    for(const pid in NET.peers){ const P=NET.peers[pid]; const r=P.last; if(!r) continue; const stale=P.gone||now-P.seen>5000;
+      // my copy of this player: the reduction's all-others when it can only be them (the testbed), else the per-number census (two seconds stale)
+      const cb=player.compsById&&player.compsById[P.rid]; if(single){ P.copyM=(red.other||0)/MK; P.copyX=red.ox||0; P.copyY=red.oy||0; } else if(cb){ P.copyM=cb.m/MK; P.copyX=cb.x; P.copyY=cb.y; } else if(player.compsById){ P.copyM=0; }
+      // the copy's goal: where the owner is ('pos'), where the owner is going ('intent'), or where the owner will be ('lead')
+      let tx=r.x, ty=r.y; if(NET.mode==='intent'){ tx=r.gx; ty=r.gy; } else if(NET.mode==='lead'){ tx=r.x+r.vx*NET.lead; ty=r.y+r.vy*NET.lead; }
+      SIM.setGoal(P.rid,tx/C,ty/C,(r.dead||stale)?0:1,1.0);
+      const drift=Math.hypot(P.copyX*C-r.x,P.copyY*C-r.y); if(NET.reseed>0&&P.copyM>4&&drift>NET.reseed) P.driftT+=16; else P.driftT=0; if(P.driftT>3000){ P.wither=true; P.driftT=0; }
+      if(P.wither&&P.copyM<4) P.wither=false;
+      // birth: at the first packet, and again whenever a census after the last birth finds no copy (never twice before the census has looked)
+      const censusSince= player.compsById? (player.censusFrame||0)>P.bornFrame+30 : P.bornFrame<-1e8;
+      if(!stale&&!r.dead&&r.m>20&&P.copyM<4&&!P.wither&&censusSince&&now-P.bornAt>3000&&!pendingInjectB&&!NET.inject){ NET.inject={x:r.x/C,y:r.y/C,id:P.rid}; P.bornAt=now; P.bornFrame=SIM.frame; }
+      // mass: the owner's figure is the truth; the copy grows toward it at full rate when a quarter body short, and withers when over
+      let g=1; if(r.dead||stale||P.wither) g=-1; else if(NET.grow) g=Math.max(-1,Math.min(1,(r.m-P.copyM)/(0.25*BODY.massMax/MK)));
+      if(P.g!==g){ P.g=g; dirty=true; } SIM.growArr[(P.rid&2047)*4]=g;
+      if(stale&&P.copyM<4&&now-P.seen>15000){ delete NET.byRid[P.rid]; delete NET.peers[pid]; } }
+    if(dirty||SIM.frame%16===0) SIM.setGrow(SIM.growArr); }
+  function netSummary(){ if(!NET) return '-'; return (NET.duo?'duo':NET.status)+' pid '+NET.pid+' peers '+Object.keys(NET.peers).length+' copies '+Object.values(NET.peers).map(p=>p.copyM.toFixed(0)+'@'+(p.copyX|0)+','+(p.copyY|0)).join('/')+' sent '+NET.sent+' got '+NET.got; }
   const selves=[{x:0,y:0,mass:0,live:true,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0},{x:0,y:0,mass:0,live:false,hx:0,hy:0}];
   function pushCentres(){ let n=0; for(let i=0;i<3;i++){ if(selves[i].live){ SIM.centres[n*2]=selves[i].x; SIM.centres[n*2+1]=selves[i].y; const d=i===0?[dirS[0],dirS[1]]:[0,0]; SIM.dirs[n*2]=d[0]; SIM.dirs[n*2+1]=d[1]; n++; } } SIM.nC=Math.max(1,n); }
   const TR=[];   // last 24 ticks of self bookkeeping, attached to camera-jump reports
@@ -197,7 +242,7 @@
           while(stack.length){ const k=stack.pop(); const m=M[k*4+1]; mass+=m; const bx=k%IW, by=(k/IW)|0; sx+=m*(bx+0.5)*bs; sy+=m*(by+0.5)*bs; cells.push(k);
             for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){ const nx=bx+dx, ny=by+dy; if(nx<0||ny<0||nx>=IW||ny>=IH) continue; const n=ny*IW+nx; if(seen[n]||(M[n*4]|0)!==id||M[n*4+1]<0.5) continue; seen[n]=1; stack.push(n); } }
           const cx=sx/mass, cy=sy/mass; let r=0; for(const k of cells){ const d=Math.hypot((k%IW+0.5)*bs-cx,((k/IW|0)+0.5)*bs-cy); if(d>r) r=d; } (comps[id]=comps[id]||[]).push({mass,cx,cy,r:r+bs}); }
-        { const g=new Float32Array(2048*4).fill(1); let nid=0; for(const id in comps){ let m=0; for(const c of comps[id]) m+=c.mass; const k=(+id)&2047; g[k*4]=Math.max(0,1-m/(BODY.massMax*0.9)); nid++; if(+id===1) player.census={m:+m.toFixed(1),g:+g[k*4].toFixed(2)}; } player.censusN=nid; SIM.setGrow(g); let nz=0,mx=0,tot=0; for(let j=0;j<IW*IH;j++){ if(M[j*4]>0) nz++; if(M[j*4+1]>mx) mx=M[j*4+1]; tot+=M[j*4+2]; } player.censusRaw=nz+'/'+mx.toFixed(1)+'/'+tot.toFixed(0); }   // each wisp grows to about a body's worth and no further
+        { const g=new Float32Array(2048*4).fill(1); let nid=0; const cb={}; for(const id in comps){ let m=0,hv=comps[id][0]; for(const c of comps[id]){ m+=c.mass; if(c.mass>hv.mass) hv=c; } cb[id]={m,x:hv.cx,y:hv.cy}; const k=(+id)&2047; g[k*4]=Math.max(0,1-m/(BODY.massMax*0.9)); { const pr=NET&&NET.byRid[+id]; if(pr&&pr.g!==undefined) g[k*4]=pr.g; } nid++; if(+id===1) player.census={m:+m.toFixed(1),g:+g[k*4].toFixed(2)}; } player.censusN=nid; player.compsById=cb; player.censusFrame=SIM.frame; SIM.setGrow(g); let nz=0,mx=0,tot=0; for(let j=0;j<IW*IH;j++){ if(M[j*4]>0) nz++; if(M[j*4+1]>mx) mx=M[j*4+1]; tot+=M[j*4+2]; } player.censusRaw=nz+'/'+mx.toFixed(1)+'/'+tot.toFixed(0); }   // each wisp grows to about a body's worth and no further
         // a piece is renumbered only when it is clearly apart (twenty cells or more between centres, a few cells of mass) and has been so at two
         // censuses in a row; the block grid reads a thin neck as a break, and a fresh number would mean a fresh heading and hue every two seconds
         player.renum=player.renum||[]; const apartNow={}; for(const id in comps){ const cs=comps[id]; if(cs.length<2) continue; cs.sort((a,b)=>b.mass-a.mass); const main=cs[0];
@@ -205,7 +250,8 @@
         player.apartPrev=apartNow;
       }catch(e){ player.censusErr=String(e).slice(0,80); if(window.REPORT) REPORT('idmap',String(e)); } }
     if(player.renum&&player.renum.length){ const q=player.renum.shift(); player.nextId=(player.nextId||0)+1; bd.seed=[q.x,q.y,q.r,player.nextId]; bd.seedFrom=q.from; }
-    else if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }   // the frame after, the seed is held one more frame so every cell of the new body has taken its number
+    else if(crowdSeed){ bd.seed=crowdSeed; crowdSeed=null; }
+    else if(NET&&NET.inject&&!pendingInjectB){ const q=NET.inject; NET.inject=null; pendingInjectB=[q.x,q.y,BODY.spawnR*0.9,0.9]; bd.seed=[q.x,q.y,BODY.spawnR*2.5,q.id]; crowdSeed=bd.seed; }   // the other player's body is born here as a wisp with their number   // the frame after, the seed is held one more frame so every cell of the new body has taken its number
     else if(CROWD.length&&SIM.frame>60&&!pendingInjectB&&!player.dead){ const c=CROWD.shift(); pendingInjectB=[c.x,c.y,BODY.spawnR*0.9,0.9]; player.nextId=(player.nextId||0)+1; bd.seed=[c.x,c.y,BODY.spawnR*2.5,player.nextId];   /* born a little smaller than you and under the shared cap, so a new wisp does not lose half of itself in its first seconds */ crowdSeed=bd.seed; }   // a crowd body is injected and seeded in the same frame: it is born with its own number
     if(!bd.seed&&PARAMS.auto&&red.far&&red.far.d>BODY.rfar*0.9&&Math.hypot(red.far.x-player.x,red.far.y-player.y)>BODY.rfar*0.9){ player.farN=(player.farN||0)+1;
       if(player.farN>300){ player.farN=0; player.nextId=(player.nextId||0)+1; bd.seed=[red.far.x,red.far.y,BODY.rnear*1.5,player.nextId]; } }   /* no caption and no tone: finding out that a part of you has become its own is part of the fun */
@@ -223,6 +269,7 @@
     selves[0].x=player.x; selves[0].y=player.y; selves[0].mass=0; selves[0].live=true; selves[1].live=false; selves[2].live=false; pushCentres(); }
   restart();
   if(HASH.cp) player.cpIndex=+HASH.cp;
+  if(NET&&!NET.duo&&!HASH.spawn&&!HASH.lab){ const slot=(Math.random()*4)|0; if(slot>0){ const sx0=world.spawn.x, sy0=world.spawn.y; for(const [dx,dy] of [[slot*22,0],[-slot*22,0],[0,slot*18],[0,-slot*18],[slot*16,slot*16]]){ const x=Math.round(sx0+dx/COARSE), y=Math.round(sy0+dy/COARSE); let ok=true; for(let yy=y-5;yy<=y+5&&ok;yy++) for(let xx=x-5;xx<=x+5;xx++){ if(xx<0||yy<0||xx>=W||yy>=H||world.type[yy*W+xx]!==0){ ok=false; break; } } if(ok){ player.x=x; player.y=y; player.px=x; player.py=y; player.checkpoint={x,y}; pendingInjectB=[x,y,BODY.spawnR,1.0]; selves[0].x=x; selves[0].y=y; pushCentres(); break; } } } }   // friends do not all appear on one spot
   if(HASH.spawn){ const [sx,sy]=HASH.spawn.split(',').map(Number); player.x=sx; player.y=sy; player.px=sx; player.py=sy; player.checkpoint={x:sx,y:sy}; pendingInjectB=[sx,sy,BODY.spawnR,1.0]; selves[0].x=sx; selves[0].y=sy; pushCentres(); }   // test hook: start the body somewhere else
   const solidAt=(x,y)=>{ const xi=x|0, yi=y|0; if(xi<0||yi<0||xi>=W||yi>=H) return true; const t=world.type[yi*W+xi]; return t===1||t>=5&&t<=8; };
   function collide(e,r){
@@ -330,7 +377,7 @@
     for(let s=0;s<steps;s++){ SIM.step(PARAMS,s===0?inject:null,bd); bd.injectB=null; }
     SIM.lightStep(3);
     SIM.probe(probePts,64);
-    updateSelves(red);
+    updateSelves(red); if(NET) netTick(red);
     player.mass=selves[0].live?selves[0].mass:0; player.burning=red.burning;   // your mass is your cluster's, not every wisp's
     if(selves[0].mass>0.5){ player.vx=selves[0].x-player.px; player.vy=selves[0].y-player.py; player.px=selves[0].x; player.py=selves[0].y; player.x=selves[0].x; player.y=selves[0].y; }
     player.hp=Math.min(1,player.mass/BODY.massMax);
@@ -376,7 +423,7 @@
       if(AUDIO.ctx){ if(stalled){ if(!quietFor){ quietFor=true; AUDIO.panic('no frames'); } } else { quietFor=false; AUDIO.watch(); } }
       if(++hbN%10===0&&window.REPORT){ REPORT('heartbeat',`frames ${SIM.frame-hbFrame} in 5 s`,null,{hidden:document.hidden,stalled,sinceFrame:AUDIO.lastFrame?Math.round(now-AUDIO.lastFrame):null}); hbFrame=SIM.frame; } }catch(e){} },500);
   function frame(now){
-    requestAnimationFrame(frame);
+    requestAnimationFrame(frame); if(NET&&HASH.nettitle&&(SIM.frame%60)<4) document.title='live '+((performance.now()/1000)|0)+'s mass '+(player.mass/MK).toFixed(0)+' at '+(player.x|0)+','+(player.y|0)+(player.dead?' dead':'')+' net '+netSummary();
     const t0=performance.now();
     if(lastNow){ const dt=Math.min(100,now-lastNow); dtAvg+=(dt-dtAvg)*0.05; acc=Math.min(MAXSTEPS,acc+dt*SUBRATE/1000); } else acc=MAXSTEPS;
     lastNow=now;
@@ -419,8 +466,9 @@
       c.fillStyle=MENU.open?'rgba(60,70,100,0.85)':'rgba(0,0,0,0.25)'; c.beginPath(); c.roundRect(px,py,pw,ph,ph/2); c.fill(); c.fillStyle='rgba(255,255,255,0.9)'; c.fillText(label,px+fs*0.8,py+ph/2);
       MENU.pill={x:px/s,y:py/s,w:pw/s,h:ph/s}; MENU.rows=[];
       if(MENU.open){ const rh=fs*2.2, rw=Math.max(pw,(MENU.showMaps?230:200)*s); let ry=py+ph+8*s; const rx=sw-rw-10*s;
-        const mh=MENU.showMaps?MAPS.length*rh*0.78:0; c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*6+mh+12*s,10*s); c.fill();
-        for(const tg of [{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:'view: '+(debug===5?'clear (cells, whose, border)':'normal'),act:()=>{ debug=debug===5?0:5; }},{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }},{l:`${MAP.dyn?'':'level '+(MAPI+1)+' of '+(MAPS.length-1)+': '}${mapName(MAPI)}   ${MENU.showMaps?'▾':'▸'}`,act:()=>{ MENU.showMaps=!MENU.showMaps; }}]){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
+                const toggles=[{l:'music: '+(AUDIO.music?'on':'off'),act:()=>AUDIO.setMusic(!AUDIO.music)},{l:'sound: '+(AUDIO.muted?'off':'on'),act:()=>{AUDIO.muted=!AUDIO.muted;}},{l:'detail: '+(COARSE>1?'half':'full')+'   '+dtAvg.toFixed(0)+'ms ×'+steps,act:()=>{ try{ localStorage.setItem('v2detail',COARSE>1?'full':'half'); }catch(e){} location.reload(); }},{l:'view: '+(debug===5?'clear (cells, whose, border)':'normal'),act:()=>{ debug=debug===5?0:5; }},{l: NET&&!NET.duo? `friends: room ${NET.room} · ${1+Object.values(NET.peers).filter(p=>!p.gone).length} here · ${NET.status}   ▸ leave` : 'friends: off   ▸ start a room',act:()=>{ if(NET&&!NET.duo){ const keep=[]; if(HASH.hud) keep.push('hud=1'); location.href=location.pathname+(keep.length?'?'+keep.join('&'):''); } else { const name=Array.from({length:4},()=>'abcdefghjkmnpqrstuvwxyz'[(Math.random()*23)|0]).join(''); const url=location.origin+location.pathname+'?room='+name+(HASH.relay?'&relay='+encodeURIComponent(HASH.relay):''); try{ navigator.clipboard&&navigator.clipboard.writeText(url); }catch(e){} location.href=url; } }},...(NET&&!NET.duo? [{l:'copy the room link for a friend',act:()=>{ const url=location.origin+location.pathname+'?room='+encodeURIComponent(NET.room)+(HASH.relay?'&relay='+encodeURIComponent(HASH.relay):''); try{ navigator.clipboard&&navigator.clipboard.writeText(url); }catch(e){} MENU.open=false; }}] : []),{l:'report a problem now',act:()=>{ if(window.REPORT) REPORT('manual','user tapped report',null,{peak:AUDIO.spectrum&&AUDIO.spectrum(),peaks:AUDIO.peaks}); AUDIO.panic('manual report'); MENU.open=false; }},{l:`${MAP.dyn?'':'level '+(MAPI+1)+' of '+(MAPS.length-1)+': '}${mapName(MAPI)}   ${MENU.showMaps?'▾':'▸'}`,act:()=>{ MENU.showMaps=!MENU.showMaps; }}];
+        const mh=MENU.showMaps?MAPS.length*rh*0.78:0; c.fillStyle='rgba(10,12,20,0.92)'; c.beginPath(); c.roundRect(rx,ry-6*s,rw,rh*toggles.length+mh+12*s,10*s); c.fill();
+        for(const tg of toggles){ c.fillStyle='rgba(255,220,160,0.9)'; c.fillText('   '+tg.l,rx+10*s,ry+rh/2); MENU.rows.push({act:tg.act,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; }
         // the level picker: every level by number and name; the four tutorials first. tapping one saves it and reloads there
         if(MENU.showMaps){ const mr=rh*0.78; const f3=Math.round(fs*0.9); c.font=`${f3}px -apple-system,Helvetica,Arial,sans-serif`; for(let i=0;i<MAPS.length;i++){ const cur=i===MAPI; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.8)'; c.fillText((cur?'   ● ':'      ')+(MAPS[i].dyn?'':(i+1)+'  ')+mapName(i),rx+10*s,ry+mr/2); MENU.rows.push({act:((k)=>()=>{ if(MAPS[k].dyn&&k===MAPI) newDyn(DYN.stage); setMap(k); })(i),x:rx/s,y:ry/s,w:rw/s,h:mr/s}); ry+=mr; } c.font=`${fs}px -apple-system,Helvetica,Arial,sans-serif`; }
         for(const n of (MENU.showSchemes?MENU.names:[])){ const cur=n===SCHEME.name; c.fillStyle=cur?'rgba(140,200,255,1)':'rgba(255,255,255,0.85)'; c.fillText((cur?'● ':'   ')+n,rx+10*s,ry+rh/2); MENU.rows.push({name:n,x:rx/s,y:ry/s,w:rw/s,h:rh/s}); ry+=rh; } }
